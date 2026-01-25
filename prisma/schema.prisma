@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  HR
+  MANAGER
+  EMPLOYEE
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+}
+
+enum LoanStatus {
+  PENDING
+  APPROVED
+  ACTIVE
+  CLOSED
+}
+
+enum PaymentType {
+  EMI
+  MANUAL
+}
+
+enum ValueType {
+  FIXED
+  PERCENTAGE
+}
+
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum SalaryChangeReason {
+  JOINING
+  PROMOTION
+  INCREMENT
+  ADJUSTMENT
+}
+
+enum TransactionType {
+  SALARY_CREDIT
+  WITHDRAWAL
+  REIMBURSEMENT
+  ADJUSTMENT
+}
+
+model User {
+  id            String     @id @default(cuid())
+  clerkId       String     @unique
+  email         String     @unique
+  role          Role       @default(EMPLOYEE)
+  status        UserStatus @default(PENDING)
+  walletBalance Float      @default(0)
+  
+  // Current active salary for quick lookups
+  baseSalary Float      @default(0)
+  
+  branchId   String?
+  branch     Branch?    @relation(fields: [branchId], references: [id])
+  
+  loans               Loan[]
+  medicalClaims       MedicalClaim[]
+  medicalEntitlements MedicalEntitlement[]
+  salaryPayments      SalaryPayment[]
+  salaryHistory       BaseSalary[]
+  walletTransactions  WalletTransaction[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WalletTransaction {
+  id          String          @id @default(cuid())
+  amount      Float
+  type        TransactionType
+  description String
+  
+  userId      String
+  user        User            @relation(fields: [userId], references: [id])
+  
+  createdAt   DateTime        @default(now())
+}
+
+model BaseSalary {
+  id            String             @id @default(cuid())
+  amount        Float
+  effectiveFrom DateTime           @default(now())
+  effectiveTo   DateTime?
+  reason        SalaryChangeReason @default(JOINING)
+  
+  userId        String
+  user          User               @relation(fields: [userId], references: [id])
+  
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  location  String
+  isActive  Boolean  @default(true)
+  
+  users      User[]
+  allowances AllowanceType[]
+  bonuses    BonusType[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SystemSettings {
+  id                String @id @default("global")
+  medicalClaimLimit Float  @default(500)
+  foodAllowance     Float  @default(0)
+  mobileAllowance   Float  @default(0)
+  updatedAt         DateTime @updatedAt
+}
+
+model AllowanceType {
+  id        String    @id @default(cuid())
+  name      String
+  amount    Float
+  type      ValueType
+  isActive  Boolean   @default(true)
+  
+  branches  Branch[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BonusType {
+  id        String    @id @default(cuid())
+  name      String
+  value     Float
+  type      ValueType
+  isActive  Boolean   @default(true)
+  
+  branches  Branch[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MedicalEntitlement {
+  id               String @id @default(cuid())
+  year             Int
+  totalLimit       Float
+  remainingBalance Float
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  
+  claims MedicalClaim[]
+  
+  @@unique([userId, year])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MedicalClaim {
+  id          String      @id @default(cuid())
+  amount      Float
+  description String
+  attachmentUrl String?
+  status      ClaimStatus @default(PENDING)
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  
+  medicalEntitlementId String?
+  medicalEntitlement   MedicalEntitlement? @relation(fields: [medicalEntitlementId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SalaryPayment {
+  id                   String @id @default(cuid())
+  month                String // e.g. "2024-01"
+  baseSalary           Float
+  totalBonuses         Float
+  totalAllowances      Float
+  medicalReimbursement Float
+  loanDeduction        Float
+  netAmount            Float
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  
+  createdAt DateTime @default(now())
+}
+
+model Loan {
+  id                 String     @id @default(cuid())
+  issuedAmount       Float
+  remainingPrincipal Float
+  gracePeriodMonths  Int
+  totalMonths        Int
+  status             LoanStatus @default(PENDING)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  emiState  EmiState?
+  payments  Payment[]
+  auditLogs AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmiState {
+  id           String @id @default(cuid())
+  currentEmi   Float
+  carryForward Float  @default(0)
+
+  loanId String @unique
+  loan   Loan   @relation(fields: [loanId], references: [id])
+}
+
+model Payment {
+  id           String      @id @default(cuid())
+  amount       Float
+  type         PaymentType
+  payrollMonth String // e.g., "2024-01"
+
+  loanId String
+  loan   Loan   @relation(fields: [loanId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id           String @id @default(cuid())
+  oldEmi       Float?
+  newEmi       Float?
+  changeReason String
+  
+  // Optional linkage for loan-specific logs
+  loanId       String?
+  loan         Loan?   @relation(fields: [loanId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model SystemAudit {
+  id        String   @id @default(cuid())
+  action    String
+  details   String
+  status    String   @default("SUCCESS")
+  createdAt DateTime @default(now())
+}
