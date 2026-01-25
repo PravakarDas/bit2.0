@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
 import { getSystemSettings } from "./settings.actions";
 import { ClaimStatus } from "@prisma/client";
+import { validateAndSubmitClaim } from "@/lib/services/medical.service";
 
 /**
  * Get current year's medical entitlement for the logged-in user.
@@ -61,16 +62,7 @@ export async function submitMedicalClaim(data: {
     }
 
     try {
-        const claim = await prisma.medicalClaim.create({
-            data: {
-                userId: user.id,
-                amount: data.amount,
-                description: data.description,
-                attachmentUrl: data.attachmentUrl,
-                status: "PENDING",
-                medicalEntitlementId: entitlement.id,
-            },
-        });
+        const claim = await validateAndSubmitClaim(user.id, data);
 
         revalidatePath("/medical");
         return { success: true, claim };
@@ -133,6 +125,14 @@ export async function approveMedicalClaim(claimId: string) {
             },
         });
 
+        await tx.auditLog.create({
+            data: {
+                changeReason: `Medical Claim Approved: ${claim.amount} for user ${claim.userId} (Year: ${year})`,
+                oldEmi: null,
+                newEmi: null,
+            }
+        });
+
         revalidatePath("/admin/medical-claims");
         revalidatePath("/medical");
         return { success: true };
@@ -140,10 +140,19 @@ export async function approveMedicalClaim(claimId: string) {
 }
 
 export async function rejectMedicalClaim(claimId: string) {
-    await prisma.medicalClaim.update({
+    const claim = await prisma.medicalClaim.update({
         where: { id: claimId },
         data: { status: "REJECTED" },
     });
+
+    await prisma.auditLog.create({
+        data: {
+            changeReason: `Medical Claim Rejected: ${claim.amount} for user ${claim.userId} (Date: ${new Date().toISOString()})`,
+            oldEmi: null,
+            newEmi: null,
+        }
+    });
+
     revalidatePath("/admin/medical-claims");
     revalidatePath("/medical");
     return { success: true };
