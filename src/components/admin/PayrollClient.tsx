@@ -101,19 +101,19 @@ export function PayrollClient({ initialData }: { initialData: PayrollAggregation
                             data.map((emp) => (
                                 <TableRow key={emp.userId} className="hover:bg-muted/30 transition-colors">
                                     <TableCell className="font-medium">{emp.email}</TableCell>
-                                    <TableCell className="text-right tabular-nums">₹{emp.baseSalary.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right tabular-nums">৳{emp.baseSalary.toLocaleString("en-BD")}</TableCell>
                                     <TableCell className="text-right tabular-nums text-blue-600 font-medium">
-                                        +₹{emp.totalAllowances.toLocaleString()}
+                                        +৳{emp.totalAllowances.toLocaleString("en-BD")}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums text-purple-600 font-medium">
-                                        +₹{emp.totalBonuses.toLocaleString()}
+                                        +৳{emp.totalBonuses.toLocaleString("en-BD")}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums text-indigo-600 font-medium">
-                                        +₹{emp.totalMedical.toLocaleString()}
+                                        +৳{emp.totalMedical.toLocaleString("en-BD")}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
                                         <div className="flex flex-col items-end">
-                                            <span className="text-destructive">-₹{(emp.totalLoanDeduction).toLocaleString()}</span>
+                                            <span className="text-destructive">-৳{(emp.totalLoanDeduction).toLocaleString("en-BD")}</span>
                                             {emp.activeLoans.some(l => l.carryForward > 0) && (
                                                 <span className="text-[10px] text-orange-600 font-bold uppercase tracking-tighter">Incl. CF</span>
                                             )}
@@ -133,7 +133,7 @@ export function PayrollClient({ initialData }: { initialData: PayrollAggregation
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums font-bold text-green-700 text-lg">
-                                        ₹{emp.netPay.toLocaleString()}
+                                        ৳{emp.netPay.toLocaleString("en-BD")}
                                     </TableCell>
                                 </TableRow>
                             ))

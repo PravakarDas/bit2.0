@@ -57,7 +57,7 @@ export default async function BonusesPage() {
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
                                         {bonus.type === "FIXED"
-                                            ? `₹${bonus.value.toLocaleString()}`
+                                            ? `৳${bonus.value.toLocaleString("en-BD")}`
                                             : `${bonus.value}%`}
                                     </TableCell>
                                     <TableCell>

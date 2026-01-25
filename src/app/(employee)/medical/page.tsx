@@ -60,7 +60,7 @@ export default function EmployeeMedicalPage() {
 
         const amount = Number(formData.amount);
         if (amount > entitlement.remainingBalance) {
-            toast.error(`Amount exceeds remaining balance of ₹${entitlement.remainingBalance}`);
+            toast.error(`Amount exceeds remaining balance of ৳${entitlement.remainingBalance}`);
             return;
         }
 
@@ -105,11 +105,11 @@ export default function EmployeeMedicalPage() {
                     <CardContent className="space-y-4">
                         <div className="flex justify-between items-center">
                             <span className="text-sm text-muted-foreground">Total Limit:</span>
-                            <span className="font-bold">₹{entitlement?.totalLimit.toLocaleString() || "..."}</span>
+                            <span className="font-bold">৳{entitlement?.totalLimit.toLocaleString("en-BD") || "..."}</span>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-sm text-muted-foreground">Remaining:</span>
-                            <span className="font-bold text-green-600">₹{entitlement?.remainingBalance.toLocaleString() || "..."}</span>
+                            <span className="font-bold text-green-600">৳{entitlement?.remainingBalance.toLocaleString("en-BD") || "..."}</span>
                         </div>
                         {entitlement && (
                             <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
@@ -130,7 +130,7 @@ export default function EmployeeMedicalPage() {
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="grid gap-4 md:grid-cols-2">
                                 <div className="space-y-2">
-                                    <Label htmlFor="amount">Amount (₹)</Label>
+                                    <Label htmlFor="amount">Amount (৳)</Label>
                                     <Input
                                         id="amount"
                                         type="number"
@@ -198,7 +198,7 @@ export default function EmployeeMedicalPage() {
                                             {claim.description}
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums">
-                                            ₹{claim.amount.toLocaleString()}
+                                            ৳{claim.amount.toLocaleString("en-BD")}
                                         </TableCell>
                                         <TableCell className="text-center">
                                             <Badge

@@ -28,12 +28,12 @@ export function SalaryChart({ data }: { data: { name: string; amount: number }[]
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(value) => `₹${value}`}
+                        tickFormatter={(value) => `৳${value}`}
                     />
                     <Tooltip
                         cursor={{ fill: '#f1f5f9' }}
                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        formatter={(value: any) => [`₹${(value as number).toLocaleString()}`, "Net Pay"]}
+                        formatter={(value: any) => [`৳${(value as number).toLocaleString("en-BD")}`, "Net Pay"]}
                     />
                     <Bar
                         dataKey="amount"

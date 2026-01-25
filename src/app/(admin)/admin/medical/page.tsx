@@ -111,11 +111,11 @@ export default function AdminMedicalClaimsPage() {
                                             {claim.description}
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums font-semibold text-indigo-700">
-                                            ₹{claim.amount.toLocaleString()}
+                                            ৳{claim.amount.toLocaleString("en-BD")}
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums font-medium">
                                             <span className={balance < claim.amount ? "text-destructive" : "text-green-600"}>
-                                                ₹{balance.toLocaleString()}
+                                                ৳{balance.toLocaleString("en-BD")}
                                             </span>
                                         </TableCell>
                                         <TableCell className="text-center">
@@ -168,7 +168,7 @@ export default function AdminMedicalClaimsPage() {
                             {selectedClaim?.action === "approve" ? "Approve Medical Claim" : "Reject Medical Claim"}
                         </DialogTitle>
                         <DialogDescription>
-                            Are you sure you want to {selectedClaim?.action} this claim of <strong>₹{selectedClaim?.amount.toLocaleString()}</strong> from <strong>{selectedClaim?.user.email}</strong>?
+                            Are you sure you want to {selectedClaim?.action} this claim of <strong>৳{selectedClaim?.amount.toLocaleString("en-BD")}</strong> from <strong>{selectedClaim?.user.email}</strong>?
                             {selectedClaim?.action === "approve" && " This will automatically deduct the amount from their annual medical entitlement."}
                         </DialogDescription>
                     </DialogHeader>

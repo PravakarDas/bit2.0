@@ -48,7 +48,7 @@ export function GlobalSettingsForm({ initialData }: GlobalSettingsFormProps) {
                 <CardContent className="space-y-6">
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="medicalLimit">Annual Medical Limit (₹)</Label>
+                            <Label htmlFor="medicalLimit">Annual Medical Limit (৳)</Label>
                             <Input
                                 id="medicalLimit"
                                 type="number"
@@ -57,7 +57,7 @@ export function GlobalSettingsForm({ initialData }: GlobalSettingsFormProps) {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="foodAllowance">Default Food Allowance (₹)</Label>
+                            <Label htmlFor="foodAllowance">Default Food Allowance (৳)</Label>
                             <Input
                                 id="foodAllowance"
                                 type="number"
@@ -66,7 +66,7 @@ export function GlobalSettingsForm({ initialData }: GlobalSettingsFormProps) {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="mobileAllowance">Default Mobile Allowance (₹)</Label>
+                            <Label htmlFor="mobileAllowance">Default Mobile Allowance (৳)</Label>
                             <Input
                                 id="mobileAllowance"
                                 type="number"

@@ -93,7 +93,7 @@ export default function MedicalHistoryPage() {
                                             {claim.description}
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums font-semibold">
-                                            ₹{claim.amount.toLocaleString()}
+                                            ৳{claim.amount.toLocaleString("en-BD")}
                                         </TableCell>
                                         <TableCell className="text-center">
                                             <Badge

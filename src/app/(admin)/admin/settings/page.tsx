@@ -75,7 +75,7 @@ export default async function SettingsPage() {
                                             </TableCell>
                                             <TableCell className="text-right tabular-nums text-sm font-semibold text-indigo-700">
                                                 {allowance.type === "FIXED"
-                                                    ? `₹${allowance.amount.toLocaleString()}`
+                                                    ? `৳${allowance.amount.toLocaleString("en-BD")}`
                                                     : `${allowance.amount}%`}
                                             </TableCell>
                                             <TableCell>

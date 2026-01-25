@@ -50,7 +50,7 @@ export default async function AdminLoansPage() {
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        ₹{loan.issuedAmount.toLocaleString()}
+                                        ৳{loan.issuedAmount.toLocaleString("en-BD")}
                                     </TableCell>
                                     <TableCell className="text-center text-muted-foreground">
                                         {new Date(loan.createdAt).toLocaleDateString()}

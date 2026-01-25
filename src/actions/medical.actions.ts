@@ -56,7 +56,7 @@ export async function submitMedicalClaim(data: {
     if (data.amount > entitlement.remainingBalance) {
         return {
             success: false,
-            error: `Claim amount ₹${data.amount} exceeds remaining balance of ₹${entitlement.remainingBalance}`,
+            error: `Claim amount ৳${data.amount} exceeds remaining balance of ৳${entitlement.remainingBalance}`,
         };
     }
 

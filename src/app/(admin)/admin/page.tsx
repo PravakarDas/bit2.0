@@ -4,7 +4,7 @@ import { Banknote, Users, Building, Gift } from "lucide-react";
 export default function AdminDashboard() {
     const stats = [
         { title: "Total Employees", value: "124", icon: Users, description: "+4 from last month" },
-        { title: "Active Loans", value: "₹4,50,000", icon: Banknote, description: "12 loans pending recovery" },
+        { title: "Active Loans", value: "৳4,50,000", icon: Banknote, description: "12 loans pending recovery" },
         { title: "Branches", value: "3", icon: Building, description: "All active" },
         { title: "Active Bonuses", value: "2", icon: Gift, description: "Performance, Festival" },
     ];

@@ -32,7 +32,7 @@ export default async function ProfilePage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-4xl font-bold text-primary">
-                            ₹{user.walletBalance.toLocaleString()}
+                            ৳{user.walletBalance.toLocaleString("en-BD")}
                         </div>
                         <p className="text-xs text-muted-foreground mt-2 uppercase tracking-wider font-semibold">
                             Available for withdrawal
@@ -51,7 +51,7 @@ export default async function ProfilePage() {
                         </div>
                         <div className="flex justify-between border-t pt-2">
                             <span className="text-muted-foreground">Current Base:</span>
-                            <span className="font-bold text-indigo-700">₹{user.baseSalary.toLocaleString()}</span>
+                            <span className="font-bold text-indigo-700">৳{user.baseSalary.toLocaleString("en-BD")}</span>
                         </div>
                     </CardContent>
                 </Card>

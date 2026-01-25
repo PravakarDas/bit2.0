@@ -30,7 +30,7 @@ export default async function EmployeeDashboardPage() {
                         <Wallet className="h-4 w-4 text-green-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold text-green-700">₹{data.walletBalance.toLocaleString()}</div>
+                        <div className="text-3xl font-bold text-green-700">৳{data.walletBalance.toLocaleString("en-BD")}</div>
                         <p className="text-[10px] text-muted-foreground mt-1 font-medium">Available for instant withdrawal</p>
                     </CardContent>
                 </Card>
@@ -41,7 +41,7 @@ export default async function EmployeeDashboardPage() {
                         <Banknote className="h-4 w-4 text-blue-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold text-blue-700">₹{data.remainingLoan.toLocaleString()}</div>
+                        <div className="text-3xl font-bold text-blue-700">৳{data.remainingLoan.toLocaleString("en-BD")}</div>
                         <p className="text-[10px] text-muted-foreground mt-1 font-medium">Total outstanding principal</p>
                     </CardContent>
                 </Card>
@@ -52,7 +52,7 @@ export default async function EmployeeDashboardPage() {
                         <Stethoscope className="h-4 w-4 text-indigo-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold text-indigo-700">₹{data.remainingMedical.toLocaleString()}</div>
+                        <div className="text-3xl font-bold text-indigo-700">৳{data.remainingMedical.toLocaleString("en-BD")}</div>
                         <p className="text-[10px] text-muted-foreground mt-1 font-medium">Available reimbursement for {new Date().getFullYear()}</p>
                     </CardContent>
                 </Card>
@@ -115,7 +115,7 @@ export default async function EmployeeDashboardPage() {
                                             ? 'text-green-600'
                                             : 'text-red-600'
                                             }`}>
-                                            {tx.type.includes('CREDIT') || tx.type.includes('REIMBURSEMENT') ? '+' : '-'}₹{tx.amount.toLocaleString()}
+                                            {tx.type.includes('CREDIT') || tx.type.includes('REIMBURSEMENT') ? '+' : '-'}৳{tx.amount.toLocaleString("en-BD")}
                                         </div>
                                     </div>
                                 ))

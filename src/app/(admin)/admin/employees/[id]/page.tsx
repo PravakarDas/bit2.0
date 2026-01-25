@@ -87,7 +87,7 @@ export default async function AdminEmployeeDetailPage({ params }: { params: { id
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-green-700">₹{user.walletBalance.toLocaleString()}</div>
+                                <div className="text-2xl font-bold text-green-700">৳{user.walletBalance.toLocaleString("en-BD")}</div>
                             </CardContent>
                         </Card>
                         <Card>
@@ -97,7 +97,7 @@ export default async function AdminEmployeeDetailPage({ params }: { params: { id
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-indigo-700">₹{user.baseSalary.toLocaleString()}</div>
+                                <div className="text-2xl font-bold text-indigo-700">৳{user.baseSalary.toLocaleString("en-BD")}</div>
                             </CardContent>
                         </Card>
                     </div>
@@ -118,7 +118,7 @@ export default async function AdminEmployeeDetailPage({ params }: { params: { id
                                             </p>
                                         </div>
                                         <div className="text-lg font-bold tabular-nums">
-                                            ₹{rev.amount.toLocaleString()}
+                                            ৳{rev.amount.toLocaleString("en-BD")}
                                         </div>
                                     </div>
                                 ))}

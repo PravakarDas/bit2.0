@@ -91,7 +91,7 @@ export default async function EmployeeSalaryHistoryPage({ params }: { params: { 
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right tabular-nums font-bold text-lg">
-                                                ₹{record.amount.toLocaleString()}
+                                                ৳{record.amount.toLocaleString("en-BD")}
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {!record.effectiveTo ? (
