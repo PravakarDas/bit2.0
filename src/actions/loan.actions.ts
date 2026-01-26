@@ -131,20 +131,16 @@ export async function applyForLoan(data: {
     const user = await getDbUser();
     if (!user) throw new Error("Unauthorized");
 
-    // 1. Validation Logic
-    const maxBySalary = user.baseSalary * 0.5;
-    const globalCap = 300000;
-    const maxLoanAmount = Math.min(maxBySalary, globalCap);
+    // 1. Validation Logic - Initial Pre-check
+    // The deeper check happens in checkLoanEligibility which considers existing debt.
+    const eligibility = await checkLoanEligibility(user.id, data.amount);
 
-    if (data.amount > maxLoanAmount) {
-        throw new Error(`Loan amount exceeds your eligible limit of ৳${maxLoanAmount.toLocaleString("en-BD")} (50% of Salary or 300k Top Cap).`);
+    if (!eligibility.eligible) {
+        throw new Error(eligibility.reason || "Loan application rejected based on eligibility criteria.");
     }
 
     // Check with loan service for other limits
-    const eligibility = await checkLoanEligibility(user.id, data.amount);
-    if (!eligibility.eligible) {
-        throw new Error(eligibility.reason);
-    }
+
 
     try {
         const loan = await prisma.loan.create({

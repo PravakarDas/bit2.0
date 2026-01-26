@@ -9,15 +9,20 @@ export default async function LoansPage() {
 
     const loans = await getMyLoans();
 
-    // STRICT Max Eligible Amount Logic:
-    // User can claim UP TO 50% of their base salary OR 300,000 Global Cap (whichever is lower).
-    // This is the absolute limit for the application form.
-    // Existing debt does not reduce this specific "per application" cap, 
-    // though global exposure might be checked on the backend.
+    // DYNAMIC Max Eligible Amount Logic:
+    // 1. Base Cap: Lower of (50% Base Salary) OR (300,000 Global Limit)
+    // 2. Remaining Capacity: Base Cap - (Total Current Debt)
+    // This allows multiple loans as long as the cumulative total fits within the cap.
+
+    const currentDebt = loans
+        .filter(l => l.status === "APPROVED" || l.status === "ACTIVE")
+        .reduce((sum, l) => sum + l.remainingPrincipal, 0);
 
     const salaryCap = user.baseSalary * 0.5;
     const globalCap = 300000;
-    const maxEligibleAmount = Math.min(salaryCap, globalCap);
+    const baseCap = Math.min(salaryCap, globalCap);
+
+    const maxEligibleAmount = Math.max(0, baseCap - currentDebt);
 
     return (
         <div className="container mx-auto py-8">

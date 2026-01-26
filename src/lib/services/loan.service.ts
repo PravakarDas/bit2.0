@@ -120,27 +120,52 @@ export async function checkLoanEligibility(userId: string, newLoanAmount: number
         }
     });
 
-    // Recovery Check
+    const user = await prisma.user.findUnique({
+        where: { id: userId }
+    });
+
+    if (!user) throw new Error("User not found");
+
+    // 1. 75% Total Repayment Rule for Multiple Loans
+    let totalIssued = 0;
+    let totalRemaining = 0;
+
     for (const loan of userLoans) {
-        const recoveryRatio = loan.remainingPrincipal / loan.issuedAmount;
-        if (recoveryRatio > 0.25) {
+        totalIssued += loan.issuedAmount;
+        totalRemaining += loan.remainingPrincipal;
+    }
+
+    if (totalIssued > 0) {
+        const totalRepaidRatio = (totalIssued - totalRemaining) / totalIssued;
+        if (totalRepaidRatio < 0.75) {
             return {
                 eligible: false,
-                reason: `Loan ${loan.id} is only ${Math.round((1 - recoveryRatio) * 100)}% recovered. Minimum 75% required.`
+                reason: `You have only repaid ${Math.round(totalRepaidRatio * 100)}% of your total loan debt. You must repay at least 75% to apply for a new loan.`
             };
         }
     }
 
-    // Principal Cap Check
-    const totalRemaining = userLoans.reduce((sum, l) => sum + l.remainingPrincipal, 0);
-    if (totalRemaining + newLoanAmount > 300000) {
+    // 2. Financial Cap Calculation
+    // Rule: (50% of Salary) - (Current Remaining Debt)
+    // AND GLOBAL CAP: 300,000 - (Current Remaining Debt)
+
+    const salaryCap = user.baseSalary * 0.5;
+    const globalCap = 300000;
+
+    const remainingSalaryCap = Math.max(0, salaryCap - totalRemaining);
+    const remainingGlobalCap = Math.max(0, globalCap - totalRemaining);
+
+    // The strict limit for the NEW loan is the lower of these two remaining capacities
+    const maxAllowedNewLoan = Math.min(remainingSalaryCap, remainingGlobalCap);
+
+    if (newLoanAmount > maxAllowedNewLoan) {
         return {
             eligible: false,
-            reason: `Total loan exposure (${totalRemaining + newLoanAmount}) exceeds the 300,000 limit.`
+            reason: `Loan amount exceeds your eligible limit. Based on your current debt of ৳${totalRemaining}, you can borrow up to ৳${maxAllowedNewLoan.toLocaleString("en-BD")}.`
         };
     }
 
-    return { eligible: true };
+    return { eligible: true, maxAmount: maxAllowedNewLoan };
 }
 
 /**
