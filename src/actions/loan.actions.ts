@@ -7,9 +7,10 @@ import { calculateEMI, checkLoanEligibility } from "@/lib/services/loan.service"
 import { getDbUser } from "./user.actions";
 
 /**
- * Fetch all loans with PENDING status for admin review.
+ * Fetch all loans for admin review (Pending & Active).
+ * Renamed to getAllLoans to reflect capability, though initially used for pending.
  */
-export async function getPendingLoans() {
+export async function getAllLoans() {
     const user = await getDbUser();
 
     // Security Check: Only Admin/HR can see this
@@ -18,14 +19,12 @@ export async function getPendingLoans() {
     }
 
     return await prisma.loan.findMany({
-        where: {
-            status: { in: [LoanStatus.PENDING, LoanStatus.ACTIVE] }
-        },
-        include: {
-            user: true
-        },
         orderBy: {
             createdAt: 'desc'
+        },
+        include: {
+            user: true,
+            emiState: true
         }
     });
 }
@@ -98,6 +97,23 @@ export async function approveLoan(
             }
         });
 
+        // 5. Credit Wallet
+        await tx.user.update({
+            where: { id: loan.userId },
+            data: {
+                walletBalance: { increment: data.issuedAmount }
+            }
+        });
+
+        await tx.walletTransaction.create({
+            data: {
+                userId: loan.userId,
+                amount: data.issuedAmount,
+                type: "ADJUSTMENT",
+                description: `Loan Disbursement - Loan #${loan.id.slice(-6)}`
+            }
+        });
+
         revalidatePath("/admin/loans");
         return updatedLoan;
     });
@@ -116,12 +132,12 @@ export async function applyForLoan(data: {
     if (!user) throw new Error("Unauthorized");
 
     // 1. Validation Logic
-    if (data.amount > user.baseSalary * 0.5) {
-        throw new Error("Loan amount exceeds 50% of your monthly salary.");
-    }
+    const maxBySalary = user.baseSalary * 0.5;
+    const globalCap = 300000;
+    const maxLoanAmount = Math.min(maxBySalary, globalCap);
 
-    if (data.amount > 300000) {
-        throw new Error("Loan amount exceeds the maximum limit of 300,000 BDT.");
+    if (data.amount > maxLoanAmount) {
+        throw new Error(`Loan amount exceeds your eligible limit of ৳${maxLoanAmount.toLocaleString("en-BD")} (50% of Salary or 300k Top Cap).`);
     }
 
     // Check with loan service for other limits
