@@ -43,8 +43,13 @@ export async function getPayrollAggregation(month: number, year: number) {
     });
 
     return users.map((user) => {
-        // Fetch Approved Claims ONLY
-        const approvedClaims = user.medicalClaims;
+        // Fetch Approved Claims for this month ONLY
+        const approvedClaims = user.medicalClaims.filter(claim => {
+            const d = new Date(claim.updatedAt);
+            const m = d.getMonth() + 1;
+            const y = d.getFullYear();
+            return m === month && y === year;
+        });
         const totalMedical = approvedClaims.reduce(
             (sum, claim) => sum + claim.amount,
             0
@@ -229,9 +234,19 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                     },
                 });
 
-                // 4. Medical Reset: Mark approved claims as 'PAID'
+                // 4. Medical Reset: Mark only approved claims for THIS month as 'PAID'
+                const startOfMonth = new Date(parseInt(yearStr), parseInt(monthStr) - 1, 1);
+                const endOfMonth = new Date(parseInt(yearStr), parseInt(monthStr), 1);
+
                 await tx.medicalClaim.updateMany({
-                    where: { userId: emp.userId, status: "APPROVED" },
+                    where: {
+                        userId: emp.userId,
+                        status: "APPROVED",
+                        updatedAt: {
+                            gte: startOfMonth,
+                            lt: endOfMonth
+                        }
+                    },
                     data: { status: "PAID" },
                 });
 
