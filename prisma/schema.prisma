@@ -218,6 +218,11 @@ model Loan {
 
   emiState  EmiState?
   payments  Payment[]
+  reason             String     @default("Personal")
+  emiStartMonth      Int?
+  emiStartYear       Int?
+  approvedBy         String?
+
   auditLogs AuditLog[]
 
   createdAt DateTime @default(now())
@@ -254,6 +259,8 @@ model AuditLog {
   // Optional linkage for loan-specific logs
   loanId       String?
   loan         Loan?   @relation(fields: [loanId], references: [id])
+  
+  userId       String?
 
   createdAt DateTime @default(now())
 }
