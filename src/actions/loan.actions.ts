@@ -4,23 +4,22 @@ import { prisma } from "@/lib/prisma";
 import { LoanStatus, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { calculateEMI, checkLoanEligibility } from "@/lib/services/loan.service";
-import { auth } from "@clerk/nextjs/server";
+import { getDbUser } from "./user.actions";
 
 /**
  * Fetch all loans with PENDING status for admin review.
  */
 export async function getPendingLoans() {
-    const { sessionClaims } = await auth();
-    const role = (sessionClaims?.metadata as any)?.role;
+    const user = await getDbUser();
 
     // Security Check: Only Admin/HR can see this
-    if (role !== "SUPERADMIN" && role !== "HR") {
+    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR")) {
         throw new Error("Unauthorized access to loan management");
     }
 
     return await prisma.loan.findMany({
         where: {
-            status: LoanStatus.PENDING
+            status: { in: [LoanStatus.PENDING, LoanStatus.ACTIVE] }
         },
         include: {
             user: true
@@ -43,10 +42,9 @@ export async function approveLoan(
         totalMonths: number;
     }
 ) {
-    const { sessionClaims, userId } = await auth();
-    const role = (sessionClaims?.metadata as any)?.role;
+    const user = await getDbUser();
 
-    if (role !== "SUPERADMIN" && role !== "HR") {
+    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR")) {
         throw new Error("Unauthorized");
     }
 
@@ -75,7 +73,7 @@ export async function approveLoan(
                 status: LoanStatus.ACTIVE,
                 emiStartMonth: startMonthDate.getMonth() + 1,
                 emiStartYear: startMonthDate.getFullYear(),
-                approvedBy: userId
+                approvedBy: user.id
             }
         });
 
@@ -96,11 +94,73 @@ export async function approveLoan(
                 loanId: updatedLoan.id,
                 oldEmi: 0,
                 newEmi: initialEmi,
-                changeReason: `Loan approved by ${userId}. EMI starts ${startMonthDate.toLocaleDateString()}.`
+                changeReason: `Loan approved by ${user.id}. EMI starts ${startMonthDate.toLocaleDateString()}.`
             }
         });
 
         revalidatePath("/admin/loans");
         return updatedLoan;
+    });
+}
+
+/**
+ * Submit a new loan application.
+ */
+export async function applyForLoan(data: {
+    amount: number;
+    duration: number;
+    gracePeriod: number;
+    reason?: string;
+}) {
+    const user = await getDbUser();
+    if (!user) throw new Error("Unauthorized");
+
+    // 1. Validation Logic
+    if (data.amount > user.baseSalary * 0.5) {
+        throw new Error("Loan amount exceeds 50% of your monthly salary.");
+    }
+
+    if (data.amount > 300000) {
+        throw new Error("Loan amount exceeds the maximum limit of 300,000 BDT.");
+    }
+
+    // Check with loan service for other limits
+    const eligibility = await checkLoanEligibility(user.id, data.amount);
+    if (!eligibility.eligible) {
+        throw new Error(eligibility.reason);
+    }
+
+    try {
+        const loan = await prisma.loan.create({
+            data: {
+                userId: user.id,
+                issuedAmount: data.amount,
+                remainingPrincipal: data.amount,
+                totalMonths: data.duration,
+                gracePeriodMonths: data.gracePeriod,
+                reason: data.reason || "Personal",
+                status: LoanStatus.PENDING
+            }
+        });
+
+        revalidatePath("/loans");
+        return { success: true, loan };
+    } catch (error: any) {
+        console.error("Loan application failed:", error);
+        return { success: false, error: error.message || "Failed to submit application" };
+    }
+}
+
+/**
+ * Fetch current user's loans.
+ */
+export async function getMyLoans() {
+    const user = await getDbUser();
+    if (!user) throw new Error("Unauthorized");
+
+    return await prisma.loan.findMany({
+        where: { userId: user.id },
+        include: { emiState: true },
+        orderBy: { createdAt: "desc" },
     });
 }
