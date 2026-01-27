@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { LoanStatus, Role } from "@prisma/client";
+import { LoanStatus, Role, TransactionType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { calculateEMI, checkLoanEligibility } from "@/lib/services/loan.service";
 import { getDbUser } from "./user.actions";
@@ -175,4 +175,81 @@ export async function getMyLoans() {
         include: { emiState: true },
         orderBy: { createdAt: "desc" },
     });
+}
+
+export async function processMonthlyEMIs(monthStr: string) {
+    const admin = await getDbUser();
+    if (!admin || (admin.role !== "SUPERADMIN" && admin.role !== "HR")) {
+        throw new Error("Unauthorized");
+    }
+
+    const activeLoans = await prisma.loan.findMany({
+        where: { status: "ACTIVE" },
+        include: { user: true, emiState: true }
+    });
+
+    const results = { processed: 0, skipped: 0, failed: 0, errors: [] as string[] };
+
+    for (const loan of activeLoans) {
+        try {
+            const existingPayment = await prisma.payment.findFirst({
+                where: {
+                    loanId: loan.id,
+                    payrollMonth: monthStr,
+                    type: "EMI"
+                }
+            });
+
+            if (existingPayment) {
+                results.skipped++;
+                continue;
+            }
+
+            const emiAmount = loan.emiState?.currentEmi || 0;
+            if (emiAmount <= 0) {
+                results.skipped++;
+                continue;
+            }
+
+            await prisma.$transaction(async (tx) => {
+                await tx.user.update({
+                    where: { id: loan.userId },
+                    data: { walletBalance: { decrement: emiAmount } }
+                });
+
+                await tx.walletTransaction.create({
+                    data: {
+                        userId: loan.userId,
+                        amount: -emiAmount,
+                        type: "LOAN_DEDUCTION" as any,
+                        description: `EMI Deduction - ${loan.reason} (${monthStr})`
+                    }
+                });
+
+                await tx.payment.create({
+                    data: {
+                        amount: emiAmount,
+                        type: "EMI",
+                        payrollMonth: monthStr,
+                        loanId: loan.id
+                    }
+                });
+
+                await tx.loan.update({
+                    where: { id: loan.id },
+                    data: { remainingPrincipal: { decrement: emiAmount } }
+                });
+            });
+
+            results.processed++;
+
+        } catch (error: any) {
+            results.failed++;
+            results.errors.push(`Loan for ${loan.user.email}: ${error.message}`);
+        }
+    }
+
+    revalidatePath("/admin/loans");
+    revalidatePath("/admin/wallet");
+    return results;
 }

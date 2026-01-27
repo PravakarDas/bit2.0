@@ -11,6 +11,8 @@ import { ApproveLoanDialog } from "@/components/admin/ApproveLoanDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 
+import { ProcessEMIButton } from "@/components/admin/loans/ProcessEMIButton";
+
 export default async function AdminLoansPage() {
     const allLoans = await getAllLoans();
 
@@ -27,6 +29,7 @@ export default async function AdminLoansPage() {
                         Review pending requests and monitor active loan portfolios.
                     </p>
                 </div>
+                <ProcessEMIButton />
             </div>
 
             <Tabs defaultValue="pending" className="space-y-4">

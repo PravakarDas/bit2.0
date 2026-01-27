@@ -55,6 +55,7 @@ enum TransactionType {
   WITHDRAWAL
   REIMBURSEMENT
   ADJUSTMENT
+  LOAN_DEDUCTION
 }
 
 model User {
@@ -77,6 +78,7 @@ model User {
   salaryPayments      SalaryPayment[]
   salaryHistory       BaseSalary[]
   walletTransactions  WalletTransaction[]
+  walletRequests      WalletRequest[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -248,6 +250,26 @@ model Payment {
   loan   Loan   @relation(fields: [loanId], references: [id])
 
   createdAt DateTime @default(now())
+}
+
+enum WalletRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WalletRequest {
+  id          String              @id @default(cuid())
+  amount      Float
+  description String
+  status      WalletRequestStatus @default(PENDING)
+  attachmentUrl String?
+
+  userId      String
+  user        User                @relation(fields: [userId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model AuditLog {
