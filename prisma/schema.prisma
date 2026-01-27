@@ -199,6 +199,7 @@ model SalaryPayment {
   totalAllowances      Float
   medicalReimbursement Float
   loanDeduction        Float
+  walletAdjustment     Float  @default(0)
   netAmount            Float
   
   userId String

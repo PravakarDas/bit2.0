@@ -36,6 +36,7 @@ interface PayrollAggregation {
     userId: string;
     email: string;
     baseSalary: number;
+    walletBalance: number;
     eligibleBonuses: EligibleBonus[];
     totalAllowances: number;
     totalMedical: number;
@@ -87,7 +88,7 @@ export function PayrollClient({
             const b = emp.eligibleBonuses.find(eb => eb.id === bid);
             return sum + (b?.amount || 0);
         }, 0);
-        return emp.netPay + bonusAmount;
+        return emp.netPay + bonusAmount + emp.walletBalance;
     };
 
     const handleProcessPayroll = async () => {
@@ -132,6 +133,7 @@ export function PayrollClient({
                             <TableHead className="font-semibold text-right">Medical</TableHead>
                             <TableHead className="font-semibold text-right">Bonuses</TableHead>
                             <TableHead className="font-semibold text-right">Deductions</TableHead>
+                            <TableHead className="font-semibold text-right">Wallet</TableHead>
                             <TableHead className="font-semibold">EMI Ctrl</TableHead>
                             <TableHead className="font-semibold text-right text-green-700">Net Pay</TableHead>
                         </TableRow>
@@ -139,7 +141,7 @@ export function PayrollClient({
                     <TableBody>
                         {data.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground italic">
+                                <TableCell colSpan={9} className="h-32 text-center text-muted-foreground italic">
                                     No approved employees found for this period.
                                 </TableCell>
                             </TableRow>
@@ -200,6 +202,11 @@ export function PayrollClient({
                                                 <span className="text-[9px] text-orange-600 font-bold uppercase">CF Active</span>
                                             )}
                                         </div>
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                        <span className={emp.walletBalance >= 0 ? "text-blue-600" : "text-red-600"}>
+                                            {emp.walletBalance >= 0 ? "+" : ""}৳{emp.walletBalance.toLocaleString("en-BD")}
+                                        </span>
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-col gap-1">

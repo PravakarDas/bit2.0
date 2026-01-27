@@ -91,6 +91,7 @@ export async function getPayrollAggregation(month: number, year: number) {
             userId: user.id,
             email: user.email,
             baseSalary: user.baseSalary,
+            walletBalance: user.walletBalance,
             eligibleBonuses: eligibleBonuses.map(b => ({
                 id: b.id,
                 name: b.name,
@@ -185,7 +186,7 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                 const appliedBonuses = emp.eligibleBonuses.filter(b => userBonusIds.includes(b.id));
                 const totalBonuses = appliedBonuses.reduce((sum, b) => sum + b.amount, 0);
 
-                const finalNetPay = emp.netPay + totalBonuses;
+                const finalNetPay = emp.netPay + totalBonuses + emp.walletBalance;
 
                 // 2. Create SalaryPayment Record
                 await tx.salaryPayment.create({
@@ -197,9 +198,34 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                         totalAllowances: emp.totalAllowances,
                         medicalReimbursement: emp.totalMedical,
                         loanDeduction: emp.totalLoanDeduction,
+                        walletAdjustment: emp.walletBalance,
                         netAmount: finalNetPay,
                     },
                 });
+
+                // Clear wallet balance and create adjustment transaction
+                if (emp.walletBalance !== 0) {
+                    await tx.user.update({
+                        where: { id: emp.userId },
+                        data: { walletBalance: 0 },
+                    });
+
+                    const monthNames = [
+                        "January", "February", "March", "April", "May", "June",
+                        "July", "August", "September", "October", "November", "December"
+                    ];
+                    const [year, monthNum] = payrollMonth.split('-');
+                    const monthName = monthNames[parseInt(monthNum) - 1];
+                    
+                    await tx.walletTransaction.create({
+                        data: {
+                            userId: emp.userId,
+                            amount: -emp.walletBalance,
+                            type: "ADJUSTMENT",
+                            description: `Adjusted in ${monthName}-${year} salary`,
+                        },
+                    });
+                }
 
                 // Audit Bonuses
                 for (const bonus of appliedBonuses) {
@@ -212,24 +238,7 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                     });
                 }
 
-                // 3. Wallet Update: Credit Net Pay to User & Create Transaction
-                await tx.user.update({
-                    where: { id: emp.userId },
-                    data: {
-                        walletBalance: { increment: finalNetPay },
-                    },
-                });
-
-                await tx.walletTransaction.create({
-                    data: {
-                        userId: emp.userId,
-                        amount: finalNetPay,
-                        type: "SALARY_CREDIT",
-                        description: `Monthly Salary Credit - ${payrollMonth}`,
-                    },
-                });
-
-                // 4. Medical Reset: Mark ALL currently processed APPROVED claims as 'PAID'
+                // 3. Medical Reset: Mark ALL currently processed APPROVED claims as 'PAID'
                 await tx.medicalClaim.updateMany({
                     where: {
                         userId: emp.userId,
@@ -238,7 +247,7 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                     data: { status: "PAID" },
                 });
 
-                // 5. Loan & Payment Updates
+                // 4. Loan & Payment Updates
                 for (const loan of emp.activeLoans) {
                     const totalDeducted = loan.currentEmi + loan.carryForward;
                     if (totalDeducted > 0) {
@@ -296,7 +305,7 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                 }
             }
 
-            // 6. Audit Log: Log the entire execution for compliance
+            // 5. Audit Log: Log the entire execution for compliance
             await tx.systemAudit.create({
                 data: {
                     action: "PAYROLL_EXECUTION",
