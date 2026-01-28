@@ -1,4 +1,4 @@
-import { getEmployees } from "@/actions/employee.actions";
+import { getActiveEmployees, getPendingEmployees } from "@/actions/employee.actions";
 import { getActiveBranches } from "@/actions/branch.actions";
 import {
     Table,
@@ -15,75 +15,119 @@ import { EditEmployeeDialog } from "@/components/admin/EditEmployeeDialog";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Users } from "lucide-react";
+import { ApprovalButtons } from "@/components/admin/ApprovalButtons";
+import { EmployeeStatusSelect } from "@/components/admin/EmployeeStatusSelect";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function EmployeesPage() {
-    const employees: any[] = await getEmployees();
+    const [activeEmployees, pendingEmployees] = await Promise.all([
+        getActiveEmployees(),
+        getPendingEmployees()
+    ]);
     const branches = await getActiveBranches();
 
     return (
         <div className="space-y-6">
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Employee Management</h1>
-                <p className="text-muted-foreground">Approve new users and manage employee organizations.</p>
+                <p className="text-muted-foreground">Manage active and pending employees</p>
             </div>
 
-            <div className="border rounded-lg bg-card bg-white shadow-sm overflow-hidden">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="bg-muted/50">
-                            <TableHead className="font-semibold">Employee</TableHead>
-                            <TableHead className="font-semibold text-center">Status</TableHead>
-                            <TableHead className="font-semibold">Branch</TableHead>
-                            <TableHead className="font-semibold text-right pr-6">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {employees.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
-                                    No employees found.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            employees.map((employee) => (
-                                <TableRow key={employee.id} className="hover:bg-muted/30 transition-colors">
-                                    <TableCell>
-                                        <div className="flex flex-col">
-                                            <span className="font-medium text-sm">{employee.email}</span>
-                                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Role: {employee.role}</span>
+            {/* Pending Employees Section */}
+            {pendingEmployees.length > 0 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-lg">Pending Approvals ({pendingEmployees.length})</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            {pendingEmployees.map((employee) => (
+                                <div key={employee.id} className="flex items-center justify-between p-3 border rounded-lg bg-yellow-50">
+                                    <div className="flex items-center gap-3">
+                                        <div>
+                                            <p className="font-medium">
+                                                {employee.firstName && employee.lastName 
+                                                    ? `${employee.firstName} ${employee.lastName}`
+                                                    : employee.email
+                                                }
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">{employee.email}</p>
+                                            {employee.branch && (
+                                                <Badge variant="outline" className="text-xs">{employee.branch.name}</Badge>
+                                            )}
                                         </div>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        <Badge variant={employee.status === "APPROVED" ? "default" : "secondary"}>
-                                            {employee.status}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        <AssignBranchSelect
-                                            userId={employee.id}
-                                            currentBranchId={employee.branchId}
-                                            branches={branches}
+                                    </div>
+                                    <ApprovalButtons employeeId={employee.id} />
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Active Employees Section */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="text-lg">Active Employees ({activeEmployees.length})</CardTitle>
+                    <Link href="/admin/archived-employees">
+                        <Button variant="outline">View Archived</Button>
+                    </Link>
+                </CardHeader>
+                <CardContent>
+                    {activeEmployees.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                            No active employees found
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {activeEmployees.map((employee) => (
+                                <div key={employee.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <Link 
+                                            href={`/admin/employees/${employee.id}`}
+                                            className="flex-1 hover:text-blue-600 transition-colors"
+                                        >
+                                            <p className="font-medium">
+                                                {employee.firstName && employee.lastName 
+                                                    ? `${employee.firstName} ${employee.lastName}`
+                                                    : employee.email
+                                                }
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">{employee.email}</p>
+                                            <div className="flex gap-2 mt-1">
+                                                {employee.branch && (
+                                                    <Badge variant="outline" className="text-xs">{employee.branch.name}</Badge>
+                                                )}
+                                                {employee.employeeStatus && (
+                                                    <Badge 
+                                                        variant={
+                                                            employee.employeeStatus === "ACTIVE" ? "default" :
+                                                            employee.employeeStatus === "PROBATION" ? "secondary" :
+                                                            "destructive"
+                                                        }
+                                                        className="text-xs"
+                                                    >
+                                                        {employee.employeeStatus}
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        </Link>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <EmployeeStatusSelect 
+                                            employeeId={employee.id} 
+                                            currentStatus={employee.employeeStatus} 
                                         />
-                                    </TableCell>
-                                    <TableCell className="text-right pr-6">
-                                        <div className="flex justify-end gap-2 items-center">
-                                            <Link href={`/admin/employees/${employee.id}`}>
-                                                <Button variant="outline" size="sm">
-                                                    <Users className="mr-2 h-4 w-4" /> View Profile
-                                                </Button>
-                                            </Link>
-                                            <EmployeeActionButtons
-                                                userId={employee.id}
-                                                currentStatus={employee.status}
-                                            />
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
+                                        <Link href={`/admin/employees/${employee.id}`}>
+                                            <Button variant="outline" size="sm">View Profile</Button>
+                                        </Link>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
 }

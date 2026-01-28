@@ -12,6 +12,8 @@ import {
     History,
     Wrench,
     ScrollText,
+    Archive,
+    Wallet,
 } from "lucide-react";
 
 import {
@@ -27,12 +29,16 @@ import {
 } from "@/components/ui/sidebar";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
+import logo from "@/assets/logo.gif";
 
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
     { title: "Employee Management", url: "/admin/employees", icon: Users },
+    { title: "Archived Employees", url: "/admin/archived-employees", icon: Archive },
     { title: "Loan Management", url: "/admin/loans", icon: Banknote },
     { title: "Medical Claims", url: "/admin/medical", icon: Stethoscope },
+    { title: "Wallet Management", url: "/admin/wallet", icon: Wallet },
     { title: "Payroll", url: "/admin/payroll", icon: CircleDollarSign },
     { title: "Branches", url: "/admin/branches", icon: Settings },
     { title: "Bonuses", url: "/admin/bonuses", icon: CircleDollarSign },
@@ -44,6 +50,7 @@ const employeeItems = [
     { title: "My Profile", url: "/profile", icon: UserCircle },
     { title: "My Loans", url: "/loans", icon: Banknote },
     { title: "My Medical", url: "/medical", icon: Stethoscope },
+    { title: "My Wallet", url: "/wallet", icon: Wallet },
     { title: "Salary History", url: "/salary-history", icon: History },
 ];
 
@@ -55,13 +62,19 @@ export function AppSidebar({ role }: { role: string }) {
         <Sidebar collapsible="icon">
             <SidebarHeader className="p-4">
                 <div className="flex items-center gap-2 font-bold text-xl">
-                    <div className="bg-primary text-primary-foreground p-1 rounded">AG</div>
-                    <span>Bit 2.0</span>
+                    <Image 
+                        src={logo} 
+                        alt="BIT Logo" 
+                        width={32} 
+                        height={32} 
+                        className="rounded"
+                    />
+                    <span></span>
                 </div>
             </SidebarHeader>
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarGroupLabel>Menu</SidebarGroupLabel>
+                    <SidebarGroupLabel></SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {items.map((item) => (

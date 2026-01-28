@@ -10,6 +10,7 @@ export async function getPayrollAggregation(month: number, year: number) {
     const users = await prisma.user.findMany({
         where: {
             status: "APPROVED",
+            isArchived: false,
             role: { not: "SUPERADMIN" },
             salaryPayments: {
                 none: {

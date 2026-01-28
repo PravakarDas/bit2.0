@@ -36,7 +36,12 @@ export default async function EmployeeSalaryHistoryPage({ params }: { params: { 
                     </Link>
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">Salary Management</h1>
-                        <p className="text-muted-foreground">Historical records for <span className="font-semibold text-black">{user.email}</span></p>
+                        <p className="text-muted-foreground">Historical records for <span className="font-semibold text-black">
+                            {user.firstName && user.lastName 
+                                ? `${user.firstName} ${user.lastName}` 
+                                : user.email
+                            }
+                        </span></p>
                     </div>
                 </div>
                 <UpdateSalaryDialog userId={id} />

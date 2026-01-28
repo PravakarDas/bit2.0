@@ -4,7 +4,7 @@ import { getSalaryHistory } from "@/actions/salary.actions";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EditEmployeeDialog } from "@/components/admin/EditEmployeeDialog";
 import { ArrowLeft, Wallet, Banknote, History } from "lucide-react";
 import Link from "next/link";
@@ -55,10 +55,12 @@ export default async function AdminEmployeeDetailPage({ params }: { params: { id
             <div className="grid gap-6 md:grid-cols-3">
                 <Card className="md:col-span-1">
                     <CardHeader className="flex flex-col items-center">
-                        <Avatar className="h-32 w-32 mb-4">
-                            <AvatarFallback className="text-4xl">{user.email[0].toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        <CardTitle className="text-2xl">{user.email}</CardTitle>
+                        <CardTitle className="text-2xl">
+                            {user.firstName && user.lastName 
+                                ? `${user.firstName} ${user.lastName}` 
+                                : user.email
+                            }
+                        </CardTitle>
                         <div className="flex gap-2 mt-2">
                             <Badge>{user.role}</Badge>
                             <Badge variant={user.status === "APPROVED" ? "default" : "secondary"}>{user.status}</Badge>

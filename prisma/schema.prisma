@@ -7,6 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum EmployeeStatus {
+  ACTIVE
+  PROBATION
+  RESIGNED
+  TERMINATED
+}
+
 enum Role {
   SUPERADMIN
   HR
@@ -62,8 +69,13 @@ model User {
   id            String     @id @default(cuid())
   clerkId       String     @unique
   email         String     @unique
+  firstName     String?
+  lastName      String?
+  imageUrl      String?
   role          Role       @default(EMPLOYEE)
   status        UserStatus @default(PENDING)
+  employeeStatus EmployeeStatus? @default(ACTIVE)
+  isArchived    Boolean    @default(false)
   walletBalance Float      @default(0)
   
   // Current active salary for quick lookups

@@ -47,3 +47,82 @@ export async function getEmployeeDashboardData() {
         recentTransactions,
     };
 }
+
+export async function getAdminDashboardData() {
+    const [
+        totalEmployees,
+        pendingEmployees,
+        totalLoans,
+        activeBranches,
+        activeBonuses,
+        totalPayrollThisMonth,
+        totalMedicalClaims
+    ] = await Promise.all([
+        // Total Approved Employees
+        prisma.user.count({
+            where: { 
+                status: "APPROVED",
+                isArchived: false,
+                role: { not: "SUPERADMIN" }
+            }
+        }),
+
+        // Pending Employees
+        prisma.user.count({
+            where: { 
+                status: "PENDING",
+                role: { not: "SUPERADMIN" }
+            }
+        }),
+
+        // Active Loans
+        prisma.loan.aggregate({
+            where: { status: "ACTIVE" },
+            _sum: { remainingPrincipal: true },
+            _count: { id: true }
+        }),
+
+        // Active Branches
+        prisma.branch.count({
+            where: { isActive: true }
+        }),
+
+        // Active Bonuses
+        prisma.bonusType.count({
+            where: { isActive: true }
+        }),
+
+        // This Month's Payroll
+        prisma.salaryPayment.aggregate({
+            where: {
+                month: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+            },
+            _sum: { netAmount: true },
+            _count: { id: true }
+        }),
+
+        // Medical Claims this year
+        prisma.medicalClaim.aggregate({
+            where: {
+                createdAt: {
+                    gte: new Date(new Date().getFullYear(), 0, 1)
+                }
+            },
+            _sum: { amount: true },
+            _count: { id: true }
+        })
+    ]);
+
+    return {
+        totalEmployees,
+        pendingEmployees,
+        activeLoanAmount: totalLoans._sum.remainingPrincipal || 0,
+        activeLoanCount: totalLoans._count,
+        activeBranches,
+        activeBonuses,
+        monthlyPayrollAmount: totalPayrollThisMonth._sum.netAmount || 0,
+        monthlyPayrollCount: totalPayrollThisMonth._count,
+        totalMedicalClaimsAmount: totalMedicalClaims._sum.amount || 0,
+        totalMedicalClaimsCount: totalMedicalClaims._count
+    };
+}
