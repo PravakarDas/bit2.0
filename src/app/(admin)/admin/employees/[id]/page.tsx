@@ -4,8 +4,7 @@ import { getSalaryHistory } from "@/actions/salary.actions";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { EditEmployeeDialog } from "@/components/admin/EditEmployeeDialog";
+import { ManageEmployeeDialog } from "@/components/admin/ManageEmployeeDialog";
 import { ArrowLeft, Wallet, Banknote, History } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -40,7 +39,7 @@ export default async function AdminEmployeeDetailPage({ params }: { params: { id
                             <History className="mr-2 h-4 w-4" /> Manage History
                         </Button>
                     </Link>
-                    <EditEmployeeDialog
+                    <ManageEmployeeDialog
                         user={{
                             id: user.id,
                             email: user.email,

@@ -92,6 +92,10 @@ model User {
   walletTransactions  WalletTransaction[]
   walletRequests      WalletRequest[]
   
+  // Leave Management Relations
+  leaveEntitlements   UserLeaveEntitlement[]
+  leaveApplications   LeaveApplication[]
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -306,4 +310,68 @@ model SystemAudit {
   details   String
   status    String   @default("SUCCESS")
   createdAt DateTime @default(now())
+}
+
+// Leave Management Models
+model LeaveType {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  allocatedDays     Int      // How many days per year
+  requiresApproval  Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  
+  // Branches that can use this leave type (JSON array of branch IDs)
+  applicableBranches String  @default("[]") // JSON array ["branch1", "branch2"]
+  
+  // Relations
+  userEntitlements   UserLeaveEntitlement[]
+  leaveApplications  LeaveApplication[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserLeaveEntitlement {
+  id           String @id @default(cuid())
+  year         Int    // Calendar year
+  allocatedDays Int    // Days allocated for this year
+  usedDays     Int    @default(0) // Days used so far
+  
+  // Relations
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  leaveTypeId  String
+  leaveType    LeaveType  @relation(fields: [leaveTypeId], references: [id])
+  
+  // Ensure one entitlement per user per leave type per year
+  @@unique([userId, leaveTypeId, year])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum LeaveApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model LeaveApplication {
+  id          String                @id @default(cuid())
+  leaveDate   DateTime              // The date of leave
+  reason      String?               // Optional reason
+  status      LeaveApplicationStatus @default(PENDING)
+  
+  // Relations
+  userId      String
+  user        User                  @relation(fields: [userId], references: [id])
+  leaveTypeId String
+  leaveType   LeaveType             @relation(fields: [leaveTypeId], references: [id])
+  
+  // Approval tracking
+  approvedBy  String?               // Admin who approved/rejected
+  approvedAt  DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

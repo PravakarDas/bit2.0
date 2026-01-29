@@ -36,6 +36,8 @@ const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
     { title: "Employee Management", url: "/admin/employees", icon: Users },
     { title: "Archived Employees", url: "/admin/archived-employees", icon: Archive },
+    { title: "Leave Types", url: "/admin/leave-types", icon: ScrollText },
+    { title: "Leave Applications", url: "/admin/leave-applications", icon: History },
     { title: "Loan Management", url: "/admin/loans", icon: Banknote },
     { title: "Medical Claims", url: "/admin/medical", icon: Stethoscope },
     { title: "Wallet Management", url: "/admin/wallet", icon: Wallet },
@@ -48,6 +50,7 @@ const adminItems = [
 const employeeItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Profile", url: "/profile", icon: UserCircle },
+    { title: "My Leaves", url: "/leaves", icon: ScrollText },
     { title: "My Loans", url: "/loans", icon: Banknote },
     { title: "My Medical", url: "/medical", icon: Stethoscope },
     { title: "My Wallet", url: "/wallet", icon: Wallet },
