@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { approveLeaveApplication, rejectLeaveApplication } from "@/actions/leave.actions";
-import { getDbUser } from "@/actions/user.actions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, XCircle } from "lucide-react";
@@ -18,13 +17,7 @@ export function ApprovalButtons({ applicationId }: ApprovalButtonsProps) {
         setLoading(true);
         
         try {
-            const user = await getDbUser();
-            if (!user) {
-                toast.error("User not found");
-                return;
-            }
-
-            const result = await approveLeaveApplication(applicationId, user.email);
+            const result = await approveLeaveApplication(applicationId, "admin");
             
             if (result.success) {
                 toast.success("Leave application approved successfully");
@@ -48,13 +41,7 @@ export function ApprovalButtons({ applicationId }: ApprovalButtonsProps) {
         setLoading(true);
         
         try {
-            const user = await getDbUser();
-            if (!user) {
-                toast.error("User not found");
-                return;
-            }
-
-            const result = await rejectLeaveApplication(applicationId, user.email);
+            const result = await rejectLeaveApplication(applicationId, "admin");
             
             if (result.success) {
                 toast.success("Leave application rejected");

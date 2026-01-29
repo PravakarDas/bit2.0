@@ -35,7 +35,7 @@ export default async function EmployeeLeavePage() {
                     <h1 className="text-3xl font-bold tracking-tight">My Leaves</h1>
                     <p className="text-muted-foreground">Track your leave balance and apply for time off</p>
                 </div>
-                {entitlements.length > 0 && <ApplyLeaveDialog entitlements={entitlements} />}
+                {entitlements.length > 0 && <ApplyLeaveDialog entitlements={entitlements} userId={user.id} />}
             </div>
 
             {/* Leave Entitlements Summary */}
@@ -53,7 +53,7 @@ export default async function EmployeeLeavePage() {
                         </CardContent>
                     </Card>
                 ) : (
-                    entitlements.map((entitlement) => {
+                    entitlements.map((entitlement: any) => {
                         const remainingDays = entitlement.allocatedDays - entitlement.usedDays;
                         const usagePercentage = (entitlement.usedDays / entitlement.allocatedDays) * 100;
                         
@@ -133,7 +133,7 @@ export default async function EmployeeLeavePage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {applications.map((application) => (
+                                    {applications.map((application: any) => (
                                         <TableRow key={application.id}>
                                             <TableCell className="font-medium">
                                                 {application.leaveType.name}

@@ -93,8 +93,8 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
             
             // Initialize form data
             const formData: {[key: string]: { assigned: boolean; customDays: string }} = {};
-            leaveTypesData.forEach(leaveType => {
-                const entitlement = entitlementsData.find(e => e.leaveType.id === leaveType.id);
+            leaveTypesData.forEach((leaveType: LeaveType) => {
+                const entitlement = entitlementsData.find((e: LeaveEntitlement) => e.leaveType.id === leaveType.id);
                 formData[leaveType.id] = {
                     assigned: !!entitlement,
                     customDays: entitlement ? entitlement.allocatedDays.toString() : leaveType.allocatedDays.toString()
@@ -216,17 +216,17 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
                             <div className="grid gap-2">
                                 <Label htmlFor="branch">Assign Branch</Label>
                                 <Select
-                                    value={basicFormData.branchId || ""}
+                                    value={basicFormData.branchId || "none"}
                                     onValueChange={(value) => setBasicFormData({ 
                                         ...basicFormData, 
-                                        branchId: value || null 
+                                        branchId: value === "none" ? null : value 
                                     })}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select branch" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="">No Branch</SelectItem>
+                                        <SelectItem value="none">No Branch</SelectItem>
                                         {branches.map((branch) => (
                                             <SelectItem key={branch.id} value={branch.id}>
                                                 {branch.name}

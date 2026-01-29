@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { applyForLeave } from "@/actions/leave.actions";
-import { getDbUser } from "@/actions/user.actions";
 import { toast } from "sonner";
 import {
     Dialog,
@@ -41,9 +40,10 @@ interface LeaveEntitlement {
 
 interface ApplyLeaveDialogProps {
     entitlements: LeaveEntitlement[];
+    userId: string; // Pass userId as prop instead of fetching in client
 }
 
-export function ApplyLeaveDialog({ entitlements }: ApplyLeaveDialogProps) {
+export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
@@ -81,18 +81,11 @@ export function ApplyLeaveDialog({ entitlements }: ApplyLeaveDialogProps) {
         setLoading(true);
         
         try {
-            // Get current user ID
-            const user = await getDbUser();
-            if (!user) {
-                toast.error("User not found");
-                return;
-            }
-
             const result = await applyForLeave({
                 leaveTypeId: formData.leaveTypeId,
                 leaveDate: formData.leaveDate,
                 reason: formData.reason.trim() || undefined,
-                userId: user.id
+                userId: userId
             });
             
             if (result.success) {
