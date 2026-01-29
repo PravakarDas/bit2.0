@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import TimelineTableView from "@/components/admin/TimelineTableView";
 import TimelineCalendarView from "@/components/admin/TimelineCalendarView";
 import TimelineFilters from "@/components/admin/TimelineFilters";
-import { getTimeRecords, initializeTimeRecords } from "@/actions/timeline.actions";
+import { getTimelineRecords } from "@/actions/timeline.actions";
 import { getBranches } from "@/actions/branch.actions";
 import { getUsers } from "@/actions/user.actions";
 
@@ -35,8 +35,10 @@ interface TimeRecord {
     lastName: string | null;
     email: string;
     branch: {
-      id: string;
       name: string;
+      weeklyOffDays: string[];
+      checkInTime: string;
+      checkOutTime: string;
     } | null;
   };
 }
@@ -54,7 +56,7 @@ export default function TimelineClient() {
   const [branches, setBranches] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [initializing, setInitializing] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 50,
@@ -98,21 +100,18 @@ export default function TimelineClient() {
   const loadTimeRecords = async () => {
     setLoading(true);
     try {
-      const result = await getTimeRecords({
-        branchId: filters.branchId || undefined,
-        userId: filters.userId || undefined,
-        startDate: filters.startDate ? new Date(filters.startDate) : undefined,
-        endDate: filters.endDate ? new Date(filters.endDate) : undefined,
-        page: pagination.page,
-        limit: pagination.limit
-      });
+      const result = await getTimelineRecords(
+        filters.userId || undefined,
+        filters.startDate ? new Date(filters.startDate) : undefined,
+        filters.endDate ? new Date(filters.endDate) : undefined
+      );
 
       if (result.success) {
         setTimeRecords(result.records || []);
         setPagination(prev => ({
           ...prev,
-          total: result.pagination?.total || 0,
-          totalPages: result.pagination?.totalPages || 0
+          total: result.records?.length || 0,
+          totalPages: Math.ceil((result.records?.length || 0) / 10)
         }));
       }
     } catch (error) {
@@ -120,35 +119,6 @@ export default function TimelineClient() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleInitializeRecords = async () => {
-    setInitializing(true);
-    try {
-      const result = await initializeTimeRecords();
-      if (result.success) {
-        alert(`Successfully created ${result.recordsCreated} time records`);
-        loadTimeRecords();
-      } else {
-        alert('Failed to initialize time records');
-      }
-    } catch (error) {
-      console.error('Error initializing records:', error);
-      alert('Error initializing time records');
-    } finally {
-      setInitializing(false);
-    }
-  };
-
-  const handleFilterChange = (key: keyof FilterOptions, value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value
-    }));
-    setPagination(prev => ({
-      ...prev,
-      page: 1 // Reset to first page when filters change
-    }));
   };
 
   const clearFilters = () => {
@@ -164,6 +134,41 @@ export default function TimelineClient() {
     }));
   };
 
+  const handleFilterChange = (key: keyof FilterOptions, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+    setPagination(prev => ({
+      ...prev,
+      page: 1 // Reset to first page when filters change
+    }));
+  };
+  const handleGenerateTimeline = async () => {
+    setGenerating(true);
+    try {
+      const response = await fetch('/api/admin/generate-timeline', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`Successfully generated ${result.recordsCreated} timeline records!`);
+        loadTimeRecords(); // Refresh the data
+      } else {
+        alert(`Failed to generate timeline: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error generating timeline:', error);
+      alert('Error generating timeline records');
+    } finally {
+      setGenerating(false);
+    }
+  };
   // Calculate summary stats
   const summaryStats = {
     totalEmployees: new Set(timeRecords.map(r => r.user.id)).size,
@@ -189,13 +194,13 @@ export default function TimelineClient() {
         </div>
         <div className="flex gap-2">
           <Button 
-            onClick={handleInitializeRecords} 
-            disabled={initializing}
-            variant="outline"
+            variant="outline" 
             size="sm"
+            onClick={handleGenerateTimeline}
+            disabled={generating}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${initializing ? 'animate-spin' : ''}`} />
-            {initializing ? 'Initializing...' : 'Initialize Records'}
+            <RefreshCw className={`h-4 w-4 mr-2 ${generating ? 'animate-spin' : ''}`} />
+            {generating ? 'Generating...' : 'Generate Today\'s Timeline'}
           </Button>
           <Button variant="outline" size="sm">
             <Download className="h-4 w-4 mr-2" />

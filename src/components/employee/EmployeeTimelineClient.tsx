@@ -11,7 +11,84 @@ import { format } from "date-fns";
 import EmployeeTimelineCalendar from "@/components/employee/EmployeeTimelineCalendar";
 import EmployeeTimelineTable from "@/components/employee/EmployeeTimelineTable";
 import EmployeeTimelineCharts from "@/components/employee/EmployeeTimelineCharts";
-import { getEmployeeTimeRecords } from "@/actions/timeline.actions";
+import { getTimelineRecords } from "@/actions/timeline.actions";
+
+/**
+ * Convert time string (HH:MM) to minutes
+ */
+function timeStringToMinutes(timeStr: string): number {
+  if (!timeStr) return 0;
+  const isNegative = timeStr.startsWith('-');
+  const cleanTime = timeStr.replace('-', '').replace('+', '');
+  const [hours, minutes] = cleanTime.split(':').map(Number);
+  const totalMinutes = (hours * 60) + minutes;
+  return isNegative ? -totalMinutes : totalMinutes;
+}
+
+/**
+ * Convert minutes to time string (HH:MM)
+ */
+function minutesToTimeString(minutes: number): string {
+  if (minutes === 0) return '00:00';
+  
+  const absMinutes = Math.abs(minutes);
+  const hours = Math.floor(absMinutes / 60);
+  const mins = absMinutes % 60;
+  
+  const sign = minutes < 0 ? '-' : '';
+  return `${sign}${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Calculate summary statistics from timeline records
+ */
+function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
+  let workingDays = 0;
+  let presentDays = 0;
+  let totalRequiredMinutes = 0;
+  let totalActualMinutes = 0;
+  let totalOvertimeMinutes = 0;
+
+  records.forEach(record => {
+    // Count working days (records with required times - not weekends/holidays)
+    if (record.requiredCheckIn && record.requiredCheckOut) {
+      workingDays++;
+      
+      // Add required time
+      if (record.requiredActiveTime) {
+        totalRequiredMinutes += timeStringToMinutes(record.requiredActiveTime);
+      }
+      
+      // Count present days (records with actual check-in)
+      if (record.actualCheckIn) {
+        presentDays++;
+        
+        // Add actual time
+        if (record.actualActiveTime) {
+          totalActualMinutes += timeStringToMinutes(record.actualActiveTime);
+        }
+        
+        // Add overtime/undertime
+        if (record.overtimeUndertime) {
+          totalOvertimeMinutes += timeStringToMinutes(record.overtimeUndertime);
+        }
+      }
+    }
+  });
+
+  const attendancePercentage = workingDays > 0 
+    ? ((presentDays / workingDays) * 100).toFixed(1)
+    : '0.0';
+
+  return {
+    workingDays,
+    presentDays,
+    totalRequiredTime: minutesToTimeString(totalRequiredMinutes),
+    totalActualTime: minutesToTimeString(totalActualMinutes),
+    totalOvertime: minutesToTimeString(totalOvertimeMinutes),
+    attendancePercentage
+  };
+}
 
 interface TimeRecord {
   id: string;
@@ -71,14 +148,48 @@ export default function EmployeeTimelineClient({ userId }: EmployeeTimelineClien
     loadTimelineData();
   }, [selectedYear, selectedMonth]);
 
+  // Recalculate summary when records change
+  useEffect(() => {
+    if (timeRecords.length > 0) {
+      const calculatedSummary = calculateTimelineSummary(timeRecords);
+      setSummary(calculatedSummary);
+    } else {
+      setSummary({
+        workingDays: 0,
+        presentDays: 0,
+        totalRequiredTime: '00:00',
+        totalActualTime: '00:00',
+        totalOvertime: '00:00',
+        attendancePercentage: '0.0'
+      });
+    }
+  }, [timeRecords]);
+
   const loadTimelineData = async () => {
     setLoading(true);
     try {
-      const result = await getEmployeeTimeRecords(userId, selectedYear, selectedMonth);
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+      
+      if (selectedMonth !== undefined) {
+        // Specific month selected
+        startDate = new Date(selectedYear, selectedMonth, 1);
+        endDate = new Date(selectedYear, selectedMonth + 1, 0);
+      } else {
+        // Whole year selected
+        startDate = new Date(selectedYear, 0, 1);
+        endDate = new Date(selectedYear, 11, 31);
+      }
+      
+      const result = await getTimelineRecords(userId, startDate, endDate);
       
       if (result.success) {
-        setTimeRecords(result.records || []);
-        setSummary(result.summary || null);
+        const records = result.records || [];
+        setTimeRecords(records);
+        
+        // Calculate dynamic summary from the loaded records
+        const calculatedSummary = calculateTimelineSummary(records);
+        setSummary(calculatedSummary);
       } else {
         console.error('Failed to load timeline data:', result.error);
       }
@@ -89,33 +200,46 @@ export default function EmployeeTimelineClient({ userId }: EmployeeTimelineClien
     }
   };
 
-  const getSummaryCards = () => [
-    {
-      title: "Working Days",
-      value: summary?.workingDays || 0,
-      icon: CalendarDays,
-      description: "Total working days"
-    },
-    {
-      title: "Present Days",
-      value: summary?.presentDays || 0,
-      icon: Clock,
-      description: "Days attended"
-    },
-    {
-      title: "Attendance Rate",
-      value: `${summary?.attendancePercentage || 0}%`,
-      icon: TrendingUp,
-      description: "Overall attendance"
-    },
-    {
-      title: "Total Overtime",
-      value: summary?.totalOvertime || "00:00",
-      icon: BarChart3,
-      description: "Extra hours worked",
-      variant: summary?.totalOvertime?.startsWith('-') ? "destructive" : "default"
-    }
-  ];
+  const getSummaryCards = () => {
+    const isLoading = loading || !summary;
+    const safeValue = (value: any, fallback: any = 0) => isLoading ? fallback : value;
+    
+    return [
+      {
+        title: "Working Days",
+        value: isLoading ? "--" : summary?.workingDays || 0,
+        icon: CalendarDays,
+        description: "Total working days"
+      },
+      {
+        title: "Present Days",
+        value: isLoading ? "--" : summary?.presentDays || 0,
+        icon: Clock,
+        description: "Days attended"
+      },
+      {
+        title: "Attendance Rate",
+        value: isLoading ? "--" : `${summary?.attendancePercentage || 0}%`,
+        icon: TrendingUp,
+        description: "Overall attendance"
+      },
+      {
+        title: "Total Overtime",
+        value: isLoading ? "--" : (() => {
+          const overtime = summary?.totalOvertime || "00:00";
+          if (overtime === '00:00') return 'On Time';
+          return overtime.startsWith('-') ? overtime : `+${overtime}`;
+        })(),
+        icon: BarChart3,
+        description: "Extra hours worked",
+        variant: (() => {
+          const overtime = summary?.totalOvertime || "00:00";
+          if (overtime === '00:00') return 'secondary';
+          return overtime.startsWith('-') ? 'destructive' : 'default';
+        })()
+      }
+    ];
+  };
 
   const getPeriodLabel = () => {
     if (selectedMonth !== undefined) {
@@ -264,7 +388,7 @@ export default function EmployeeTimelineClient({ userId }: EmployeeTimelineClien
       </Card>
 
       {/* Additional Summary Details */}
-      {summary && (
+      {!loading && summary && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card>
             <CardHeader>
@@ -281,9 +405,13 @@ export default function EmployeeTimelineClient({ userId }: EmployeeTimelineClien
               </div>
               <div className="flex justify-between text-sm border-t pt-2">
                 <span>Net Overtime/Undertime:</span>
-                <Badge variant={summary.totalOvertime.startsWith('-') ? "destructive" : "default"}>
-                  {summary.totalOvertime.startsWith('-') ? '' : '+'}
-                  {summary.totalOvertime}
+                <Badge variant={
+                  summary.totalOvertime === '00:00' ? 'secondary' : 
+                  summary.totalOvertime.startsWith('-') ? 'destructive' : 'default'
+                }>
+                  {summary.totalOvertime === '00:00' ? 'On Time' :
+                   summary.totalOvertime.startsWith('-') ? summary.totalOvertime : 
+                   `+${summary.totalOvertime}`}
                 </Badge>
               </div>
             </CardContent>
@@ -314,6 +442,27 @@ export default function EmployeeTimelineClient({ userId }: EmployeeTimelineClien
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+      
+      {/* Show loading state for summary details */}
+      {loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[...Array(2)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <div className="animate-pulse bg-gray-200 h-6 w-32 rounded"></div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {[...Array(4)].map((_, j) => (
+                  <div key={j} className="flex justify-between">
+                    <div className="animate-pulse bg-gray-200 h-4 w-24 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 h-4 w-16 rounded"></div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
     </div>

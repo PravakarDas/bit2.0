@@ -103,7 +103,8 @@ export async function rejectEmployee(userId: string) {
 
         // Try to delete from Clerk (optional, if it fails we continue)
         try {
-            await clerkClient.users.deleteUser(user.clerkId);
+            const clerk = await clerkClient();
+            await clerk.users.deleteUser(user.clerkId);
         } catch (clerkError) {
             console.warn("Could not delete user from Clerk:", clerkError);
         }

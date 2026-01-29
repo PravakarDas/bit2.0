@@ -414,3 +414,25 @@ model DailyTimeRecord {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+enum NotificationType {
+  TIMELINE_GENERATION_FAILED
+  TIMELINE_BACKFILL_COMPLETED
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
+model AdminNotification {
+  id          String             @id @default(cuid())
+  type        NotificationType
+  title       String
+  message     String
+  status      NotificationStatus @default(UNREAD)
+  metadata    Json?              // For storing additional data
+  
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}

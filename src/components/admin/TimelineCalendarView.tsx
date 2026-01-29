@@ -26,8 +26,10 @@ interface TimeRecord {
     lastName: string | null;
     email: string;
     branch: {
-      id: string;
       name: string;
+      weeklyOffDays: string[];
+      checkInTime: string;
+      checkOutTime: string;
     } | null;
   };
 }
