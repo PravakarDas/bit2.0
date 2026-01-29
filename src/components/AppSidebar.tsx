@@ -14,6 +14,7 @@ import {
     ScrollText,
     Archive,
     Wallet,
+    Clock,
 } from "lucide-react";
 
 import {
@@ -36,6 +37,7 @@ const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
     { title: "Employee Management", url: "/admin/employees", icon: Users },
     { title: "Archived Employees", url: "/admin/archived-employees", icon: Archive },
+    { title: "Timeline", url: "/admin/timeline", icon: Clock },
     { title: "Leave Types", url: "/admin/leave-types", icon: ScrollText },
     { title: "Leave Applications", url: "/admin/leave-applications", icon: History },
     { title: "Loan Management", url: "/admin/loans", icon: Banknote },
@@ -50,6 +52,7 @@ const adminItems = [
 const employeeItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Profile", url: "/profile", icon: UserCircle },
+    { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "My Leaves", url: "/leaves", icon: ScrollText },
     { title: "My Loans", url: "/loans", icon: Banknote },
     { title: "My Medical", url: "/medical", icon: Stethoscope },

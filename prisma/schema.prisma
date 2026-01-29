@@ -96,6 +96,9 @@ model User {
   leaveEntitlements   UserLeaveEntitlement[]
   leaveApplications   LeaveApplication[]
   
+  // Timeline/Attendance Relations
+  timeRecords         DailyTimeRecord[]
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -131,6 +134,12 @@ model Branch {
   name      String
   location  String
   isActive  Boolean  @default(true)
+  
+  // Timeline/Attendance Settings
+  checkInTime    String   @default("09:00")    // Format: "HH:MM" (24-hour)
+  checkOutTime   String   @default("18:00")    // Format: "HH:MM" (24-hour)  
+  breakDuration  String   @default("01:00")    // Format: "HH:MM" (duration)
+  weeklyOffDays  String[] @default(["SUNDAY"]) // Array of day names: MONDAY, TUESDAY, etc.
   
   users      User[]
   allowances AllowanceType[]
@@ -374,4 +383,34 @@ model LeaveApplication {
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model DailyTimeRecord {
+  id                String    @id @default(cuid())
+  date              DateTime  // The date for this record (date only, no time)
+  
+  // Required times (from branch settings or manual override)
+  requiredCheckIn   DateTime? // Full DateTime for required check-in
+  requiredCheckOut  DateTime? // Full DateTime for required check-out
+  requiredBreakTime String?   // Duration in HH:MM format (e.g., "01:00")
+  
+  // Actual times (to be filled by attendance system or manual entry)
+  actualCheckIn     DateTime? // Actual check-in time
+  actualCheckOut    DateTime? // Actual check-out time
+  actualBreakTime   String?   // Actual break duration in HH:MM format
+  
+  // Calculated fields (computed from above times)
+  requiredActiveTime String?  // (requiredCheckOut - requiredCheckIn - requiredBreakTime) in HH:MM
+  actualActiveTime   String?  // (actualCheckOut - actualCheckIn - actualBreakTime) in HH:MM
+  overtimeUndertime  String?  // (actualActiveTime - requiredActiveTime) in +/-HH:MM format
+  
+  // Relations
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  
+  // Ensure one record per user per date
+  @@unique([userId, date])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -16,10 +16,24 @@ export async function getActiveBranches() {
     });
 }
 
-export async function createBranch(data: { name: string; location: string }) {
+export async function createBranch(data: { 
+    name: string; 
+    location: string;
+    checkInTime?: string;
+    checkOutTime?: string;
+    breakDuration?: string;
+    weeklyOffDays?: string[];
+}) {
     try {
         const branch = await prisma.branch.create({
-            data,
+            data: {
+                name: data.name,
+                location: data.location,
+                checkInTime: data.checkInTime || "09:00",
+                checkOutTime: data.checkOutTime || "18:00",
+                breakDuration: data.breakDuration || "01:00",
+                weeklyOffDays: data.weeklyOffDays || ["SUNDAY"]
+            },
         });
         revalidatePath("/admin/branches");
         return { success: true, branch };
@@ -40,5 +54,56 @@ export async function toggleBranchStatus(id: string, isActive: boolean) {
     } catch (error) {
         console.error("Error toggling branch status:", error);
         return { success: false, error: "Failed to toggle status" };
+    }
+}
+
+export async function getBranchWithDetails(id: string) {
+    try {
+        const branch = await prisma.branch.findUnique({
+            where: { id },
+            include: {
+                users: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true
+                    }
+                },
+                _count: {
+                    select: {
+                        users: true
+                    }
+                }
+            }
+        });
+        return { success: true, branch };
+    } catch (error) {
+        console.error("Error fetching branch details:", error);
+        return { success: false, error: "Failed to fetch branch details" };
+    }
+}
+
+export async function updateBranchTimelineSettings(branchId: string, data: {
+    checkInTime: string;
+    checkOutTime: string;
+    breakDuration: string;
+    weeklyOffDays: string[];
+}) {
+    try {
+        const branch = await prisma.branch.update({
+            where: { id: branchId },
+            data: {
+                checkInTime: data.checkInTime,
+                checkOutTime: data.checkOutTime,
+                breakDuration: data.breakDuration,
+                weeklyOffDays: data.weeklyOffDays
+            }
+        });
+        revalidatePath("/admin/branches");
+        return { success: true, branch };
+    } catch (error) {
+        console.error("Error updating branch timeline settings:", error);
+        return { success: false, error: "Failed to update branch timeline settings" };
     }
 }

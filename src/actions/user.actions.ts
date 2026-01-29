@@ -112,3 +112,25 @@ export async function getUserById(id: string) {
         where: { id },
     });
 }
+
+export async function getUsers() {
+    return await prisma.user.findMany({
+        where: {
+            status: "APPROVED",
+            isArchived: false
+        },
+        include: {
+            branch: {
+                select: {
+                    id: true,
+                    name: true
+                }
+            }
+        },
+        orderBy: [
+            { firstName: "asc" },
+            { lastName: "asc" },
+            { email: "asc" }
+        ]
+    });
+}
