@@ -15,6 +15,7 @@ import {
     Archive,
     Wallet,
     Clock,
+    FileCheck,
 } from "lucide-react";
 
 import {
@@ -36,6 +37,7 @@ import logo from "@/assets/logo.gif";
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
     { title: "Employee Management", url: "/admin/employees", icon: Users },
+    { title: "Profile Requests", url: "/admin/profile-requests", icon: FileCheck },
     { title: "Archived Employees", url: "/admin/archived-employees", icon: Archive },
     { title: "Timeline", url: "/admin/timeline", icon: Clock },
     { title: "Leave Types", url: "/admin/leave-types", icon: ScrollText },
