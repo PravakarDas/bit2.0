@@ -15,7 +15,6 @@ export type ProfileData = {
   // Contact Information
   phoneNumber?: string | null;
   personalEmail?: string | null;
-  workEmail?: string | null;
 
   // Current Address
   currentStreet?: string | null;
@@ -146,7 +145,6 @@ export async function submitProfileUpdateRequest(data: ProfileData) {
       nidNumber: user.nidNumber,
       phoneNumber: user.phoneNumber,
       personalEmail: user.personalEmail,
-      workEmail: user.workEmail,
       currentStreet: user.currentStreet,
       currentCity: user.currentCity,
       currentState: user.currentState,

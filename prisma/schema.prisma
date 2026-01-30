@@ -93,7 +93,6 @@ model User {
   // Contact Information
   phoneNumber          String?
   personalEmail        String?
-  workEmail            String?
   
   // Current Address
   currentStreet        String?

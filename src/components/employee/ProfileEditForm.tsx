@@ -33,7 +33,6 @@ const profileFormSchema = z.object({
   // Contact Information
   phoneNumber: z.string().optional(),
   personalEmail: z.string().email().optional().or(z.literal("")),
-  workEmail: z.string().email().optional().or(z.literal("")),
 
   // Current Address
   currentStreet: z.string().optional(),
@@ -92,7 +91,6 @@ export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: 
       nidNumber: user.nidNumber || "",
       phoneNumber: user.phoneNumber || "",
       personalEmail: user.personalEmail || "",
-      workEmail: user.workEmail || "",
       currentStreet: user.currentStreet || "",
       currentCity: user.currentCity || "",
       currentState: user.currentState || "",
@@ -276,20 +274,6 @@ export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: 
                   <FormLabel>Personal Email</FormLabel>
                   <FormControl>
                     <Input type="email" placeholder="personal@example.com" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="workEmail"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Work Email</FormLabel>
-                  <FormControl>
-                    <Input type="email" placeholder="work@company.com" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,9 +48,19 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold">
-                {user.firstName?.[0]}{user.lastName?.[0]}
-              </div>
+              {user.imageUrl ? (
+                <Image
+                  src={user.imageUrl}
+                  alt={`${user.firstName} ${user.lastName}`}
+                  width={80}
+                  height={80}
+                  className="h-20 w-20 rounded-full object-cover border-2 border-primary/20"
+                />
+              ) : (
+                <div className="h-20 w-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold">
+                  {user.firstName?.[0]}{user.lastName?.[0]}
+                </div>
+              )}
               <div>
                 <CardTitle className="text-2xl">
                   {user.firstName} {user.lastName}
@@ -102,7 +113,7 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <InfoItem label="Phone Number" value={user.phoneNumber} icon={<Phone className="h-4 w-4" />} />
           <InfoItem label="Personal Email" value={user.personalEmail} icon={<Mail className="h-4 w-4" />} />
-          <InfoItem label="Work Email" value={user.workEmail || user.email} icon={<Mail className="h-4 w-4" />} />
+          <InfoItem label="Work Email" value={user.email} icon={<Mail className="h-4 w-4" />} />
         </CardContent>
       </Card>
 
