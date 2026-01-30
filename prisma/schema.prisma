@@ -84,6 +84,52 @@ model User {
   branchId   String?
   branch     Branch?    @relation(fields: [branchId], references: [id])
   
+  // Personal Information
+  gender               String?
+  dateOfBirth          DateTime?
+  bloodGroup           String?
+  nidNumber            String?
+  
+  // Contact Information
+  phoneNumber          String?
+  personalEmail        String?
+  workEmail            String?
+  
+  // Current Address
+  currentStreet        String?
+  currentCity          String?
+  currentState         String?
+  currentCountry       String?
+  currentPostalCode    String?
+  
+  // Permanent Address
+  permanentStreet      String?
+  permanentCity        String?
+  permanentState       String?
+  permanentCountry     String?
+  permanentPostalCode  String?
+  
+  // Employment Details
+  designation          String?
+  department           String?
+  dateOfJoining        DateTime?
+  attendanceId         String?
+  
+  // Emergency Contact
+  emergencyContactName          String?
+  emergencyContactRelationship  String?
+  emergencyContactPhone         String?
+  emergencyContactEmail         String?
+  emergencyContactAddress       String?
+  
+  // Banking Information
+  bankAccountNumber    String?
+  
+  // Professional Links
+  portfolioLink        String?
+  githubLink           String?
+  linkedinLink         String?
+  
   loans               Loan[]
   medicalClaims       MedicalClaim[]
   medicalEntitlements MedicalEntitlement[]
@@ -98,6 +144,9 @@ model User {
   
   // Timeline/Attendance Relations
   timeRecords         DailyTimeRecord[]
+  
+  // Profile Update Requests
+  profileUpdateRequests ProfileUpdateRequest[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -418,11 +467,18 @@ model DailyTimeRecord {
 enum NotificationType {
   TIMELINE_GENERATION_FAILED
   TIMELINE_BACKFILL_COMPLETED
+  PROFILE_UPDATE_REQUEST
 }
 
 enum NotificationStatus {
   UNREAD
   READ
+}
+
+enum ProfileUpdateStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model AdminNotification {
@@ -436,3 +492,27 @@ model AdminNotification {
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 }
+
+model ProfileUpdateRequest {
+  id          String              @id @default(cuid())
+  userId      String
+  user        User                @relation(fields: [userId], references: [id])
+  
+  status      ProfileUpdateStatus @default(PENDING)
+  
+  // Store the requested changes as JSON
+  // This allows us to store only the fields that are being updated
+  requestedChanges Json
+  
+  // Optional: Store previous values for audit trail
+  previousValues   Json?
+  
+  // Admin review info
+  reviewedBy       String?         // Clerk ID of admin who reviewed
+  reviewedAt       DateTime?
+  reviewNotes      String?         // Optional notes from admin
+  
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
