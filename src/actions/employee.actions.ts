@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { UserStatus, EmployeeStatus } from "@prisma/client";
+import { UserStatus, EmployeeStatus, SalaryChangeReason } from "@prisma/client";
 import { clerkClient } from "@clerk/nextjs/server";
 
 export async function getActiveEmployees() {
@@ -47,15 +47,34 @@ export async function getArchivedEmployees(fromDate?: string, toDate?: string) {
     });
 }
 
-export async function approveEmployee(userId: string) {
+export async function approveEmployeeWithDetails(userId: string, branchId: string, baseSalary: number) {
     try {
+        if (!branchId) {
+            return { success: false, error: "Branch is required to approve employee" };
+        }
+        if (!baseSalary || baseSalary <= 0) {
+            return { success: false, error: "Base salary is required to approve employee" };
+        }
+
         const user = await prisma.$transaction(async (tx) => {
             const updatedUser = await tx.user.update({
                 where: { id: userId },
                 data: { 
                     status: "APPROVED",
-                    employeeStatus: "ACTIVE"
+                    employeeStatus: "ACTIVE",
+                    branchId,
+                    baseSalary
                 },
+            });
+
+            // Create salary history entry for joining
+            await tx.baseSalary.create({
+                data: {
+                    userId,
+                    amount: baseSalary,
+                    reason: SalaryChangeReason.JOINING,
+                    effectiveFrom: new Date()
+                }
             });
 
             // Create medical entitlement for approved employee
@@ -79,6 +98,24 @@ export async function approveEmployee(userId: string) {
 
         revalidatePath("/admin/employees");
         return { success: true, user };
+    } catch (error) {
+        console.error("Error approving employee:", error);
+        return { success: false, error: "Failed to approve employee" };
+    }
+}
+
+export async function approveEmployee(userId: string) {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { branchId: true, baseSalary: true }
+        });
+
+        if (!user?.branchId || !user.baseSalary || user.baseSalary <= 0) {
+            return { success: false, error: "Branch and base salary are required before approval" };
+        }
+
+        return await approveEmployeeWithDetails(userId, user.branchId, user.baseSalary);
     } catch (error) {
         console.error("Error approving employee:", error);
         return { success: false, error: "Failed to approve employee" };
@@ -173,5 +210,19 @@ export async function updateEmployeeProfile(userId: string, data: {
 
 // Legacy function - kept for backward compatibility
 export async function updateUserStatus(userId: string, status: UserStatus) {
-    return await approveEmployee(userId);
+    if (status === "APPROVED") {
+        return { success: false, error: "Approval requires branch and base salary" };
+    }
+
+    try {
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data: { status },
+        });
+        revalidatePath("/admin/employees");
+        return { success: true, user };
+    } catch (error) {
+        console.error("Error updating user status:", error);
+        return { success: false, error: "Failed to update status" };
+    }
 }

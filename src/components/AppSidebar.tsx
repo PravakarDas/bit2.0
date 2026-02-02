@@ -46,6 +46,7 @@ const adminItems = [
     { title: "Medical Claims", url: "/admin/medical", icon: Stethoscope },
     { title: "Wallet Management", url: "/admin/wallet", icon: Wallet },
     { title: "Payroll", url: "/admin/payroll", icon: CircleDollarSign },
+    { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
     { title: "Branches", url: "/admin/branches", icon: Settings },
     { title: "Bonuses", url: "/admin/bonuses", icon: CircleDollarSign },
     { title: "Settings", url: "/admin/settings", icon: Wrench },

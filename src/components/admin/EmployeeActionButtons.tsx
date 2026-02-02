@@ -5,8 +5,9 @@ import { updateUserStatus } from "@/actions/employee.actions";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { UserStatus } from "@prisma/client";
-import { Banknote, ShieldAlert, UserCheck, XCircle } from "lucide-react";
+import { Banknote, ShieldAlert, XCircle } from "lucide-react";
 import Link from "next/link";
+import { ApproveEmployeeDialog } from "@/components/admin/ApproveEmployeeDialog";
 
 export function EmployeeActionButtons({
     userId,
@@ -63,15 +64,7 @@ export function EmployeeActionButtons({
                 <XCircle className="mr-1 h-4 w-4" />
                 Reject
             </Button>
-            <Button
-                size="sm"
-                onClick={() => handleStatusUpdate("APPROVED")}
-                disabled={loading}
-                className="bg-green-600 hover:bg-green-700"
-            >
-                <UserCheck className="mr-1 h-4 w-4" />
-                Approve
-            </Button>
+            <ApproveEmployeeDialog userId={userId} />
         </div>
     );
 }

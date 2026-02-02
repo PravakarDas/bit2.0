@@ -9,5 +9,5 @@ export default async function EmployeeTimelinePage() {
     redirect("/sign-in");
   }
 
-  return <EmployeeTimelineClient userId={user.id} />;
+  return <EmployeeTimelineClient userId={user.id} baseSalary={user.baseSalary} />;
 }

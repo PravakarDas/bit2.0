@@ -46,6 +46,7 @@ function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
   let workingDays = 0;
   let presentDays = 0;
   let totalRequiredMinutes = 0;
+  let totalRequiredBreakMinutes = 0;
   let totalActualMinutes = 0;
   let totalOvertimeMinutes = 0;
 
@@ -57,6 +58,10 @@ function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
       // Add required time
       if (record.requiredActiveTime) {
         totalRequiredMinutes += timeStringToMinutes(record.requiredActiveTime);
+      }
+
+      if (record.requiredBreakTime) {
+        totalRequiredBreakMinutes += timeStringToMinutes(record.requiredBreakTime);
       }
       
       // Count present days (records with actual check-in)
@@ -84,6 +89,7 @@ function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
     workingDays,
     presentDays,
     totalRequiredTime: minutesToTimeString(totalRequiredMinutes),
+    totalRequiredBreakTime: minutesToTimeString(totalRequiredBreakMinutes),
     totalActualTime: minutesToTimeString(totalActualMinutes),
     totalOvertime: minutesToTimeString(totalOvertimeMinutes),
     attendancePercentage
@@ -108,6 +114,7 @@ interface TimelineSummary {
   workingDays: number;
   presentDays: number;
   totalRequiredTime: string;
+  totalRequiredBreakTime: string;
   totalActualTime: string;
   totalOvertime: string;
   attendancePercentage: string;
@@ -115,9 +122,10 @@ interface TimelineSummary {
 
 interface EmployeeTimelineClientProps {
   userId: string;
+  baseSalary: number;
 }
 
-export default function EmployeeTimelineClient({ userId }: EmployeeTimelineClientProps) {
+export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeTimelineClientProps) {
   const [activeView, setActiveView] = useState<"calendar" | "table" | "charts">("calendar");
   const [timeRecords, setTimeRecords] = useState<TimeRecord[]>([]);
   const [summary, setSummary] = useState<TimelineSummary | null>(null);
@@ -160,6 +168,7 @@ export default function EmployeeTimelineClient({ userId }: EmployeeTimelineClien
         totalRequiredTime: '00:00',
         totalActualTime: '00:00',
         totalOvertime: '00:00',
+        totalRequiredBreakTime: '00:00',
         attendancePercentage: '0.0'
       });
     }
