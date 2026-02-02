@@ -171,7 +171,7 @@ export default function EmployeeTimelineCalendar({
                       key={day.toISOString()}
                       onClick={() => setSelectedDay(day)}
                       className={cn(
-                        "min-h-[100px] p-2 text-left border rounded-lg hover:bg-gray-50 transition-colors",
+                        "min-h-25 p-2 text-left border rounded-lg hover:bg-gray-50 transition-colors",
                         isSelected && "border-primary bg-primary/5",
                         isToday && "border-blue-500 bg-blue-50"
                       )}

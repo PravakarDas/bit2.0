@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { toggleEmiCarryForward, processPayroll } from "@/actions/payroll.actions";
 import {
     Table,
@@ -20,7 +20,6 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-    DialogFooter,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -59,7 +58,7 @@ export function PayrollClient({
     month: number,
     year: number
 }) {
-    const [data, setData] = useState(initialData);
+    const data = initialData;
     const [selectedBonuses, setSelectedBonuses] = useState<Record<string, string[]>>({});
     const [processing, setProcessing] = useState(false);
 
@@ -67,7 +66,7 @@ export function PayrollClient({
         try {
             await toggleEmiCarryForward(loanId, !checked);
             toast.success(checked ? "EMI will be deducted" : "EMI carried forward");
-        } catch (error) {
+        } catch {
             toast.error("Failed to update EMI status");
         }
     };
@@ -98,8 +97,8 @@ export function PayrollClient({
             // Need to update processPayroll to accept selected bonuses
             await processPayroll(payrollMonth, selectedBonuses);
             toast.success(`Payroll for ${payrollMonth} processed successfully`);
-        } catch (error: any) {
-            toast.error(error.message || "Failed to process payroll");
+        } catch (error: unknown) {
+            toast.error((error instanceof Error) ? error.message : "Failed to process payroll");
         } finally {
             setProcessing(false);
         }
@@ -123,7 +122,7 @@ export function PayrollClient({
                 </Button>
             </div>
 
-            <div className="border rounded-lg bg-card bg-white shadow-sm overflow-hidden text-sm">
+            <div className="border rounded-lg bg-white shadow-sm overflow-hidden text-sm">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-muted/50">

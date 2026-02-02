@@ -110,7 +110,7 @@ export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps
             } else {
                 toast.error(result.error || "Failed to apply for leave");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred while applying for leave");
         } finally {
             setLoading(false);
@@ -137,7 +137,7 @@ export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps
                     Apply for Leave
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="sm:max-w-125">
                 <DialogHeader>
                     <DialogTitle>Apply for Leave</DialogTitle>
                 </DialogHeader>

@@ -49,7 +49,7 @@ interface User {
     designationId: string | null;
 }
 
-export function EditEmployeeDialog({ user, branches }: { user: User, branches: Branch[] }) {
+export function EditEmployeeDialog({ user, branches, onUpdate }: { user: User, branches: Branch[], onUpdate?: () => void }) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [departments, setDepartments] = useState<Department[]>([]);
@@ -97,10 +97,11 @@ export function EditEmployeeDialog({ user, branches }: { user: User, branches: B
             if (res.success) {
                 toast.success("Employee profile updated successfully");
                 setIsOpen(false);
+                onUpdate?.(); // Call the onUpdate callback to refresh data
             } else {
                 toast.error(res.error || "Failed to update profile");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred during update");
         } finally {
             setLoading(false);
@@ -110,11 +111,11 @@ export function EditEmployeeDialog({ user, branches }: { user: User, branches: B
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                    <UserCog className="mr-2 h-4 w-4" /> Edit Profile
+                <Button variant="default" size="sm">
+                    <UserCog className="mr-2 h-4 w-4" /> Edit Role & Assignment
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                     <DialogTitle>Edit Employee: {user.email}</DialogTitle>
                 </DialogHeader>

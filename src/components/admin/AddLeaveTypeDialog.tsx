@@ -70,7 +70,7 @@ export function AddLeaveTypeDialog({ branches }: AddLeaveTypeDialogProps) {
             } else {
                 toast.error(result.error || "Failed to create leave type");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred while creating leave type");
         } finally {
             setLoading(false);
@@ -108,7 +108,7 @@ export function AddLeaveTypeDialog({ branches }: AddLeaveTypeDialogProps) {
                     Add Leave Type
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-150">
                 <DialogHeader>
                     <DialogTitle>Add New Leave Type</DialogTitle>
                 </DialogHeader>

@@ -80,8 +80,8 @@ export async function createDepartment(data: {
 
     revalidatePath("/admin/departments");
     return { success: true, department };
-  } catch (error: any) {
-    if (error.code === "P2002") {
+  } catch (error: unknown) {
+    if (error instanceof Object && 'code' in error && error.code === "P2002") {
       return { success: false, error: "Department name already exists" };
     }
     return { success: false, error: "Failed to create department" };
@@ -119,7 +119,7 @@ export async function updateDepartment(id: string, data: {
     revalidatePath("/admin/departments");
     return { success: true, department };
   } catch (error: unknown) {
-    if ((error as any).code === "P2002") {
+    if (error instanceof Object && 'code' in error && error.code === "P2002") {
       return { success: false, error: "Department name already exists" };
     }
     return { success: false, error: "Failed to update department" };

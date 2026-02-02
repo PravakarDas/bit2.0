@@ -98,6 +98,12 @@ export default async function EmployeesPage() {
                                                 {employee.branch && (
                                                     <Badge variant="outline" className="text-xs">{employee.branch.name}</Badge>
                                                 )}
+                                                {employee.department && (
+                                                    <Badge variant="secondary" className="text-xs">{employee.department.name}</Badge>
+                                                )}
+                                                {employee.designation && (
+                                                    <Badge variant="secondary" className="text-xs">{employee.designation.name}</Badge>
+                                                )}
                                                 {employee.employeeStatus && (
                                                     <Badge 
                                                         variant={
@@ -117,6 +123,17 @@ export default async function EmployeesPage() {
                                         <EmployeeStatusSelect 
                                             employeeId={employee.id} 
                                             currentStatus={employee.employeeStatus} 
+                                        />
+                                        <EditEmployeeDialog
+                                            user={{
+                                                id: employee.id,
+                                                email: employee.email,
+                                                role: employee.role,
+                                                branchId: employee.branchId,
+                                                departmentId: employee.departmentId,
+                                                designationId: employee.designationId,
+                                            }}
+                                            branches={branches}
                                         />
                                         <Link href={`/admin/employees/${employee.id}`}>
                                             <Button variant="outline" size="sm">View Profile</Button>

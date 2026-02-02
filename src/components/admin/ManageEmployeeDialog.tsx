@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { updateEmployeeProfile } from "@/actions/employee.actions";
 import { 
     getActiveLeaveTypes, 
@@ -29,8 +29,8 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { UserCog, CalendarDays, Trash2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { UserCog, CalendarDays } from "lucide-react";
 import { Role } from "@prisma/client";
 
 interface Branch {
@@ -75,13 +75,7 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
     
     const [leaveFormData, setLeaveFormData] = useState<{[key: string]: { assigned: boolean; customDays: string }}>({});
 
-    useEffect(() => {
-        if (isOpen) {
-            loadLeaveData();
-        }
-    }, [isOpen, user.id]);
-
-    const loadLeaveData = async () => {
+    const loadLeaveData = useCallback(async () => {
         try {
             const [leaveTypesData, entitlementsData] = await Promise.all([
                 getActiveLeaveTypes(),
@@ -101,10 +95,16 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
                 };
             });
             setLeaveFormData(formData);
-        } catch (error) {
+        } catch {
             toast.error("Failed to load leave data");
         }
-    };
+    }, [user.id]);
+
+    useEffect(() => {
+        if (isOpen) {
+            loadLeaveData();
+        }
+    }, [isOpen, loadLeaveData]);
 
     const handleBasicSubmit = async () => {
         setLoading(true);
@@ -115,7 +115,7 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
             } else {
                 toast.error(res.error || "Failed to update profile");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred during update");
         } finally {
             setLoading(false);
@@ -148,7 +148,7 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
             
             toast.success("Leave assignments updated successfully");
             await loadLeaveData(); // Refresh data
-        } catch (error) {
+        } catch {
             toast.error("Failed to update leave assignments");
         } finally {
             setLoading(false);
@@ -183,7 +183,7 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
                     Manage Employee
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-175 max-h-screen overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Manage Employee: {user.email}</DialogTitle>
                 </DialogHeader>
@@ -287,7 +287,7 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
                                                                 </div>
                                                                 {!isApplicable && (
                                                                     <div className="text-xs text-red-500">
-                                                                        Not applicable for employee's branch
+                                                                        Not applicable for employee&apos;s branch
                                                                     </div>
                                                                 )}
                                                             </div>

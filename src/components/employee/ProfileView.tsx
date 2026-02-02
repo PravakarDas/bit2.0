@@ -65,7 +65,7 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
                   className="h-20 w-20 rounded-full object-cover border-2 border-primary/20"
                 />
               ) : (
-                <div className="h-20 w-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold">
+                <div className="h-20 w-20 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold">
                   {user.firstName?.[0]}{user.lastName?.[0]}
                 </div>
               )}

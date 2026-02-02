@@ -74,7 +74,7 @@ export function EditLeaveTypeDialog({ leaveType, branches }: EditLeaveTypeDialog
             } else {
                 toast.error(result.error || "Failed to update leave type");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred while updating leave type");
         } finally {
             setLoading(false);
@@ -112,7 +112,7 @@ export function EditLeaveTypeDialog({ leaveType, branches }: EditLeaveTypeDialog
                     Edit
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-150">
                 <DialogHeader>
                     <DialogTitle>Edit Leave Type</DialogTitle>
                 </DialogHeader>

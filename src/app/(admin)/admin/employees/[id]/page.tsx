@@ -13,6 +13,7 @@ import { Loader2, ArrowLeft, Wallet, History } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { ManageEmployeeDialog } from "@/components/admin/ManageEmployeeDialog";
+import { EditEmployeeDialog } from "@/components/admin/EditEmployeeDialog";
 import { getActiveBranches } from "@/actions/branch.actions";
 
 type UserWithBranch = User & {
@@ -20,6 +21,14 @@ type UserWithBranch = User & {
     id: string;
     name: string;
     location: string;
+  } | null;
+  department?: {
+    id: string;
+    name: string;
+  } | null;
+  designation?: {
+    id: string;
+    name: string;
   } | null;
 };
 
@@ -96,6 +105,18 @@ export default function AdminEmployeeDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <EditEmployeeDialog
+            user={{
+              id: user.id,
+              email: user.email,
+              role: user.role,
+              branchId: user.branchId,
+              departmentId: user.departmentId,
+              designationId: user.designationId,
+            }}
+            branches={branches}
+            onUpdate={fetchData}
+          />
           <Link href={`/employees/${userId}/salary`}>
             <Button variant="outline">
               <History className="mr-2 h-4 w-4" />

@@ -86,7 +86,7 @@ export function AddBranchDialog() {
                     <Plus className="mr-2 h-4 w-4" /> Add Branch
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-150 max-h-screen overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Add New Branch</DialogTitle>
                 </DialogHeader>

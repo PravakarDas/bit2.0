@@ -42,9 +42,8 @@ interface TimelineCalendarViewProps {
 
 export default function TimelineCalendarView({
   records,
-  loading,
-  onRecordUpdate
-}: TimelineCalendarViewProps) {
+  loading
+}: Omit<TimelineCalendarViewProps, "onRecordUpdate">) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
@@ -140,7 +139,7 @@ export default function TimelineCalendarView({
                       key={day.toISOString()}
                       onClick={() => setSelectedDay(day)}
                       className={cn(
-                        "min-h-[80px] p-2 text-left border rounded-lg hover:bg-gray-50 transition-colors",
+                        "min-h-20 p-2 text-left border rounded-lg hover:bg-gray-50 transition-colors",
                         isSelected && "border-primary bg-primary/5",
                         isToday && "border-blue-500 bg-blue-50"
                       )}

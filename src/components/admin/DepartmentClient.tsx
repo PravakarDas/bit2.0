@@ -47,28 +47,38 @@ interface Department {
   isActive: boolean;
   parentId: string | null;
   parent: { id: string; name: string } | null;
-  children: any[];
+  children: unknown[];
   _count: {
     designations: number;
     users: number;
   };
 }
 
-export default function DepartmentClient() {
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
+interface DepartmentClientProps {
+  initialDepartments?: Department[];
+}
+
+export function DepartmentClient({ initialDepartments = [] }: DepartmentClientProps) {
+  const [departments, setDepartments] = useState<Department[]>(initialDepartments);
+  const [loading, setLoading] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    parentId: "",
+    parentId: null as string | null,
   });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    loadDepartments();
+    if (showInactive) {
+      loadDepartments();
+    } else {
+      // Filter initial data when hiding inactive
+      setDepartments(initialDepartments.filter((d: Department) => d.isActive));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showInactive]);
 
   const loadDepartments = async () => {
@@ -76,7 +86,7 @@ export default function DepartmentClient() {
     try {
       const data = await getAllDepartments(showInactive);
       setDepartments(data);
-    } catch (error) {
+    } catch {
       toast.error("Failed to load departments");
     } finally {
       setLoading(false);
@@ -89,11 +99,11 @@ export default function DepartmentClient() {
       setFormData({
         name: department.name,
         description: department.description || "",
-        parentId: department.parentId || "",
+        parentId: department.parentId,
       });
     } else {
       setEditingDepartment(null);
-      setFormData({ name: "", description: "", parentId: "" });
+      setFormData({ name: "", description: "", parentId: null });
     }
     setDialogOpen(true);
   };
@@ -132,7 +142,7 @@ export default function DepartmentClient() {
       } else {
         toast.error(result.error || "Operation failed");
       }
-    } catch (error) {
+    } catch {
       toast.error("An error occurred");
     } finally {
       setSubmitting(false);
@@ -282,7 +292,7 @@ export default function DepartmentClient() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-125">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
               <DialogTitle>

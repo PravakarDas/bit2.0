@@ -39,7 +39,6 @@ import {
   toggleDesignationStatus,
   deleteDesignation,
 } from "@/actions/designation.actions";
-import { getActiveDepartments } from "@/actions/department.actions";
 
 interface Designation {
   id: string;
@@ -60,12 +59,21 @@ interface Designation {
 interface Department {
   id: string;
   name: string;
+  isActive?: boolean;
 }
 
-export default function DesignationClient() {
-  const [designations, setDesignations] = useState<Designation[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
+interface DesignationClientProps {
+  initialDesignations?: Designation[];
+  departments?: Department[];
+}
+
+export function DesignationClient({ 
+  initialDesignations = [], 
+  departments: initialDepartments = [] 
+}: DesignationClientProps) {
+  const [designations, setDesignations] = useState<Designation[]>(initialDesignations);
+  const [departments] = useState<Department[]>(initialDepartments);
+  const [loading, setLoading] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDesignation, setEditingDesignation] = useState<Designation | null>(null);
@@ -77,19 +85,21 @@ export default function DesignationClient() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    loadData();
+    if (showInactive) {
+      loadData();
+    } else {
+      // Filter initial data when hiding inactive
+      setDesignations(initialDesignations.filter((d: Designation) => d.isActive));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showInactive]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [designationsData, departmentsData] = await Promise.all([
-        getAllDesignations(showInactive),
-        getActiveDepartments(),
-      ]);
+      const designationsData = await getAllDesignations(showInactive);
       setDesignations(designationsData);
-      setDepartments(departmentsData);
-    } catch (error) {
+    } catch {
       toast.error("Failed to load data");
     } finally {
       setLoading(false);
@@ -151,7 +161,7 @@ export default function DesignationClient() {
       } else {
         toast.error(result.error || "Operation failed");
       }
-    } catch (error) {
+    } catch {
       toast.error("An error occurred");
     } finally {
       setSubmitting(false);
@@ -283,7 +293,7 @@ export default function DesignationClient() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-125">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
               <DialogTitle>

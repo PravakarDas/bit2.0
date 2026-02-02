@@ -18,6 +18,10 @@ import {
     FileCheck,
     Building2,
     Briefcase,
+    ChevronDown,
+    ChevronRight,
+    Gift,
+    DollarSign,
 } from "lucide-react";
 
 import {
@@ -29,8 +33,16 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarMenuSub,
+    SidebarMenuSubButton,
+    SidebarMenuSubItem,
     SidebarHeader,
 } from "@/components/ui/sidebar";
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
@@ -49,9 +61,6 @@ const adminItems = [
     { title: "Wallet Management", url: "/admin/wallet", icon: Wallet },
     { title: "Payroll", url: "/admin/payroll", icon: CircleDollarSign },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
-    { title: "Branches", url: "/admin/branches", icon: Settings },
-    { title: "Organization", url: "/admin/organization", icon: Building2 },
-    { title: "Bonuses", url: "/admin/bonuses", icon: CircleDollarSign },
     { title: "Settings", url: "/admin/settings", icon: Wrench },
 ];
 
@@ -66,9 +75,31 @@ const employeeItems = [
     { title: "Salary History", url: "/salary-history", icon: History },
 ];
 
+const organizationSubItems = [
+    { title: "Branches", icon: Building2, hash: "#branches" },
+    { title: "Departments & Designations", icon: Briefcase, hash: "#departments" },
+    { title: "Bonuses", icon: Gift, hash: "#bonuses" },
+    { title: "Allowances", icon: DollarSign, hash: "#allowances" },
+];
+
 export function AppSidebar({ role }: { role: string }) {
     const pathname = usePathname();
     const items = role === "SUPERADMIN" ? adminItems : employeeItems;
+    const [isOrganizationOpen, setIsOrganizationOpen] = React.useState(false);
+
+    // Auto-open organization menu if on organization page
+    React.useEffect(() => {
+        if (pathname === "/admin/organization") {
+            setIsOrganizationOpen(true);
+        }
+    }, [pathname]);
+
+    const handleSubItemClick = (hash: string) => {
+        const element = document.querySelector(hash);
+        if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    };
 
     return (
         <Sidebar collapsible="icon">
@@ -99,6 +130,50 @@ export function AppSidebar({ role }: { role: string }) {
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}
+                            
+                            {/* Organization Collapsible Menu (Admin Only) */}
+                            {role === "SUPERADMIN" && (
+                                <Collapsible open={isOrganizationOpen} onOpenChange={setIsOrganizationOpen}>
+                                    <SidebarMenuItem>
+                                        <CollapsibleTrigger asChild>
+                                            <SidebarMenuButton 
+                                                isActive={pathname === "/admin/organization"}
+                                                tooltip="Organization"
+                                            >
+                                                <Building2 className="h-4 w-4" />
+                                                <span>Organization</span>
+                                                {isOrganizationOpen ? (
+                                                    <ChevronDown className="ml-auto h-4 w-4 transition-transform" />
+                                                ) : (
+                                                    <ChevronRight className="ml-auto h-4 w-4 transition-transform" />
+                                                )}
+                                            </SidebarMenuButton>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                            <SidebarMenuSub>
+                                                {organizationSubItems.map((subItem) => (
+                                                    <SidebarMenuSubItem key={subItem.title}>
+                                                        <SidebarMenuSubButton asChild>
+                                                            <Link 
+                                                                href={`/admin/organization${subItem.hash}`}
+                                                                onClick={(e) => {
+                                                                    if (pathname === "/admin/organization") {
+                                                                        e.preventDefault();
+                                                                        handleSubItemClick(subItem.hash);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <subItem.icon className="h-3.5 w-3.5" />
+                                                                <span className="text-xs">{subItem.title}</span>
+                                                            </Link>
+                                                        </SidebarMenuSubButton>
+                                                    </SidebarMenuSubItem>
+                                                ))}
+                                            </SidebarMenuSub>
+                                        </CollapsibleContent>
+                                    </SidebarMenuItem>
+                                </Collapsible>
+                            )}
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>

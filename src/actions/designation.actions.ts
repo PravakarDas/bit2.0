@@ -101,8 +101,8 @@ export async function createDesignation(data: {
 
     revalidatePath("/admin/designations");
     return { success: true, designation };
-  } catch (error: any) {
-    if (error.code === "P2002") {
+  } catch (error: unknown) {
+    if (error instanceof Object && 'code' in error && error.code === "P2002") {
       return { success: false, error: "Designation name already exists in this department" };
     }
     return { success: false, error: "Failed to create designation" };
@@ -135,7 +135,7 @@ export async function updateDesignation(id: string, data: {
     revalidatePath("/admin/designations");
     return { success: true, designation };
   } catch (error: unknown) {
-    if ((error as any).code === "P2002") {
+    if (error instanceof Object && 'code' in error && error.code === "P2002") {
       return { success: false, error: "Designation name already exists in this department" };
     }
     return { success: false, error: "Failed to update designation" };
