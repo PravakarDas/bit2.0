@@ -310,14 +310,14 @@ export default function DepartmentClient() {
               <div className="space-y-2">
                 <Label htmlFor="parentId">Parent Department</Label>
                 <Select
-                  value={formData.parentId}
-                  onValueChange={(value) => setFormData({ ...formData, parentId: value })}
+                  value={formData.parentId || "none"}
+                  onValueChange={(value) => setFormData({ ...formData, parentId: value === "none" ? null : value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="None (Top Level)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None (Top Level)</SelectItem>
+                    <SelectItem value="none">None (Top Level)</SelectItem>
                     {getAvailableParents().map((dept) => (
                       <SelectItem key={dept.id} value={dept.id}>
                         {dept.name}
