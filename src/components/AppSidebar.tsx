@@ -16,6 +16,8 @@ import {
     Wallet,
     Clock,
     FileCheck,
+    Building2,
+    Briefcase,
 } from "lucide-react";
 
 import {
@@ -48,6 +50,7 @@ const adminItems = [
     { title: "Payroll", url: "/admin/payroll", icon: CircleDollarSign },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
     { title: "Branches", url: "/admin/branches", icon: Settings },
+    { title: "Organization", url: "/admin/organization", icon: Building2 },
     { title: "Bonuses", url: "/admin/bonuses", icon: CircleDollarSign },
     { title: "Settings", url: "/admin/settings", icon: Wrench },
 ];

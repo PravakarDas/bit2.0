@@ -66,6 +66,43 @@ enum TransactionType {
   YEARLY_OT_UT_ADJUSTMENT
 }
 
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  
+  // Self-referencing for parent-child hierarchy
+  parentId    String?
+  parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Department[] @relation("DepartmentHierarchy")
+  
+  // Relations
+  designations Designation[]
+  users        User[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Designation {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  isActive     Boolean  @default(true)
+  
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  
+  // Relations
+  users        User[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([name, departmentId])
+}
+
 model User {
   id            String     @id @default(cuid())
   clerkId       String     @unique
@@ -110,10 +147,12 @@ model User {
   permanentPostalCode  String?
   
   // Employment Details
-  designation          String?
-  department           String?
-  dateOfJoining        DateTime?
-  attendanceId         String?
+  departmentId     String?
+  department       Department? @relation(fields: [departmentId], references: [id])
+  designationId    String?
+  designation      Designation? @relation(fields: [designationId], references: [id])
+  dateOfJoining    DateTime?
+  attendanceId     String?
   
   // Emergency Contact
   emergencyContactName          String?

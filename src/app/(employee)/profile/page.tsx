@@ -19,6 +19,14 @@ type UserWithBranch = User & {
     name: string;
     location: string;
   } | null;
+  department?: {
+    id: string;
+    name: string;
+  } | null;
+  designation?: {
+    id: string;
+    name: string;
+  } | null;
 };
 
 export default function ProfilePage() {

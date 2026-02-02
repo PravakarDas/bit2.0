@@ -11,7 +11,11 @@ export async function getActiveEmployees() {
             isArchived: false,
             role: { not: "SUPERADMIN" }
         },
-        include: { branch: true },
+        include: { 
+            branch: true,
+            department: true,
+            designation: true
+        },
         orderBy: { createdAt: "desc" },
     });
 }
@@ -23,7 +27,11 @@ export async function getPendingEmployees() {
             isArchived: false,
             role: { not: "SUPERADMIN" }
         },
-        include: { branch: true },
+        include: { 
+            branch: true,
+            department: true,
+            designation: true
+        },
         orderBy: { createdAt: "desc" },
     });
 }
@@ -42,7 +50,11 @@ export async function getArchivedEmployees(fromDate?: string, toDate?: string) {
 
     return await prisma.user.findMany({
         where: whereClause,
-        include: { branch: true },
+        include: { 
+            branch: true,
+            department: true,
+            designation: true
+        },
         orderBy: { updatedAt: "desc" },
     });
 }
@@ -194,6 +206,8 @@ export async function assignBranch(userId: string, branchId: string | null) {
 export async function updateEmployeeProfile(userId: string, data: {
     role?: any;
     branchId?: string | null;
+    departmentId?: string | null;
+    designationId?: string | null;
 }) {
     try {
         const user = await prisma.user.update({

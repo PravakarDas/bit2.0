@@ -49,8 +49,6 @@ const profileFormSchema = z.object({
   permanentPostalCode: z.string().optional(),
 
   // Employment Details
-  designation: z.string().optional(),
-  department: z.string().optional(),
   dateOfJoining: z.string().optional(),
   attendanceId: z.string().optional(),
 
@@ -101,8 +99,6 @@ export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: 
       permanentState: user.permanentState || "",
       permanentCountry: user.permanentCountry || "",
       permanentPostalCode: user.permanentPostalCode || "",
-      designation: user.designation || "",
-      department: user.department || "",
       dateOfJoining: user.dateOfJoining ? new Date(user.dateOfJoining).toISOString().split("T")[0] : "",
       attendanceId: user.attendanceId || "",
       emergencyContactName: user.emergencyContactName || "",
@@ -448,34 +444,6 @@ export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: 
             <CardTitle>Employment Details</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="designation"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Designation</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Software Engineer" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="department"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Department</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Engineering" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name="dateOfJoining"

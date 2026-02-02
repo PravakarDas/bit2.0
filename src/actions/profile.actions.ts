@@ -31,8 +31,6 @@ export type ProfileData = {
   permanentPostalCode?: string | null;
 
   // Employment Details
-  designation?: string | null;
-  department?: string | null;
   dateOfJoining?: Date | null;
   attendanceId?: string | null;
 
@@ -66,6 +64,8 @@ export async function getCurrentUserProfile() {
       where: { clerkId },
       include: {
         branch: true,
+        department: true,
+        designation: true,
       },
     });
 
@@ -104,6 +104,8 @@ export async function getUserProfileById(userId: string) {
       where: { id: userId },
       include: {
         branch: true,
+        department: true,
+        designation: true,
       },
     });
 
@@ -155,8 +157,6 @@ export async function submitProfileUpdateRequest(data: ProfileData) {
       permanentState: user.permanentState,
       permanentCountry: user.permanentCountry,
       permanentPostalCode: user.permanentPostalCode,
-      designation: user.designation,
-      department: user.department,
       dateOfJoining: user.dateOfJoining,
       attendanceId: user.attendanceId,
       emergencyContactName: user.emergencyContactName,

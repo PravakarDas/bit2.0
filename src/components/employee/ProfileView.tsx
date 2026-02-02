@@ -30,6 +30,14 @@ interface ProfileViewProps {
       name: string;
       location: string;
     } | null;
+    department?: {
+      id: string;
+      name: string;
+    } | null;
+    designation?: {
+      id: string;
+      name: string;
+    } | null;
   };
   onEdit?: () => void;
   canEdit?: boolean;
@@ -66,7 +74,7 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
                   {user.firstName} {user.lastName}
                 </CardTitle>
                 <CardDescription className="text-base mt-1">
-                  {user.designation || "Employee"} • {user.department || "Department not set"}
+                  {user.designation?.name || "Employee"} • {user.department?.name || "Department not set"}
                 </CardDescription>
                 <div className="flex gap-2 mt-2">
                   <Badge variant={user.employeeStatus === "ACTIVE" ? "default" : "secondary"}>
@@ -161,8 +169,8 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <InfoItem label="Designation" value={user.designation} />
-          <InfoItem label="Department" value={user.department} />
+          <InfoItem label="Designation" value={user.designation?.name} />
+          <InfoItem label="Department" value={user.department?.name} />
           <InfoItem label="Date of Joining" value={formatDate(user.dateOfJoining)} icon={<Calendar className="h-4 w-4" />} />
           <InfoItem label="Attendance ID" value={user.attendanceId} />
           {user.branch && (

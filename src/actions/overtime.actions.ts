@@ -22,19 +22,6 @@ function minutesToTimeString(minutes: number): string {
   return `${sign}${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
 }
 
-function calculateActiveMinutes(checkIn: Date, checkOut: Date, breakTime: string): number {
-  const diffMs = checkOut.getTime() - checkIn.getTime();
-  const totalMinutes = Math.floor(diffMs / (1000 * 60));
-  const breakMinutes = timeStringToMinutes(breakTime || "00:00");
-  return Math.max(0, totalMinutes - breakMinutes);
-}
-
-function calculateOvertimeMinutes(actualActiveTime: string, requiredActiveTime: string): number {
-  const actualMinutes = timeStringToMinutes(actualActiveTime || "00:00");
-  const requiredMinutes = timeStringToMinutes(requiredActiveTime || "00:00");
-  return actualMinutes - requiredMinutes;
-}
-
 export async function getOvertimePayoutSummary(userId: string, year: number) {
   const admin = await getDbUser();
   if (!admin || admin.role !== "SUPERADMIN") {

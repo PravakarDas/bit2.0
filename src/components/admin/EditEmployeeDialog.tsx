@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { updateEmployeeProfile } from "@/actions/employee.actions";
+import { getActiveDepartments } from "@/actions/department.actions";
+import { getDesignationsByDepartment } from "@/actions/designation.actions";
 import { toast } from "sonner";
 import {
     Dialog,
@@ -28,20 +30,65 @@ interface Branch {
     name: string;
 }
 
+interface Department {
+    id: string;
+    name: string;
+}
+
+interface Designation {
+    id: string;
+    name: string;
+}
+
 interface User {
     id: string;
     email: string;
     role: Role;
     branchId: string | null;
+    departmentId: string | null;
+    designationId: string | null;
 }
 
 export function EditEmployeeDialog({ user, branches }: { user: User, branches: Branch[] }) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [departments, setDepartments] = useState<Department[]>([]);
+    const [designations, setDesignations] = useState<Designation[]>([]);
     const [formData, setFormData] = useState({
         role: user.role,
         branchId: user.branchId,
+        departmentId: user.departmentId,
+        designationId: user.designationId,
     });
+
+    useEffect(() => {
+        const loadDepartments = async () => {
+            try {
+                const data = await getActiveDepartments();
+                setDepartments(data);
+            } catch (error) {
+                console.error("Failed to load departments", error);
+            }
+        };
+        loadDepartments();
+    }, []);
+
+    useEffect(() => {
+        const loadDesignations = async () => {
+            if (formData.departmentId) {
+                try {
+                    const data = await getDesignationsByDepartment(formData.departmentId);
+                    setDesignations(data);
+                } catch (error) {
+                    console.error("Failed to load designations", error);
+                }
+            } else {
+                setDesignations([]);
+                setFormData(prev => ({ ...prev, designationId: null }));
+            }
+        };
+        loadDesignations();
+    }, [formData.departmentId]);
 
     const handleSubmit = async () => {
         setLoading(true);
@@ -103,6 +150,45 @@ export function EditEmployeeDialog({ user, branches }: { user: User, branches: B
                                 {branches.map((branch) => (
                                     <SelectItem key={branch.id} value={branch.id}>
                                         {branch.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="department">Department</Label>
+                        <Select
+                            value={formData.departmentId || "none"}
+                            onValueChange={(value) => setFormData({ ...formData, departmentId: value === "none" ? null : value })}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select department" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">Not Assigned</SelectItem>
+                                {departments.map((dept) => (
+                                    <SelectItem key={dept.id} value={dept.id}>
+                                        {dept.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="designation">Designation</Label>
+                        <Select
+                            value={formData.designationId || "none"}
+                            onValueChange={(value) => setFormData({ ...formData, designationId: value === "none" ? null : value })}
+                            disabled={!formData.departmentId}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder={formData.departmentId ? "Select designation" : "Select department first"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">Not Assigned</SelectItem>
+                                {designations.map((desig) => (
+                                    <SelectItem key={desig.id} value={desig.id}>
+                                        {desig.name}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
