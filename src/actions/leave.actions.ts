@@ -22,6 +22,7 @@ export async function createLeaveType(data: {
     name: string;
     allocatedDays: number;
     requiresApproval: boolean;
+    leaveResetPolicy: "ROSTER_EVERY_YEAR" | "FIXED";
     applicableBranches: string[]; // Array of branch IDs
 }) {
     try {
@@ -30,6 +31,7 @@ export async function createLeaveType(data: {
                 name: data.name,
                 allocatedDays: data.allocatedDays,
                 requiresApproval: data.requiresApproval,
+                leaveResetPolicy: data.leaveResetPolicy,
                 applicableBranches: JSON.stringify(data.applicableBranches)
             }
         });
@@ -46,6 +48,7 @@ export async function updateLeaveType(id: string, data: {
     name?: string;
     allocatedDays?: number;
     requiresApproval?: boolean;
+    leaveResetPolicy?: "ROSTER_EVERY_YEAR" | "FIXED";
     applicableBranches?: string[];
     isActive?: boolean;
 }) {

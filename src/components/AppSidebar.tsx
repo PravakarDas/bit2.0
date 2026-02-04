@@ -22,6 +22,7 @@ import {
     ChevronRight,
     Gift,
     DollarSign,
+    Zap,
 } from "lucide-react";
 
 import {
@@ -56,6 +57,7 @@ const adminItems = [
     { title: "Timeline", url: "/admin/timeline", icon: Clock },
     { title: "Leave Types", url: "/admin/leave-types", icon: ScrollText },
     { title: "Leave Applications", url: "/admin/leave-applications", icon: History },
+    { title: "Leave Automation", url: "/admin/leave-automation", icon: Zap },
     { title: "Loan Management", url: "/admin/loans", icon: Banknote },
     { title: "Medical Claims", url: "/admin/medical", icon: Stethoscope },
     { title: "Wallet Management", url: "/admin/wallet", icon: Wallet },

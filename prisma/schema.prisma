@@ -66,6 +66,18 @@ enum TransactionType {
   YEARLY_OT_UT_ADJUSTMENT
 }
 
+enum LeaveResetPolicy {
+  ROSTER_EVERY_YEAR
+  FIXED
+}
+
+enum DailyRecordStatus {
+  PRESENT
+  ABSENT
+  ON_LEAVE
+  WEEKLY_OFF
+}
+
 model Department {
   id          String   @id @default(cuid())
   name        String   @unique
@@ -189,6 +201,12 @@ model User {
   
   // Profile Update Requests
   profileUpdateRequests ProfileUpdateRequest[]
+  
+  // Employee Notifications
+  employeeNotifications EmployeeNotification[]
+  
+  // Audit Logs
+  auditLogs             LeaveAuditLog[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -419,6 +437,7 @@ model LeaveType {
   allocatedDays     Int      // How many days per year
   requiresApproval  Boolean  @default(true)
   isActive          Boolean  @default(true)
+  leaveResetPolicy  LeaveResetPolicy @default(ROSTER_EVERY_YEAR)
   
   // Branches that can use this leave type (JSON array of branch IDs)
   applicableBranches String  @default("[]") // JSON array ["branch1", "branch2"]
@@ -426,6 +445,7 @@ model LeaveType {
   // Relations
   userEntitlements   UserLeaveEntitlement[]
   leaveApplications  LeaveApplication[]
+  leaveAuditLogs     LeaveAuditLog[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -479,6 +499,7 @@ model LeaveApplication {
 model DailyTimeRecord {
   id                String    @id @default(cuid())
   date              DateTime  // The date for this record (date only, no time)
+  status            DailyRecordStatus @default(PRESENT)
   
   // Required times (from branch settings or manual override)
   requiredCheckIn   DateTime? // Full DateTime for required check-in
@@ -494,6 +515,10 @@ model DailyTimeRecord {
   requiredActiveTime String?  // (requiredCheckOut - requiredCheckIn - requiredBreakTime) in HH:MM
   actualActiveTime   String?  // (actualCheckOut - actualCheckIn - actualBreakTime) in HH:MM
   overtimeUndertime  String?  // (actualActiveTime - requiredActiveTime) in +/-HH:MM format
+  
+  // Auto leave deduction details
+  autoDeductedLeaveType String? // Leave type name that was auto-deducted
+  isProcessed           Boolean @default(false) // Whether auto-processing has been done for this date
   
   // Relations
   userId            String
@@ -579,5 +604,50 @@ model ProfileUpdateRequest {
   
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
+}
+
+// Employee Notification Model
+model EmployeeNotification {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  
+  type            String    // Type of notification (e.g., "AUTO_LEAVE_DEDUCTION", "LEAVE_APPROVED", etc.)
+  title           String    // Short title for the notification
+  message         String    // Detailed message
+  relatedDate     DateTime? // Date related to the notification (e.g., date leave was deducted)
+  relatedEntityId String?   // ID of related entity (leave application, etc.)
+  
+  isRead          Boolean   @default(false)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Audit Log Model for tracking all automatic leave operations
+model LeaveAuditLog {
+  id                    String     @id @default(cuid())
+  userId                String
+  user                  User       @relation(fields: [userId], references: [id])
+  
+  action                String     // Action performed (e.g., "AUTO_LEAVE_DEDUCTION", "WEEKLY_OFF_SET", etc.)
+  description           String     // Detailed description of what happened
+  
+  // Leave-related details
+  affectedDate          DateTime   // The date this action was taken for
+  leaveTypeId           String?    // ID of leave type affected (if applicable)
+  leaveType             LeaveType? @relation(fields: [leaveTypeId], references: [id])
+  previousBalance       Int?       // Previous leave balance before action
+  newBalance            Int?       // New leave balance after action
+  deductedDays          Int?       // Number of days deducted (if applicable)
+  
+  // Processing details
+  processedAt           DateTime   @default(now()) // When this action was processed
+  processingSource      String     @default("SYSTEM") // Source of processing (SYSTEM, MANUAL, etc.)
+  
+  // Additional metadata
+  metadata              Json?      // Additional data related to the action
+  
+  createdAt            DateTime   @default(now())
 }
 

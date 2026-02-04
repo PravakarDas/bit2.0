@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProfileView } from "@/components/employee/ProfileView";
 import { ProfileEditForm } from "@/components/employee/ProfileEditForm";
+import { NotificationPanel } from "@/components/employee/NotificationPanel";
 import { getCurrentUserProfile, getMyProfileUpdateRequests } from "@/actions/profile.actions";
 import { User } from "@prisma/client";
 import { Loader2, Clock, CheckCircle, XCircle } from "lucide-react";
@@ -107,6 +108,7 @@ export default function ProfilePage() {
         <TabsList>
           <TabsTrigger value="view">View Profile</TabsTrigger>
           <TabsTrigger value="edit">Edit Profile</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="requests">
             Update History
             {pendingRequests.length > 0 && (
@@ -136,7 +138,9 @@ export default function ProfilePage() {
             onCancel={() => setActiveTab("view")}
           />
         </TabsContent>
-
+        <TabsContent value="notifications" className="mt-6">
+          <NotificationPanel userId={user.id} />
+        </TabsContent>
         <TabsContent value="requests" className="mt-6">
           <div className="space-y-4">
             {updateRequests.length === 0 ? (

@@ -14,6 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { Plus } from "lucide-react";
 
 interface Branch {
@@ -32,6 +39,7 @@ export function AddLeaveTypeDialog({ branches }: AddLeaveTypeDialogProps) {
         name: "",
         allocatedDays: "",
         requiresApproval: true,
+        leaveResetPolicy: "ROSTER_EVERY_YEAR",
         selectedBranches: [] as string[]
     });
 
@@ -55,6 +63,7 @@ export function AddLeaveTypeDialog({ branches }: AddLeaveTypeDialogProps) {
                 name: formData.name.trim(),
                 allocatedDays: parseInt(formData.allocatedDays),
                 requiresApproval: formData.requiresApproval,
+                leaveResetPolicy: formData.leaveResetPolicy as "ROSTER_EVERY_YEAR" | "FIXED",
                 applicableBranches: formData.selectedBranches
             });
             
@@ -65,6 +74,7 @@ export function AddLeaveTypeDialog({ branches }: AddLeaveTypeDialogProps) {
                     name: "",
                     allocatedDays: "",
                     requiresApproval: true,
+                    leaveResetPolicy: "ROSTER_EVERY_YEAR",
                     selectedBranches: []
                 });
             } else {
@@ -138,6 +148,29 @@ export function AddLeaveTypeDialog({ branches }: AddLeaveTypeDialogProps) {
                                 placeholder="Enter number of days"
                                 required
                             />
+                        </div>
+
+                        <div className="grid gap-2">
+                            <Label htmlFor="leaveResetPolicy">Leave Reset Policy</Label>
+                            <Select
+                                value={formData.leaveResetPolicy}
+                                onValueChange={(value) => setFormData({ ...formData, leaveResetPolicy: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="ROSTER_EVERY_YEAR">
+                                        Reset Every Year (Auto-deduction eligible)
+                                    </SelectItem>
+                                    <SelectItem value="FIXED">
+                                        Fixed Balance (No auto-deduction)
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                "Reset Every Year" leaves will be auto-deducted for absences. "Fixed" leaves will not be auto-deducted.
+                            </p>
                         </div>
 
                         <div className="flex items-center space-x-2">

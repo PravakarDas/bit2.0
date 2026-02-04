@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 interface TimeRecord {
   id: string;
   date: Date;
+  status: "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF";
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
   requiredBreakTime: string | null;
@@ -20,6 +21,7 @@ interface TimeRecord {
   requiredActiveTime: string | null;
   actualActiveTime: string | null;
   overtimeUndertime: string | null;
+  autoDeductedLeaveType: string | null;
   user: {
     id: string;
     firstName: string | null;
@@ -69,11 +71,12 @@ export default function TimelineCalendarView({
     const dayRecords = recordsByDate[dateKey] || [];
     
     const total = dayRecords.length;
-    const present = dayRecords.filter(r => r.actualCheckIn).length;
-    const offDay = dayRecords.filter(r => !r.requiredCheckIn && !r.requiredCheckOut).length;
-    const absent = total - present - offDay;
+    const present = dayRecords.filter(r => r.status === "PRESENT").length;
+    const onLeave = dayRecords.filter(r => r.status === "ON_LEAVE").length;
+    const weeklyOff = dayRecords.filter(r => r.status === "WEEKLY_OFF").length;
+    const absent = dayRecords.filter(r => r.status === "ABSENT").length;
     
-    return { total, present, absent, offDay, records: dayRecords };
+    return { total, present, onLeave, weeklyOff, absent, records: dayRecords };
   };
 
   const selectedDayRecords = selectedDay ? getDateSummary(selectedDay).records : [];
@@ -155,14 +158,19 @@ export default function TimelineCalendarView({
                               Present: {summary.present}
                             </Badge>
                           )}
+                          {summary.onLeave > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              On Leave: {summary.onLeave}
+                            </Badge>
+                          )}
                           {summary.absent > 0 && (
                             <Badge variant="destructive" className="text-xs">
                               Absent: {summary.absent}
                             </Badge>
                           )}
-                          {summary.offDay > 0 && (
+                          {summary.weeklyOff > 0 && (
                             <Badge variant="secondary" className="text-xs">
-                              Off: {summary.offDay}
+                              Weekly Off: {summary.weeklyOff}
                             </Badge>
                           )}
                         </div>
@@ -201,16 +209,32 @@ export default function TimelineCalendarView({
                               : record.user.email}
                           </div>
                           {(() => {
-                            if (!record.requiredCheckIn && !record.requiredCheckOut) {
-                              return <Badge variant="secondary">Off Day</Badge>;
+                            switch (record.status) {
+                              case "WEEKLY_OFF":
+                                return <Badge variant="secondary">Weekly Off</Badge>;
+                              case "ON_LEAVE":
+                                return (
+                                  <div className="flex flex-col gap-1">
+                                    <Badge variant="outline" className="text-xs">On Leave</Badge>
+                                    {record.autoDeductedLeaveType && (
+                                      <span className="text-xs text-orange-600">
+                                        Auto-deducted: {record.autoDeductedLeaveType}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              case "PRESENT":
+                                if (record.actualCheckIn && record.actualCheckOut) {
+                                  return <Badge variant="default">Present</Badge>;
+                                } else if (record.actualCheckIn) {
+                                  return <Badge variant="outline">Checked In</Badge>;
+                                } else {
+                                  return <Badge variant="default">Present</Badge>;
+                                }
+                              case "ABSENT":
+                              default:
+                                return <Badge variant="destructive">Absent</Badge>;
                             }
-                            if (record.actualCheckIn && record.actualCheckOut) {
-                              return <Badge variant="default">Present</Badge>;
-                            }
-                            if (record.actualCheckIn) {
-                              return <Badge variant="outline">Checked In</Badge>;
-                            }
-                            return <Badge variant="destructive">Absent</Badge>;
                           })()}
                         </div>
                         
