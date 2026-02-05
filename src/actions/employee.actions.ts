@@ -203,6 +203,21 @@ export async function assignBranch(userId: string, branchId: string | null) {
     }
 }
 
+export async function updateWorkingDaysInMonth(userId: string, workingDaysInMonth: number) {
+    try {
+        const normalizedWorkingDays = Math.max(0, Math.min(31, Math.floor(workingDaysInMonth)));
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data: { workingDaysInMonth: normalizedWorkingDays }
+        });
+        revalidatePath(`/admin/employees/${userId}`);
+        return { success: true, user };
+    } catch (error) {
+        console.error("Error updating working days in month:", error);
+        return { success: false, error: "Failed to update working days" };
+    }
+}
+
 export async function updateEmployeeProfile(userId: string, data: {
     role?: any;
     branchId?: string | null;

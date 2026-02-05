@@ -173,6 +173,7 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
           <InfoItem label="Department" value={user.department?.name} />
           <InfoItem label="Date of Joining" value={formatDate(user.dateOfJoining)} icon={<Calendar className="h-4 w-4" />} />
           <InfoItem label="Attendance ID" value={user.attendanceId} />
+          <InfoItem label="Working Days (Monthly)" value={user.workingDaysInMonth?.toString()} />
           {user.branch && (
             <InfoItem 
               label="Branch" 

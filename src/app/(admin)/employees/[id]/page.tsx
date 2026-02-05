@@ -9,6 +9,7 @@ import Link from "next/link";
 import { AssignBranchSelect } from "@/components/admin/AssignBranchSelect";
 import { EmployeeStatusSelect } from "@/components/admin/EmployeeStatusSelect";
 import { getActiveBranches } from "@/actions/branch.actions";
+import { WorkingDaysInput } from "@/components/admin/WorkingDaysInput";
 
 export default async function EmployeeProfilePage({ params }: { params: { id: string } }) {
     const { id } = await params;
@@ -22,6 +23,7 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
     const employeeName = user.firstName && user.lastName 
         ? `${user.firstName} ${user.lastName}`
         : user.email;
+    const workingDaysInMonth = user.workingDaysInMonth ?? 22;
 
     return (
         <div className="space-y-6">
@@ -89,13 +91,6 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
                                     currentStatus={user.employeeStatus} 
                                 />
                             </div>
-                            <div>
-                                <label className="text-sm font-medium text-muted-foreground">Joined</label>
-                                <p className="font-medium flex items-center gap-2">
-                                    <Calendar className="h-4 w-4" />
-                                    {new Date(user.createdAt).toLocaleDateString()}
-                                </p>
-                            </div>
                         </div>
                     </CardContent>
                 </Card>
@@ -133,6 +128,34 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
                     </CardContent>
                 </Card>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Calendar className="h-5 w-5" />
+                        Employment Details
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div>
+                        <label className="text-sm font-medium text-muted-foreground">Date of Joining</label>
+                        <p className="font-medium flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                            {user.dateOfJoining ? new Date(user.dateOfJoining).toLocaleDateString() : "Not set"}
+                        </p>
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-muted-foreground">Working Days (Monthly)</label>
+                        <p className="text-sm text-muted-foreground">
+                            Current setting: {workingDaysInMonth}
+                        </p>
+                        <WorkingDaysInput
+                            employeeId={user.id}
+                            currentWorkingDays={workingDaysInMonth}
+                        />
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* Quick Actions */}
             <Card>

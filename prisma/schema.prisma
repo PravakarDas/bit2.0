@@ -165,6 +165,7 @@ model User {
   designation      Designation? @relation(fields: [designationId], references: [id])
   dateOfJoining    DateTime?
   attendanceId     String?
+  workingDaysInMonth Int?       @default(22)
   
   // Emergency Contact
   emergencyContactName          String?

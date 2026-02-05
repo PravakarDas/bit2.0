@@ -51,6 +51,7 @@ const profileFormSchema = z.object({
   // Employment Details
   dateOfJoining: z.string().optional(),
   attendanceId: z.string().optional(),
+  workingDaysInMonth: z.string().optional(),
 
   // Emergency Contact
   emergencyContactName: z.string().optional(),
@@ -101,6 +102,7 @@ export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: 
       permanentPostalCode: user.permanentPostalCode || "",
       dateOfJoining: user.dateOfJoining ? new Date(user.dateOfJoining).toISOString().split("T")[0] : "",
       attendanceId: user.attendanceId || "",
+      workingDaysInMonth: user.workingDaysInMonth?.toString() || "",
       emergencyContactName: user.emergencyContactName || "",
       emergencyContactRelationship: user.emergencyContactRelationship || "",
       emergencyContactPhone: user.emergencyContactPhone || "",
@@ -116,11 +118,30 @@ export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: 
   async function onSubmit(data: ProfileFormValues) {
     setIsSubmitting(true);
     try {
+      const workingDaysRaw = data.workingDaysInMonth?.trim();
+      let workingDaysValue: number | null | undefined = undefined;
+
+      if (isAdmin) {
+        if (!workingDaysRaw) {
+          workingDaysValue = null;
+        } else {
+          const parsed = Number(workingDaysRaw);
+          if (!Number.isInteger(parsed) || parsed < 0 || parsed > 31) {
+            toast.error("Working days must be a whole number between 0 and 31");
+            setIsSubmitting(false);
+            return;
+          }
+          workingDaysValue = parsed;
+        }
+      }
+
       // Convert date strings to Date objects
+      const { workingDaysInMonth, ...rest } = data;
       const formattedData = {
-        ...data,
+        ...rest,
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
         dateOfJoining: data.dateOfJoining ? new Date(data.dateOfJoining) : null,
+        ...(isAdmin ? { workingDaysInMonth: workingDaysValue } : {}),
       };
 
       let result;
@@ -471,6 +492,29 @@ export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: 
                 </FormItem>
               )}
             />
+
+            {isAdmin && (
+              <FormField
+                control={form.control}
+                name="workingDaysInMonth"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Working Days (Monthly)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={31}
+                        placeholder="22"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>Set the monthly working days for this employee.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
           </CardContent>
         </Card>
 

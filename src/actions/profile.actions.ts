@@ -33,6 +33,7 @@ export type ProfileData = {
   // Employment Details
   dateOfJoining?: Date | null;
   attendanceId?: string | null;
+  workingDaysInMonth?: number | null;
 
   // Emergency Contact
   emergencyContactName?: string | null;
@@ -48,6 +49,13 @@ export type ProfileData = {
   portfolioLink?: string | null;
   githubLink?: string | null;
   linkedinLink?: string | null;
+};
+
+const normalizeWorkingDaysInMonth = (value: unknown) => {
+  if (value === null || value === undefined) return value as null | undefined;
+  const parsed = typeof value === "string" ? Number(value) : value;
+  if (Number.isNaN(parsed)) return undefined;
+  return Math.max(0, Math.min(31, Math.floor(Number(parsed))));
 };
 
 /**
@@ -159,6 +167,7 @@ export async function submitProfileUpdateRequest(data: ProfileData) {
       permanentPostalCode: user.permanentPostalCode,
       dateOfJoining: user.dateOfJoining,
       attendanceId: user.attendanceId,
+      workingDaysInMonth: user.workingDaysInMonth,
       emergencyContactName: user.emergencyContactName,
       emergencyContactRelationship: user.emergencyContactRelationship,
       emergencyContactPhone: user.emergencyContactPhone,
@@ -231,6 +240,9 @@ export async function updateUserProfileByAdmin(userId: string, data: ProfileData
     }
     if (updateData.dateOfJoining && typeof updateData.dateOfJoining === "string") {
       updateData.dateOfJoining = new Date(updateData.dateOfJoining);
+    }
+    if ("workingDaysInMonth" in updateData) {
+      updateData.workingDaysInMonth = normalizeWorkingDaysInMonth(updateData.workingDaysInMonth);
     }
 
     const updatedUser = await prisma.user.update({
@@ -364,6 +376,9 @@ export async function approveProfileUpdateRequest(requestId: string, reviewNotes
     }
     if (updateData.dateOfJoining && typeof updateData.dateOfJoining === "string") {
       updateData.dateOfJoining = new Date(updateData.dateOfJoining);
+    }
+    if ("workingDaysInMonth" in updateData) {
+      updateData.workingDaysInMonth = normalizeWorkingDaysInMonth(updateData.workingDaysInMonth);
     }
 
     // Update user and request in a transaction
