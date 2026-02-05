@@ -18,6 +18,23 @@ function isNonZeroTime(value?: Date | null) {
     return value.getHours() !== 0 || value.getMinutes() !== 0 || value.getSeconds() !== 0;
 }
 
+function timeStringToMinutes(timeStr?: string | null) {
+    if (!timeStr) return 0;
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return (hours * 60) + minutes;
+}
+
+function getRequiredActiveMinutes(existingRecord: any, requiredCheckIn: Date, requiredCheckOut: Date, requiredBreakTime: string) {
+    if (existingRecord?.requiredActiveTime) {
+        const minutes = timeStringToMinutes(existingRecord.requiredActiveTime);
+        if (minutes > 0) return minutes;
+    }
+
+    const totalMinutes = Math.max(0, Math.floor((requiredCheckOut.getTime() - requiredCheckIn.getTime()) / (1000 * 60)));
+    const breakMinutes = timeStringToMinutes(requiredBreakTime);
+    return Math.max(0, totalMinutes - breakMinutes);
+}
+
 function isSameDay(a: Date, b: Date) {
     return a.getFullYear() === b.getFullYear()
         && a.getMonth() === b.getMonth()
@@ -213,13 +230,61 @@ async function handleWorkDay(employee: any, processDate: Date, existingRecord: a
     );
 
     if (existingRecord && hasRequiredFilled && hasActualFilled) {
+        const requiredCheckIn = existingRecord.requiredCheckIn as Date;
+        const requiredCheckOut = existingRecord.requiredCheckOut as Date;
+        const requiredBreakTime = existingRecord.requiredBreakTime || "00:00";
+
+        const actualCheckIn = existingRecord.actualCheckIn as Date;
+        const lateMinutes = Math.max(0, Math.floor((actualCheckIn.getTime() - requiredCheckIn.getTime()) / (1000 * 60)));
+        const requiredActiveMinutes = getRequiredActiveMinutes(
+            existingRecord,
+            requiredCheckIn,
+            requiredCheckOut,
+            requiredBreakTime
+        );
+
+        const workingDaysInMonth = employee.workingDaysInMonth || 22;
+        const dailySalary = workingDaysInMonth > 0 ? (employee.baseSalary / workingDaysInMonth) : 0;
+        const perMinuteRate = requiredActiveMinutes > 0 ? (dailySalary / requiredActiveMinutes) : 0;
+        const penaltyAmount = lateMinutes > 0 ? Number((perMinuteRate * lateMinutes).toFixed(2)) : 0;
+
         await prisma.dailyTimeRecord.update({
             where: { id: existingRecord.id },
             data: {
                 status: "PRESENT",
-                isProcessed: true
+                isProcessed: true,
+                lateCheckInMinutes: lateMinutes,
+                lateCheckInPenalty: penaltyAmount
             }
         });
+
+        if (penaltyAmount > 0 && (existingRecord.lateCheckInPenalty || 0) <= 0) {
+            await prisma.$transaction(async (tx) => {
+                await tx.user.update({
+                    where: { id: employee.id },
+                    data: { walletBalance: { increment: -penaltyAmount } }
+                });
+
+                await tx.walletTransaction.create({
+                    data: {
+                        userId: employee.id,
+                        amount: -penaltyAmount,
+                        type: "ADJUSTMENT",
+                        description: `Late check-in penalty for ${format(processDate, 'yyyy-MM-dd')} (${lateMinutes} min)`
+                    }
+                });
+            });
+
+            await prisma.employeeNotification.create({
+                data: {
+                    userId: employee.id,
+                    type: "LATE_CHECKIN_PENALTY",
+                    title: "Late Check-in Penalty",
+                    message: `A penalty of ৳${penaltyAmount.toFixed(2)} was applied for ${lateMinutes} minutes late on ${format(processDate, 'MMMM d, yyyy')}.`,
+                    relatedDate: processDate
+                }
+            });
+        }
         return;
     }
 

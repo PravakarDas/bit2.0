@@ -516,6 +516,10 @@ model DailyTimeRecord {
   requiredActiveTime String?  // (requiredCheckOut - requiredCheckIn - requiredBreakTime) in HH:MM
   actualActiveTime   String?  // (actualCheckOut - actualCheckIn - actualBreakTime) in HH:MM
   overtimeUndertime  String?  // (actualActiveTime - requiredActiveTime) in +/-HH:MM format
+
+  // Late check-in penalty tracking
+  lateCheckInMinutes Int?     @default(0)
+  lateCheckInPenalty Float?   @default(0)
   
   // Auto leave deduction details
   autoDeductedLeaveType String? // Leave type name that was auto-deducted
