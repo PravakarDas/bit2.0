@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { processDailyLeaveAutomation, processBackfillLeaveAutomation } from '@/actions/leave-automation.actions';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request) {
     try {
@@ -9,12 +10,51 @@ export async function POST(request: Request) {
         let result;
         
         if (backfillDays) {
-            // Process backfill for specified number of days
-            const days = parseInt(backfillDays);
-            const fromDate = new Date();
-            fromDate.setDate(fromDate.getDate() - days);
-            
-            result = await processBackfillLeaveAutomation(fromDate);
+            if (backfillDays === 'all') {
+                const earliestRecord = await prisma.dailyTimeRecord.findFirst({
+                    orderBy: { date: 'asc' },
+                    select: { date: true }
+                });
+
+                const earliestByJoinDate = await prisma.user.findFirst({
+                    where: {
+                        employeeStatus: 'ACTIVE',
+                        isArchived: false,
+                        branchId: { not: null },
+                        dateOfJoining: { not: null }
+                    },
+                    orderBy: { dateOfJoining: 'asc' },
+                    select: { dateOfJoining: true }
+                });
+
+                const earliestByCreatedAt = await prisma.user.findFirst({
+                    where: {
+                        employeeStatus: 'ACTIVE',
+                        isArchived: false,
+                        branchId: { not: null }
+                    },
+                    orderBy: { createdAt: 'asc' },
+                    select: { createdAt: true }
+                });
+
+                const earliestDate = earliestRecord?.date
+                    || earliestByJoinDate?.dateOfJoining
+                    || earliestByCreatedAt?.createdAt;
+                const fromDate = earliestDate ? new Date(earliestDate) : new Date(0);
+
+                result = await processBackfillLeaveAutomation(fromDate, undefined, {
+                    includeToday: true,
+                    skipIfWithinWindow: true,
+                    now: new Date()
+                });
+            } else {
+                // Process backfill for specified number of days
+                const days = parseInt(backfillDays);
+                const fromDate = new Date();
+                fromDate.setDate(fromDate.getDate() - days);
+
+                result = await processBackfillLeaveAutomation(fromDate);
+            }
         } else {
             // Process yesterday's records
             result = await processDailyLeaveAutomation();

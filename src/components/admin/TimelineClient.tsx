@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Clock, Users, Filter, Download, RefreshCw } from "lucide-react";
+import { CalendarDays, Clock, Users, Filter, Download, RefreshCw, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
 import TimelineTableView from "@/components/admin/TimelineTableView";
 import TimelineCalendarView from "@/components/admin/TimelineCalendarView";
@@ -16,6 +16,7 @@ import TimelineFilters from "@/components/admin/TimelineFilters";
 import { getTimelineRecords } from "@/actions/timeline.actions";
 import { getBranches } from "@/actions/branch.actions";
 import { getUsers } from "@/actions/user.actions";
+import { toast } from "sonner";
 
 interface TimeRecord {
   id: string;
@@ -57,6 +58,7 @@ export default function TimelineClient() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [leaveBackfillRunning, setLeaveBackfillRunning] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 50,
@@ -169,6 +171,29 @@ export default function TimelineClient() {
       setGenerating(false);
     }
   };
+
+  const handleLeaveAutomationBackfill = async () => {
+    setLeaveBackfillRunning(true);
+    try {
+      const response = await fetch('/api/leave-automation?backfill=all', {
+        method: 'POST'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success(`Leave automation backfill completed. Processed ${result.data.processedDates} dates.`);
+        loadTimeRecords();
+      } else {
+        toast.error(result.error || 'Failed to process leave automation backfill');
+      }
+    } catch (error) {
+      console.error('Error running leave automation backfill:', error);
+      toast.error('Failed to process leave automation backfill');
+    } finally {
+      setLeaveBackfillRunning(false);
+    }
+  };
   // Calculate summary stats
   const summaryStats = {
     totalEmployees: new Set(timeRecords.map(r => r.user.id)).size,
@@ -193,6 +218,15 @@ export default function TimelineClient() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleLeaveAutomationBackfill}
+            disabled={leaveBackfillRunning}
+          >
+            <RotateCcw className={`h-4 w-4 mr-2 ${leaveBackfillRunning ? 'animate-spin' : ''}`} />
+            {leaveBackfillRunning ? 'Processing...' : 'Run Leave Automation (All)'}
+          </Button>
           <Button 
             variant="outline" 
             size="sm"

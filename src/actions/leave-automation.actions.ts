@@ -3,11 +3,52 @@
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay, format, subDays } from "date-fns";
 
+function getMidnightDate(date: Date) {
+    const midnight = new Date(date);
+    midnight.setHours(0, 0, 0, 0);
+    return midnight;
+}
+
+function isFilledString(value?: string | null) {
+    return Boolean(value && value.trim().length > 0);
+}
+
+function isNonZeroTime(value?: Date | null) {
+    if (!value) return false;
+    return value.getHours() !== 0 || value.getMinutes() !== 0 || value.getSeconds() !== 0;
+}
+
+function isSameDay(a: Date, b: Date) {
+    return a.getFullYear() === b.getFullYear()
+        && a.getMonth() === b.getMonth()
+        && a.getDate() === b.getDate();
+}
+
+function isWithinRequiredWindow(employee: any, processDate: Date, now: Date) {
+    if (!isSameDay(processDate, now)) return false;
+
+    const checkInTime = employee.branch?.checkInTime || "09:00";
+    const checkOutTime = employee.branch?.checkOutTime || "18:00";
+
+    const requiredCheckIn = new Date(processDate);
+    const [checkInHour, checkInMinute] = checkInTime.split(':');
+    requiredCheckIn.setHours(parseInt(checkInHour), parseInt(checkInMinute), 0, 0);
+
+    const requiredCheckOut = new Date(processDate);
+    const [checkOutHour, checkOutMinute] = checkOutTime.split(':');
+    requiredCheckOut.setHours(parseInt(checkOutHour), parseInt(checkOutMinute), 0, 0);
+
+    return now >= requiredCheckIn && now <= requiredCheckOut;
+}
+
 /**
  * Main function to process daily leave automation
  * Should be called every day at 22:00 (10 PM)
  */
-export async function processDailyLeaveAutomation(targetDate?: Date) {
+export async function processDailyLeaveAutomation(
+    targetDate?: Date,
+    options?: { skipIfWithinWindow?: boolean; now?: Date }
+) {
     const processDate = targetDate ? startOfDay(targetDate) : startOfDay(subDays(new Date(), 1)); // Yesterday by default
     
     console.log(`Processing leave automation for date: ${format(processDate, 'yyyy-MM-dd')}`);
@@ -41,7 +82,7 @@ export async function processDailyLeaveAutomation(targetDate?: Date) {
         });
 
         for (const employee of activeEmployees) {
-            await processEmployeeDailyRecord(employee, processDate);
+            await processEmployeeDailyRecord(employee, processDate, options);
         }
 
         console.log(`Completed processing for ${activeEmployees.length} employees`);
@@ -55,7 +96,7 @@ export async function processDailyLeaveAutomation(targetDate?: Date) {
 /**
  * Process daily record for a single employee
  */
-async function processEmployeeDailyRecord(employee: any, processDate: Date) {
+async function processEmployeeDailyRecord(employee: any, processDate: Date, options?: { skipIfWithinWindow?: boolean; now?: Date }) {
     const dateStr = format(processDate, 'yyyy-MM-dd');
     
     // Check if already processed
@@ -68,13 +109,31 @@ async function processEmployeeDailyRecord(employee: any, processDate: Date) {
         }
     });
 
-    // If record exists and is already processed, skip
-    if (existingRecord?.isProcessed) {
+    const hasRequiredFilled = Boolean(
+        isNonZeroTime(existingRecord?.requiredCheckIn) &&
+        isNonZeroTime(existingRecord?.requiredCheckOut) &&
+        isFilledString(existingRecord?.requiredBreakTime)
+    );
+
+    const hasActualFilled = Boolean(
+        isNonZeroTime(existingRecord?.actualCheckIn) &&
+        isNonZeroTime(existingRecord?.actualCheckOut) &&
+        isFilledString(existingRecord?.actualBreakTime)
+    );
+
+    const isFullyFilled = hasRequiredFilled && hasActualFilled;
+
+    // If record exists, is already processed, and fully filled, skip
+    if (existingRecord?.isProcessed && isFullyFilled) {
         return;
     }
 
     const dayOfWeek = format(processDate, 'EEEE').toUpperCase();
     const isWeeklyOff = employee.branch?.weeklyOffDays?.includes(dayOfWeek);
+
+    if (options?.skipIfWithinWindow && options?.now && isWithinRequiredWindow(employee, processDate, options.now)) {
+        return;
+    }
 
     if (isWeeklyOff) {
         await handleWeeklyOffDay(employee, processDate, existingRecord);
@@ -141,15 +200,19 @@ async function handleWeeklyOffDay(employee: any, processDate: Date, existingReco
  * Handle work day processing
  */
 async function handleWorkDay(employee: any, processDate: Date, existingRecord: any) {
-    // Check if employee has any attendance data for this day
-    const hasAttendanceData = existingRecord && (
-        existingRecord.actualCheckIn || 
-        existingRecord.actualCheckOut || 
-        (existingRecord.actualBreakTime && existingRecord.actualBreakTime !== "00:00")
+    const hasRequiredFilled = Boolean(
+        isNonZeroTime(existingRecord?.requiredCheckIn) &&
+        isNonZeroTime(existingRecord?.requiredCheckOut) &&
+        isFilledString(existingRecord?.requiredBreakTime)
     );
 
-    if (hasAttendanceData) {
-        // Employee has attendance data, mark as present and processed
+    const hasActualFilled = Boolean(
+        isNonZeroTime(existingRecord?.actualCheckIn) &&
+        isNonZeroTime(existingRecord?.actualCheckOut) &&
+        isFilledString(existingRecord?.actualBreakTime)
+    );
+
+    if (existingRecord && hasRequiredFilled && hasActualFilled) {
         await prisma.dailyTimeRecord.update({
             where: { id: existingRecord.id },
             data: {
@@ -184,15 +247,16 @@ async function handleAutoLeaveDeduction(employee: any, processDate: Date, existi
         }
     });
 
+    const midnight = getMidnightDate(processDate);
     const recordData = {
         userId: employee.id,
         date: processDate,
         status: "ON_LEAVE" as const,
-        requiredCheckIn: null,
-        requiredCheckOut: null,
+        requiredCheckIn: midnight,
+        requiredCheckOut: midnight,
         requiredBreakTime: "00:00",
-        actualCheckIn: null,
-        actualCheckOut: null,
+        actualCheckIn: midnight,
+        actualCheckOut: midnight,
         actualBreakTime: "00:00",
         requiredActiveTime: "00:00",
         actualActiveTime: "00:00",
@@ -245,38 +309,20 @@ async function handleAutoLeaveDeduction(employee: any, processDate: Date, existi
  * Handle absent without leave
  */
 async function handleAbsentWithoutLeave(employee: any, processDate: Date, existingRecord: any) {
-    // Set required times based on branch settings
-    const checkInTime = employee.branch?.checkInTime || "09:00";
-    const checkOutTime = employee.branch?.checkOutTime || "18:00";
-    const breakDuration = employee.branch?.breakDuration || "01:00";
-
-    const requiredCheckIn = new Date(processDate);
-    const [checkInHour, checkInMinute] = checkInTime.split(':');
-    requiredCheckIn.setHours(parseInt(checkInHour), parseInt(checkInMinute), 0, 0);
-
-    const requiredCheckOut = new Date(processDate);
-    const [checkOutHour, checkOutMinute] = checkOutTime.split(':');
-    requiredCheckOut.setHours(parseInt(checkOutHour), parseInt(checkOutMinute), 0, 0);
-
-    // Calculate required active time
-    const totalMinutes = (requiredCheckOut.getTime() - requiredCheckIn.getTime()) / (1000 * 60);
-    const breakMinutes = parseInt(breakDuration.split(':')[0]) * 60 + parseInt(breakDuration.split(':')[1]);
-    const activeMinutes = totalMinutes - breakMinutes;
-    const requiredActiveTime = `${Math.floor(activeMinutes / 60).toString().padStart(2, '0')}:${(activeMinutes % 60).toString().padStart(2, '0')}`;
-
+    const midnight = getMidnightDate(processDate);
     const recordData = {
         userId: employee.id,
         date: processDate,
         status: "ABSENT" as const,
-        requiredCheckIn,
-        requiredCheckOut,
-        requiredBreakTime: breakDuration,
-        actualCheckIn: null,
-        actualCheckOut: null,
+        requiredCheckIn: midnight,
+        requiredCheckOut: midnight,
+        requiredBreakTime: "00:00",
+        actualCheckIn: midnight,
+        actualCheckOut: midnight,
         actualBreakTime: "00:00",
-        requiredActiveTime,
+        requiredActiveTime: "00:00",
         actualActiveTime: "00:00",
-        overtimeUndertime: `-${requiredActiveTime}`,
+        overtimeUndertime: "00:00",
         isProcessed: true
     };
 
@@ -317,16 +363,25 @@ async function handleAbsentWithoutLeave(employee: any, processDate: Date, existi
 /**
  * Process past dates that haven't been processed yet
  */
-export async function processBackfillLeaveAutomation(fromDate: Date, toDate?: Date) {
-    const endDate = toDate || subDays(new Date(), 1); // Yesterday by default
-    const currentDate = new Date(fromDate);
+export async function processBackfillLeaveAutomation(
+    fromDate: Date,
+    toDate?: Date,
+    options?: { includeToday?: boolean; skipIfWithinWindow?: boolean; now?: Date }
+) {
+    const today = startOfDay(new Date());
+    const endDate = toDate ? startOfDay(toDate) : (options?.includeToday ? today : subDays(today, 1));
+    const currentDate = startOfDay(new Date(fromDate));
     
     console.log(`Processing backfill from ${format(fromDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
     
     let processedDates = 0;
     
     while (currentDate <= endDate) {
-        await processDailyLeaveAutomation(new Date(currentDate));
+        const isCurrentDay = isSameDay(currentDate, today);
+        await processDailyLeaveAutomation(new Date(currentDate), {
+            skipIfWithinWindow: isCurrentDay ? options?.skipIfWithinWindow : false,
+            now: isCurrentDay ? options?.now : undefined
+        });
         currentDate.setDate(currentDate.getDate() + 1);
         processedDates++;
     }
