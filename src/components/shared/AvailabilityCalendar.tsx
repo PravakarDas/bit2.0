@@ -5,6 +5,13 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSa
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { CalendarDays, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { getAvailabilityData } from "@/actions/availability.actions";
 
@@ -42,6 +49,8 @@ export default function AvailabilityCalendar() {
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [leaves, setLeaves] = useState<LeaveEntry[]>([]);
     const [loading, setLoading] = useState(true);
+    const [selectedBranch, setSelectedBranch] = useState("all");
+    const [selectedEmployee, setSelectedEmployee] = useState("all");
 
     useEffect(() => {
         const load = async () => {
@@ -58,16 +67,46 @@ export default function AvailabilityCalendar() {
         load();
     }, [currentMonth]);
 
+    const availableBranches = useMemo(() => {
+        const map = new Map<string, string>();
+        employees.forEach((employee) => {
+            if (employee.branch?.name) {
+                map.set(employee.branch.name, employee.branch.name);
+            }
+        });
+        return Array.from(map.values()).sort();
+    }, [employees]);
+
+    const filteredEmployees = useMemo(() => {
+        return employees.filter((employee) => {
+            if (selectedBranch !== "all" && employee.branch?.name !== selectedBranch) {
+                return false;
+            }
+            if (selectedEmployee !== "all" && employee.id !== selectedEmployee) {
+                return false;
+            }
+            return true;
+        });
+    }, [employees, selectedBranch, selectedEmployee]);
+
+    const filteredLeaves = useMemo(() => {
+        if (selectedBranch === "all" && selectedEmployee === "all") {
+            return leaves;
+        }
+        const allowedIds = new Set(filteredEmployees.map((employee) => employee.id));
+        return leaves.filter((leave) => allowedIds.has(leave.userId));
+    }, [leaves, filteredEmployees, selectedBranch, selectedEmployee]);
+
     const leaveByDate = useMemo(() => {
         const map = new Map<string, LeaveEntry[]>();
-        leaves.forEach((leave) => {
+        filteredLeaves.forEach((leave) => {
             const key = leave.date.slice(0, 10);
             const existing = map.get(key) || [];
             existing.push(leave);
             map.set(key, existing);
         });
         return map;
-    }, [leaves]);
+    }, [filteredLeaves]);
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(monthStart);
@@ -92,15 +131,15 @@ export default function AvailabilityCalendar() {
     }, [leaveByDate, selectedKey]);
 
     const weeklyOffUsers = useMemo(() => {
-        return employees.filter((employee) =>
+        return filteredEmployees.filter((employee) =>
             employee.branch?.weeklyOffDays?.includes(selectedDayName)
         );
-    }, [employees, selectedDayName]);
+    }, [filteredEmployees, selectedDayName]);
 
     const offUsers = useMemo(() => {
         const result = new Map<string, { employee: Employee; reason: string }>();
         selectedLeaves.forEach((leave) => {
-            const employee = employees.find((emp) => emp.id === leave.userId);
+            const employee = filteredEmployees.find((emp) => emp.id === leave.userId);
             if (employee) {
                 result.set(employee.id, {
                     employee,
@@ -119,7 +158,7 @@ export default function AvailabilityCalendar() {
         });
 
         return Array.from(result.values());
-    }, [employees, selectedLeaves, weeklyOffUsers]);
+    }, [filteredEmployees, selectedLeaves, weeklyOffUsers]);
 
     const goPrevMonth = () => {
         setCurrentMonth((prev) => addDays(startOfMonth(prev), -1));
@@ -155,6 +194,40 @@ export default function AvailabilityCalendar() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
+                        <div className="mb-4 grid gap-3 md:grid-cols-2">
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground">Branch</label>
+                                <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+                                    <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="All branches" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All branches</SelectItem>
+                                        {availableBranches.map((branch) => (
+                                            <SelectItem key={branch} value={branch}>
+                                                {branch}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground">Employee</label>
+                                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                                    <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="All employees" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All employees</SelectItem>
+                                        {filteredEmployees.map((employee) => (
+                                            <SelectItem key={employee.id} value={employee.id}>
+                                                {getEmployeeName(employee)}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
                         <div className="grid grid-cols-7 gap-2 text-sm font-medium text-muted-foreground">
                             {dayNames.map((name) => (
                                 <div key={name} className="text-center">
@@ -171,7 +244,7 @@ export default function AvailabilityCalendar() {
                                 const isPast = isBefore(date, startOfDay(today));
 
                                 const leaveCount = leaveByDate.get(key)?.length || 0;
-                                const weeklyOffCount = employees.filter((employee) =>
+                                const weeklyOffCount = filteredEmployees.filter((employee) =>
                                     employee.branch?.weeklyOffDays?.includes(dayName)
                                 ).length;
 
@@ -197,6 +270,11 @@ export default function AvailabilityCalendar() {
                                     </button>
                                 );
                             })}
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            <Badge variant="secondary">Leave count (approved, upcoming)</Badge>
+                            <Badge variant="secondary">Weekly off count</Badge>
+                            <Badge variant="outline">Past</Badge>
                         </div>
                         {loading && (
                             <div className="mt-4 text-sm text-muted-foreground">Loading availability...</div>
