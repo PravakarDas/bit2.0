@@ -43,6 +43,12 @@ enum ValueType {
   PERCENTAGE
 }
 
+enum AllowanceScope {
+  FIXED
+  FULL_BRANCH
+  CUSTOM
+}
+
 enum ClaimStatus {
   PENDING
   APPROVED
@@ -209,6 +215,10 @@ model User {
   // Audit Logs
   auditLogs             LeaveAuditLog[]
   
+  // Allowance Relations
+  employeeAllowances    EmployeeAllowance[]
+  payrollOverrides      PayrollAllowanceOverride[]
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -252,7 +262,6 @@ model Branch {
   weeklyOffDays  String[] @default(["SUNDAY"]) // Array of day names: MONDAY, TUESDAY, etc.
   
   users      User[]
-  allowances AllowanceType[]
   bonuses    BonusType[]
   
   createdAt DateTime @default(now())
@@ -262,22 +271,55 @@ model Branch {
 model SystemSettings {
   id                String @id @default("global")
   medicalClaimLimit Float  @default(500)
-  foodAllowance     Float  @default(0)
-  mobileAllowance   Float  @default(0)
   updatedAt         DateTime @updatedAt
 }
 
 model AllowanceType {
-  id        String    @id @default(cuid())
-  name      String
-  amount    Float
-  type      ValueType
-  isActive  Boolean   @default(true)
+  id               String            @id @default(cuid())
+  name             String
+  amount           Float
+  valueType        ValueType         // FIXED or PERCENTAGE
+  scope            AllowanceScope    // FIXED, FULL_BRANCH, CUSTOM
+  targetBranchIds  String[]          // For FULL_BRANCH scope only
+  isActive         Boolean           @default(true)
   
-  branches  Branch[]
+  // Relations
+  employeeAllowances EmployeeAllowance[]
+  payrollOverrides   PayrollAllowanceOverride[]
   
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model EmployeeAllowance {
+  id            String        @id @default(cuid())
+  userId        String
+  allowanceId   String
+  isActive      Boolean       @default(true)
+  
+  // Relations
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  allowance     AllowanceType @relation(fields: [allowanceId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, allowanceId])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PayrollAllowanceOverride {
+  id            String        @id @default(cuid())
+  payrollMonth  String        // e.g. "2024-01"
+  userId        String
+  allowanceId   String
+  isIncluded    Boolean       // true = include, false = exclude
+  customAmount  Float?        // override amount if different from allowance default
+  
+  // Relations
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  allowance     AllowanceType @relation(fields: [allowanceId], references: [id], onDelete: Cascade)
+  
+  @@unique([payrollMonth, userId, allowanceId])
+  createdAt     DateTime @default(now())
 }
 
 model BonusType {

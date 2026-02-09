@@ -12,8 +12,6 @@ import { Loader2, Save } from "lucide-react";
 interface GlobalSettingsFormProps {
     initialData: {
         medicalClaimLimit: number;
-        foodAllowance: number;
-        mobileAllowance: number;
     };
 }
 
@@ -40,9 +38,9 @@ export function GlobalSettingsForm({ initialData }: GlobalSettingsFormProps) {
         <form onSubmit={handleSubmit}>
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-xl">Organization Defaults</CardTitle>
+                    <CardTitle className="text-xl">Medical Settings</CardTitle>
                     <CardDescription>
-                        Standard values for all employees.
+                        Default medical claim limit for all employees.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -56,29 +54,11 @@ export function GlobalSettingsForm({ initialData }: GlobalSettingsFormProps) {
                                 onChange={(e) => setFormData({ ...formData, medicalClaimLimit: Number(e.target.value) })}
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="foodAllowance">Default Food Allowance (৳)</Label>
-                            <Input
-                                id="foodAllowance"
-                                type="number"
-                                value={formData.foodAllowance}
-                                onChange={(e) => setFormData({ ...formData, foodAllowance: Number(e.target.value) })}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="mobileAllowance">Default Mobile Allowance (৳)</Label>
-                            <Input
-                                id="mobileAllowance"
-                                type="number"
-                                value={formData.mobileAllowance}
-                                onChange={(e) => setFormData({ ...formData, mobileAllowance: Number(e.target.value) })}
-                            />
-                        </div>
                     </div>
 
                     <Button type="submit" className="w-full" disabled={saving}>
                         {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        Save Defaults
+                        Save Medical Settings
                     </Button>
                 </CardContent>
             </Card>

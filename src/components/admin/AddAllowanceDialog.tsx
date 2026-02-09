@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Edit2, Trash2 } from "lucide-react";
-import { ValueType } from "@prisma/client";
+import { ValueType, AllowanceScope } from "@prisma/client";
 
 interface Branch {
     id: string;
@@ -35,9 +35,10 @@ interface AllowanceDialogProps {
     initialData?: {
         id: string;
         name: string;
-        type: ValueType;
+        valueType: ValueType;
+        scope: AllowanceScope;
         amount: number;
-        branchIds: string[];
+        targetBranchIds: string[];
     };
     trigger?: React.ReactNode;
 }
@@ -47,9 +48,10 @@ export function AllowanceDialog({ branches, initialData, trigger }: AllowanceDia
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: initialData?.name || "",
-        type: (initialData?.type || "FIXED") as ValueType,
+        valueType: (initialData?.valueType || "FIXED") as ValueType,
+        scope: (initialData?.scope || "FIXED") as AllowanceScope,
         amount: initialData?.amount || 0,
-        branchIds: initialData?.branchIds || [] as string[],
+        targetBranchIds: initialData?.targetBranchIds || [] as string[],
     });
 
     // Reset form when initialData changes or dialog closes/opens
@@ -57,9 +59,10 @@ export function AllowanceDialog({ branches, initialData, trigger }: AllowanceDia
         if (isOpen) {
             setFormData({
                 name: initialData?.name || "",
-                type: (initialData?.type || "FIXED") as ValueType,
+                valueType: (initialData?.valueType || "FIXED") as ValueType,
+                scope: (initialData?.scope || "FIXED") as AllowanceScope,
                 amount: initialData?.amount || 0,
-                branchIds: initialData?.branchIds || [] as string[],
+                targetBranchIds: initialData?.targetBranchIds || [] as string[],
             });
         }
     }, [isOpen, initialData]);
@@ -67,9 +70,9 @@ export function AllowanceDialog({ branches, initialData, trigger }: AllowanceDia
     const toggleBranch = (id: string) => {
         setFormData((prev) => ({
             ...prev,
-            branchIds: prev.branchIds.includes(id)
-                ? prev.branchIds.filter((bid) => bid !== id)
-                : [...prev.branchIds, id],
+            targetBranchIds: prev.targetBranchIds.includes(id)
+                ? prev.targetBranchIds.filter((bid) => bid !== id)
+                : [...prev.targetBranchIds, id],
         }));
     };
 
@@ -88,7 +91,13 @@ export function AllowanceDialog({ branches, initialData, trigger }: AllowanceDia
             if (res.success) {
                 toast.success(`Allowance ${initialData ? "updated" : "created"} successfully`);
                 setIsOpen(false);
-                if (!initialData) setFormData({ name: "", type: "FIXED", amount: 0, branchIds: [] });
+                if (!initialData) setFormData({ 
+                    name: "", 
+                    valueType: "FIXED", 
+                    scope: "FIXED", 
+                    amount: 0, 
+                    targetBranchIds: [] 
+                });
             } else {
                 toast.error((res as any).error || "Failed to save allowance");
             }
@@ -142,13 +151,38 @@ export function AllowanceDialog({ branches, initialData, trigger }: AllowanceDia
                             }
                         />
                     </div>
+                    
+                    <div className="grid gap-2">
+                        <Label htmlFor="scope">Allowance Scope</Label>
+                        <Select
+                            value={formData.scope}
+                            onValueChange={(value: AllowanceScope) =>
+                                setFormData({ ...formData, scope: value, targetBranchIds: value !== "FULL_BRANCH" ? [] : formData.targetBranchIds })
+                            }
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select scope" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="FIXED">All Employees (Company-wide)</SelectItem>
+                                <SelectItem value="FULL_BRANCH">Branch-specific</SelectItem>
+                                <SelectItem value="CUSTOM">Individual Assignment</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p className="text-[10px] text-muted-foreground">
+                            {formData.scope === "FIXED" && "Applied to all employees automatically"}
+                            {formData.scope === "FULL_BRANCH" && "Applied to all employees in selected branches"}
+                            {formData.scope === "CUSTOM" && "Manually assigned to specific employees"}
+                        </p>
+                    </div>
+                    
                     <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-2">
-                            <Label htmlFor="type">Value Type</Label>
+                            <Label htmlFor="valueType">Value Type</Label>
                             <Select
-                                value={formData.type}
+                                value={formData.valueType}
                                 onValueChange={(value: ValueType) =>
-                                    setFormData({ ...formData, type: value })
+                                    setFormData({ ...formData, valueType: value })
                                 }
                             >
                                 <SelectTrigger>
@@ -165,7 +199,7 @@ export function AllowanceDialog({ branches, initialData, trigger }: AllowanceDia
                             <Input
                                 id="amount"
                                 type="number"
-                                placeholder="e.g. 5000"
+                                placeholder={formData.valueType === "FIXED" ? "e.g. 5000" : "e.g. 10"}
                                 value={formData.amount}
                                 onChange={(e) =>
                                     setFormData({ ...formData, amount: Number(e.target.value) })
@@ -174,29 +208,31 @@ export function AllowanceDialog({ branches, initialData, trigger }: AllowanceDia
                         </div>
                     </div>
 
-                    <div className="space-y-3">
-                        <Label>Target Branches</Label>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                            If none selected, it applies to ALL branches.
-                        </p>
-                        <div className="grid grid-cols-2 gap-3 border rounded-lg p-4 bg-muted/30">
-                            {branches.map((branch) => (
-                                <div key={branch.id} className="flex items-center space-x-2">
-                                    <Checkbox
-                                        id={`${initialData ? 'edit' : 'add'}-branch-${branch.id}`}
-                                        checked={formData.branchIds.includes(branch.id)}
-                                        onCheckedChange={() => toggleBranch(branch.id)}
-                                    />
-                                    <label
-                                        htmlFor={`${initialData ? 'edit' : 'add'}-branch-${branch.id}`}
-                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                    >
-                                        {branch.name}
-                                    </label>
-                                </div>
-                            ))}
+                    {formData.scope === "FULL_BRANCH" && (
+                        <div className="space-y-3">
+                            <Label>Target Branches</Label>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                Select branches where this allowance will apply to all employees.
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 border rounded-lg p-4 bg-muted/30">
+                                {branches.map((branch) => (
+                                    <div key={branch.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`${initialData ? 'edit' : 'add'}-branch-${branch.id}`}
+                                            checked={formData.targetBranchIds.includes(branch.id)}
+                                            onCheckedChange={() => toggleBranch(branch.id)}
+                                        />
+                                        <label
+                                            htmlFor={`${initialData ? 'edit' : 'add'}-branch-${branch.id}`}
+                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                        >
+                                            {branch.name}
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
                 <DialogFooter className="flex justify-between items-center sm:justify-between">
                     {initialData ? (

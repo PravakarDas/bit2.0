@@ -36,7 +36,12 @@ export async function getPayrollAggregation(month: number, year: number) {
 
     const allActiveAllowances = await prisma.allowanceType.findMany({
         where: { isActive: true },
-        include: { branches: true },
+        include: {
+            employeeAllowances: {
+                where: { isActive: true },
+                include: { user: true },
+            },
+        },
     });
 
     const settings = await prisma.systemSettings.findUnique({
@@ -58,16 +63,40 @@ export async function getPayrollAggregation(month: number, year: number) {
                 b.branches.some((br) => br.id === user.branchId)
         );
 
-        // Allowances
-        let totalAllowances =
-            (settings?.foodAllowance || 0) + (settings?.mobileAllowance || 0);
-        const userAllowances = allActiveAllowances.filter(
-            (a) =>
-                a.branches.length === 0 ||
-                a.branches.some((br) => br.id === user.branchId)
+        // Allowances - New 3-tier system
+        let totalAllowances = 0;
+        
+        // 1. FIXED scope allowances (apply to all employees)
+        const fixedAllowances = allActiveAllowances.filter(a => a.scope === "FIXED");
+        fixedAllowances.forEach((allowance) => {
+            if (allowance.valueType === "FIXED") {
+                totalAllowances += allowance.amount;
+            } else {
+                totalAllowances += (user.baseSalary * allowance.amount) / 100;
+            }
+        });
+        
+        // 2. FULL_BRANCH scope allowances (apply to employees in target branches)
+        const branchAllowances = allActiveAllowances.filter(a => 
+            a.scope === "FULL_BRANCH" && 
+            user.branchId && 
+            a.targetBranchIds.includes(user.branchId)
         );
-        userAllowances.forEach((allowance) => {
-            if (allowance.type === "FIXED") {
+        branchAllowances.forEach((allowance) => {
+            if (allowance.valueType === "FIXED") {
+                totalAllowances += allowance.amount;
+            } else {
+                totalAllowances += (user.baseSalary * allowance.amount) / 100;
+            }
+        });
+        
+        // 3. CUSTOM scope allowances (individual employee assignments)
+        const customAllowances = allActiveAllowances.filter(a => 
+            a.scope === "CUSTOM" && 
+            a.employeeAllowances.some(ea => ea.userId === user.id && ea.isActive)
+        );
+        customAllowances.forEach((allowance) => {
+            if (allowance.valueType === "FIXED") {
                 totalAllowances += allowance.amount;
             } else {
                 totalAllowances += (user.baseSalary * allowance.amount) / 100;

@@ -9,6 +9,12 @@ import {
     removeLeaveFromUser,
     adjustUserLeaveBalance
 } from "@/actions/leave.actions";
+import { 
+    getEmployeeAllowances, 
+    getCustomAllowancesForEmployee, 
+    assignEmployeeAllowance, 
+    removeEmployeeAllowance 
+} from "@/actions/settings.actions";
 import { toast } from "sonner";
 import {
     Dialog,
@@ -30,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { UserCog, CalendarDays } from "lucide-react";
+import { UserCog, CalendarDays, DollarSign } from "lucide-react";
 import { Role } from "@prisma/client";
 
 interface Branch {
@@ -62,11 +68,29 @@ interface LeaveEntitlement {
     leaveType: LeaveType;
 }
 
+interface CustomAllowance {
+    id: string;
+    name: string;
+    amount: number;
+    valueType: string;
+    scope: string;
+}
+
+interface EmployeeAllowance {
+    id: string;
+    isActive: boolean;
+    allowance: CustomAllowance;
+}
+
 export function ManageEmployeeDialog({ user, branches }: { user: User, branches: Branch[] }) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
     const [userEntitlements, setUserEntitlements] = useState<LeaveEntitlement[]>([]);
+    
+    // Allowance states
+    const [customAllowances, setCustomAllowances] = useState<CustomAllowance[]>([]);
+    const [userAllowances, setUserAllowances] = useState<EmployeeAllowance[]>([]);
     
     const [basicFormData, setBasicFormData] = useState({
         role: user.role,
@@ -74,6 +98,20 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
     });
     
     const [leaveFormData, setLeaveFormData] = useState<{[key: string]: { assigned: boolean; customDays: string }}>({});
+
+    const loadAllowanceData = useCallback(async () => {
+        try {
+            const [customAllowancesData, userAllowancesData] = await Promise.all([
+                getCustomAllowancesForEmployee(user.id),
+                getEmployeeAllowances(user.id)
+            ]);
+            
+            setCustomAllowances(customAllowancesData);
+            setUserAllowances(userAllowancesData);
+        } catch {
+            toast.error("Failed to load allowance data");
+        }
+    }, [user.id]);
 
     const loadLeaveData = useCallback(async () => {
         try {
@@ -103,8 +141,9 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
     useEffect(() => {
         if (isOpen) {
             loadLeaveData();
+            loadAllowanceData();
         }
-    }, [isOpen, loadLeaveData]);
+    }, [isOpen, loadLeaveData, loadAllowanceData]);
 
     const handleBasicSubmit = async () => {
         setLoading(true);
@@ -155,6 +194,40 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
         }
     };
 
+    const handleAssignAllowance = async (allowanceId: string) => {
+        setLoading(true);
+        try {
+            const res = await assignEmployeeAllowance(user.id, allowanceId);
+            if (res.success) {
+                toast.success("Allowance assigned successfully");
+                await loadAllowanceData();
+            } else {
+                toast.error(res.error || "Failed to assign allowance");
+            }
+        } catch {
+            toast.error("Failed to assign allowance");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRemoveAllowance = async (allowanceId: string) => {
+        setLoading(true);
+        try {
+            const res = await removeEmployeeAllowance(user.id, allowanceId);
+            if (res.success) {
+                toast.success("Allowance removed successfully");
+                await loadAllowanceData();
+            } else {
+                toast.error(res.error || "Failed to remove allowance");
+            }
+        } catch {
+            toast.error("Failed to remove allowance");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleLeaveToggle = (leaveTypeId: string, assigned: boolean) => {
         setLeaveFormData(prev => ({
             ...prev,
@@ -189,9 +262,10 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
                 </DialogHeader>
                 
                 <Tabs defaultValue="basic" className="space-y-4">
-                    <TabsList className="grid w-full grid-cols-2">
+                    <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="basic">Basic Info</TabsTrigger>
                         <TabsTrigger value="leaves">Leave Management</TabsTrigger>
+                        <TabsTrigger value="allowances">Allowances</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="basic" className="space-y-4">
@@ -329,6 +403,96 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
                             <Button onClick={handleLeaveSubmit} disabled={loading}>
                                 {loading ? "Updating..." : "Update Leave Assignments"}
                             </Button>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="allowances" className="space-y-4">
+                        <div className="flex items-center gap-2 mb-4">
+                            <DollarSign className="h-5 w-5 text-primary" />
+                            <h3 className="font-medium">Custom Allowance Assignment</h3>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            {/* Available Custom Allowances */}
+                            <div>
+                                <h4 className="font-medium text-sm mb-3">Available Custom Allowances</h4>
+                                {customAllowances.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground text-center py-4">
+                                        No custom allowance types available. Create some in Organization → Allowances.
+                                    </p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {customAllowances.map((allowance) => {
+                                            const isAssigned = userAllowances.some(
+                                                ua => ua.allowance.id === allowance.id && ua.isActive
+                                            );
+                                            
+                                            return (
+                                                <Card key={allowance.id}>
+                                                    <CardContent className="p-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <div className="font-medium">{allowance.name}</div>
+                                                                <div className="text-sm text-muted-foreground">
+                                                                    {allowance.valueType === "FIXED" 
+                                                                        ? `৳${allowance.amount.toLocaleString("en-BD")}`
+                                                                        : `${allowance.amount}% of salary`}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                {isAssigned ? (
+                                                                    <>
+                                                                        <span className="text-sm text-green-600 font-medium">Assigned</span>
+                                                                        <Button 
+                                                                            variant="outline" 
+                                                                            size="sm"
+                                                                            onClick={() => handleRemoveAllowance(allowance.id)}
+                                                                            disabled={loading}
+                                                                        >
+                                                                            Remove
+                                                                        </Button>
+                                                                    </>
+                                                                ) : (
+                                                                    <Button 
+                                                                        variant="default" 
+                                                                        size="sm"
+                                                                        onClick={() => handleAssignAllowance(allowance.id)}
+                                                                        disabled={loading}
+                                                                    >
+                                                                        Assign
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Currently Assigned Allowances Summary */}
+                            {userAllowances.some(ua => ua.isActive) && (
+                                <div>
+                                    <h4 className="font-medium text-sm mb-3">Currently Assigned Custom Allowances</h4>
+                                    <div className="bg-muted/30 rounded-lg p-4">
+                                        {userAllowances
+                                            .filter(ua => ua.isActive)
+                                            .map(userAllowance => (
+                                                <div key={userAllowance.id} className="flex justify-between items-center py-1">
+                                                    <span className="text-sm">{userAllowance.allowance.name}</span>
+                                                    <span className="text-sm font-medium">
+                                                        {userAllowance.allowance.valueType === "FIXED" 
+                                                            ? `৳${userAllowance.allowance.amount.toLocaleString("en-BD")}`
+                                                            : `${userAllowance.allowance.amount}%`}
+                                                    </span>
+                                                </div>
+                                            ))
+                                        }
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </TabsContent>
                 </Tabs>

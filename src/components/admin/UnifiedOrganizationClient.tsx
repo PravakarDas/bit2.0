@@ -20,6 +20,7 @@ import { AddBonusDialog } from "./AddBonusDialog";
 import { BonusToggle } from "./BonusToggle";
 import { AllowanceDialog } from "./AddAllowanceDialog";
 import { AllowanceToggle } from "./AllowanceToggle";
+import { GlobalSettingsForm } from "./GlobalSettingsForm";
 import { Edit2 } from "lucide-react";
 
 type Branch = {
@@ -71,10 +72,11 @@ type Bonus = {
 type Allowance = {
     id: string;
     name: string;
-    type: string;
+    valueType: string;
+    scope: string;
     amount: number;
+    targetBranchIds: string[];
     isActive: boolean;
-    branches: { id: string; name: string }[];
 };
 
 interface UnifiedOrganizationClientProps {
@@ -83,6 +85,9 @@ interface UnifiedOrganizationClientProps {
     designations: Designation[];
     bonuses: Bonus[];
     allowances: Allowance[];
+    systemSettings: {
+        medicalClaimLimit: number;
+    };
 }
 
 export function UnifiedOrganizationClient({
@@ -91,6 +96,7 @@ export function UnifiedOrganizationClient({
     designations,
     bonuses,
     allowances,
+    systemSettings,
 }: UnifiedOrganizationClientProps) {
     return (
         <div className="space-y-12 pb-12">
@@ -263,29 +269,48 @@ export function UnifiedOrganizationClient({
                 </Card>
             </section>
 
-            {/* Section 4: Allowances */}
+            {/* Section 4: Allowances & Settings */}
             <section id="allowances" className="scroll-mt-20">
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
+                <div className="space-y-6">
+                    {/* Medical Settings */}
+                    <Card>
+                        <CardHeader>
                             <div className="flex items-center gap-2">
                                 <DollarSign className="h-5 w-5 text-primary" />
                                 <div>
-                                    <CardTitle>Custom Allowances</CardTitle>
-                                    <CardDescription>Define additional benefits for specific branches</CardDescription>
+                                    <CardTitle>Medical Settings</CardTitle>
+                                    <CardDescription>Configure default medical claim limits</CardDescription>
                                 </div>
                             </div>
-                            <AllowanceDialog branches={branches.filter(b => b.isActive)} />
-                        </div>
-                    </CardHeader>
+                        </CardHeader>
+                        <CardContent>
+                            <GlobalSettingsForm initialData={systemSettings} />
+                        </CardContent>
+                    </Card>
+
+                    {/* Custom Allowances */}
+                    <Card>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <DollarSign className="h-5 w-5 text-primary" />
+                                    <div>
+                                        <CardTitle>Allowance Types</CardTitle>
+                                        <CardDescription>Manage allowance types with different scopes and calculation methods</CardDescription>
+                                    </div>
+                                </div>
+                                <AllowanceDialog branches={branches.filter(b => b.isActive)} />
+                            </div>
+                        </CardHeader>
                     <CardContent>
                         <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
                             <Table>
                                 <TableHeader>
                                     <TableRow className="bg-muted/50">
-                                        <TableHead className="font-semibold">Benefit</TableHead>
+                                        <TableHead className="font-semibold">Allowance</TableHead>
+                                        <TableHead className="font-semibold text-center">Scope</TableHead>
                                         <TableHead className="font-semibold text-right">Value</TableHead>
-                                        <TableHead className="font-semibold">Branches</TableHead>
+                                        <TableHead className="font-semibold">Target</TableHead>
                                         <TableHead className="font-semibold text-center">Status</TableHead>
                                         <TableHead className="font-semibold text-right pr-6">Actions</TableHead>
                                     </TableRow>
@@ -293,8 +318,8 @@ export function UnifiedOrganizationClient({
                                 <TableBody>
                                     {allowances.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                                                No custom allowances defined.
+                                            <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                                                No allowance types defined.
                                             </TableCell>
                                         </TableRow>
                                     ) : (
@@ -303,22 +328,43 @@ export function UnifiedOrganizationClient({
                                                 <TableCell>
                                                     <div className="flex flex-col">
                                                         <span className="font-medium text-sm">{allowance.name}</span>
-                                                        <span className="text-[10px] text-muted-foreground uppercase">{allowance.type}</span>
+                                                        <span className="text-[10px] text-muted-foreground uppercase">{allowance.valueType}</span>
                                                     </div>
                                                 </TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge 
+                                                        variant={
+                                                            allowance.scope === "FIXED" ? "default" : 
+                                                            allowance.scope === "FULL_BRANCH" ? "secondary" : 
+                                                            "outline"
+                                                        }
+                                                        className="text-[10px]"
+                                                    >
+                                                        {allowance.scope === "FIXED" ? "All Employees" :
+                                                         allowance.scope === "FULL_BRANCH" ? "Branch-wide" :
+                                                         "Individual"}
+                                                    </Badge>
+                                                </TableCell>
                                                 <TableCell className="text-right tabular-nums text-sm font-semibold text-indigo-700">
-                                                    {allowance.type === "FIXED"
+                                                    {allowance.valueType === "FIXED"
                                                         ? `৳${allowance.amount.toLocaleString("en-BD")}`
                                                         : `${allowance.amount}%`}
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex flex-wrap gap-1">
-                                                        {allowance.branches.length === 0 ? (
-                                                            <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200">Global</Badge>
+                                                        {allowance.scope === "FIXED" ? (
+                                                            <Badge variant="outline" className="text-[9px] bg-green-50 text-green-700 border-green-200">All Branches</Badge>
+                                                        ) : allowance.scope === "CUSTOM" ? (
+                                                            <Badge variant="outline" className="text-[9px] bg-purple-50 text-purple-700 border-purple-200">Per Employee</Badge>
+                                                        ) : allowance.targetBranchIds.length === 0 ? (
+                                                            <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200">No Selection</Badge>
                                                         ) : (
-                                                            allowance.branches.map(br => (
-                                                                <Badge key={br.id} variant="secondary" className="text-[9px]">{br.name}</Badge>
-                                                            ))
+                                                            allowance.targetBranchIds.map(branchId => {
+                                                                const branch = branches.find(b => b.id === branchId);
+                                                                return branch ? (
+                                                                    <Badge key={branchId} variant="secondary" className="text-[9px]">{branch.name}</Badge>
+                                                                ) : null;
+                                                            })
                                                         )}
                                                     </div>
                                                 </TableCell>
@@ -331,9 +377,10 @@ export function UnifiedOrganizationClient({
                                                         initialData={{
                                                             id: allowance.id,
                                                             name: allowance.name,
-                                                            type: allowance.type as "FIXED" | "PERCENTAGE",
+                                                            valueType: allowance.valueType as "FIXED" | "PERCENTAGE",
+                                                            scope: allowance.scope as "FIXED" | "FULL_BRANCH" | "CUSTOM",
                                                             amount: allowance.amount,
-                                                            branchIds: allowance.branches.map(b => b.id)
+                                                            targetBranchIds: allowance.targetBranchIds
                                                         }}
                                                         trigger={
                                                             <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -350,6 +397,7 @@ export function UnifiedOrganizationClient({
                         </div>
                     </CardContent>
                 </Card>
+                </div>
             </section>
         </div>
     );
