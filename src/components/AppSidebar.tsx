@@ -52,20 +52,24 @@ import logo from "@/assets/logo.gif";
 
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
-    { title: "Employee Management", url: "/admin/employees", icon: Users },
-    { title: "Profile Requests", url: "/admin/profile-requests", icon: FileCheck },
-    { title: "Archived Employees", url: "/admin/archived-employees", icon: Archive },
-    { title: "Timeline", url: "/admin/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
-    { title: "Leave Types", url: "/admin/leave-types", icon: ScrollText },
-    { title: "Leave Applications", url: "/admin/leave-applications", icon: History },
-    { title: "Leave Automation", url: "/admin/leave-automation", icon: Zap },
-    { title: "Loan Management", url: "/admin/loans", icon: Banknote },
-    { title: "Medical Claims", url: "/admin/medical", icon: Stethoscope },
-    { title: "Wallet Management", url: "/admin/wallet", icon: Wallet },
-    { title: "Payroll", url: "/admin/payroll", icon: CircleDollarSign },
+    { title: "Loan", url: "/admin/loans", icon: Banknote },
+    { title: "Medical", url: "/admin/medical", icon: Stethoscope },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
+    { title: "Payroll", url: "/admin/payroll", icon: CircleDollarSign },
     { title: "Settings", url: "/admin/settings", icon: Wrench },
+    { title: "Timeline", url: "/admin/timeline", icon: Clock },
+    { title: "Wallet", url: "/admin/wallet", icon: Wallet },
+];
+
+const employeeSubItems = [
+    { title: "Employee Management", url: "/admin/employees", icon: Users },
+    { title: "Archived Employees", url: "/admin/archived-employees", icon: Archive },
+];
+
+const requestSubItems = [
+    { title: "Profile Requests", url: "/admin/profile-requests", icon: FileCheck },
+    { title: "Leave Applications", url: "/admin/leave-applications", icon: History },
 ];
 
 const employeeItems = [
@@ -92,11 +96,19 @@ export function AppSidebar({ role }: { role: string }) {
     const pathname = usePathname();
     const items = role === "SUPERADMIN" ? adminItems : employeeItems;
     const [isOrganizationOpen, setIsOrganizationOpen] = React.useState(false);
+    const [isEmployeeOpen, setIsEmployeeOpen] = React.useState(false);
+    const [isRequestOpen, setIsRequestOpen] = React.useState(false);
 
-    // Auto-open organization menu if on organization page
+    // Auto-open menus based on current page
     React.useEffect(() => {
         if (pathname === "/admin/organization") {
             setIsOrganizationOpen(true);
+        }
+        if (pathname === "/admin/employees" || pathname === "/admin/archived-employees") {
+            setIsEmployeeOpen(true);
+        }
+        if (pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications") {
+            setIsRequestOpen(true);
         }
     }, [pathname]);
 
@@ -137,17 +149,53 @@ export function AppSidebar({ role }: { role: string }) {
                                 </SidebarMenuItem>
                             ))}
                             
-                            {/* Organization Collapsible Menu (Admin Only) */}
+                            {/* Employee Collapsible Menu (Admin Only) */}
+                            {role === "SUPERADMIN" && (
+                                <Collapsible open={isEmployeeOpen} onOpenChange={setIsEmployeeOpen}>
+                                    <SidebarMenuItem>
+                                        <CollapsibleTrigger asChild>
+                                            <SidebarMenuButton 
+                                                isActive={pathname === "/admin/employees" || pathname === "/admin/archived-employees"}
+                                                tooltip="Employee"
+                                            >
+                                                <Users className="h-4 w-4" />
+                                                <span>Employee</span>
+                                                {isEmployeeOpen ? (
+                                                    <ChevronDown className="ml-auto h-4 w-4 transition-transform" />
+                                                ) : (
+                                                    <ChevronRight className="ml-auto h-4 w-4 transition-transform" />
+                                                )}
+                                            </SidebarMenuButton>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                            <SidebarMenuSub>
+                                                {employeeSubItems.map((subItem) => (
+                                                    <SidebarMenuSubItem key={subItem.title}>
+                                                        <SidebarMenuSubButton asChild isActive={pathname === subItem.url}>
+                                                            <Link href={subItem.url}>
+                                                                <subItem.icon className="h-3.5 w-3.5" />
+                                                                <span className="text-xs">{subItem.title}</span>
+                                                            </Link>
+                                                        </SidebarMenuSubButton>
+                                                    </SidebarMenuSubItem>
+                                                ))}
+                                            </SidebarMenuSub>
+                                        </CollapsibleContent>
+                                    </SidebarMenuItem>
+                                </Collapsible>
+                            )}
+
+                            {/* Organizational Settings Collapsible Menu (Admin Only) */}
                             {role === "SUPERADMIN" && (
                                 <Collapsible open={isOrganizationOpen} onOpenChange={setIsOrganizationOpen}>
                                     <SidebarMenuItem>
                                         <CollapsibleTrigger asChild>
                                             <SidebarMenuButton 
                                                 isActive={pathname === "/admin/organization"}
-                                                tooltip="Organization"
+                                                tooltip="Organizational Settings"
                                             >
                                                 <Building2 className="h-4 w-4" />
-                                                <span>Organization</span>
+                                                <span>Organizational Settings</span>
                                                 {isOrganizationOpen ? (
                                                     <ChevronDown className="ml-auto h-4 w-4 transition-transform" />
                                                 ) : (
@@ -169,6 +217,42 @@ export function AppSidebar({ role }: { role: string }) {
                                                                     }
                                                                 }}
                                                             >
+                                                                <subItem.icon className="h-3.5 w-3.5" />
+                                                                <span className="text-xs">{subItem.title}</span>
+                                                            </Link>
+                                                        </SidebarMenuSubButton>
+                                                    </SidebarMenuSubItem>
+                                                ))}
+                                            </SidebarMenuSub>
+                                        </CollapsibleContent>
+                                    </SidebarMenuItem>
+                                </Collapsible>
+                            )}
+
+                            {/* Request Collapsible Menu (Admin Only) */}
+                            {role === "SUPERADMIN" && (
+                                <Collapsible open={isRequestOpen} onOpenChange={setIsRequestOpen}>
+                                    <SidebarMenuItem>
+                                        <CollapsibleTrigger asChild>
+                                            <SidebarMenuButton 
+                                                isActive={pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications"}
+                                                tooltip="Request"
+                                            >
+                                                <FileCheck className="h-4 w-4" />
+                                                <span>Request</span>
+                                                {isRequestOpen ? (
+                                                    <ChevronDown className="ml-auto h-4 w-4 transition-transform" />
+                                                ) : (
+                                                    <ChevronRight className="ml-auto h-4 w-4 transition-transform" />
+                                                )}
+                                            </SidebarMenuButton>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                            <SidebarMenuSub>
+                                                {requestSubItems.map((subItem) => (
+                                                    <SidebarMenuSubItem key={subItem.title}>
+                                                        <SidebarMenuSubButton asChild isActive={pathname === subItem.url}>
+                                                            <Link href={subItem.url}>
                                                                 <subItem.icon className="h-3.5 w-3.5" />
                                                                 <span className="text-xs">{subItem.title}</span>
                                                             </Link>
