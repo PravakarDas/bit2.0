@@ -85,6 +85,7 @@ const organizationSubItems = [
     { title: "Departments & Designations", icon: Briefcase, hash: "#departments" },
     { title: "Bonuses", icon: Gift, hash: "#bonuses" },
     { title: "Allowances", icon: DollarSign, hash: "#allowances" },
+    { title: "Leave Types", icon: CalendarDays, hash: "#leave-types" },
 ];
 
 export function AppSidebar({ role }: { role: string }) {

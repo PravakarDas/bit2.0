@@ -11,7 +11,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Briefcase, DollarSign, Gift } from "lucide-react";
+import { Building2, Briefcase, DollarSign, Gift, CalendarDays } from "lucide-react";
 import { AddBranchDialog } from "./AddBranchDialog";
 import { BranchToggle } from "./BranchToggle";
 import { DepartmentClient } from "./DepartmentClient";
@@ -20,6 +20,9 @@ import { AddBonusDialog } from "./AddBonusDialog";
 import { BonusToggle } from "./BonusToggle";
 import { AllowanceDialog } from "./AddAllowanceDialog";
 import { AllowanceToggle } from "./AllowanceToggle";
+import { AddLeaveTypeDialog } from "./AddLeaveTypeDialog";
+import { EditLeaveTypeDialog } from "./EditLeaveTypeDialog";
+import { LeaveTypeToggle } from "./LeaveTypeToggle";
 import { GlobalSettingsForm } from "./GlobalSettingsForm";
 import { Edit2 } from "lucide-react";
 
@@ -79,12 +82,22 @@ type Allowance = {
     isActive: boolean;
 };
 
+type LeaveType = {
+    id: string;
+    name: string;
+    allocatedDays: number;
+    requiresApproval: boolean;
+    applicableBranches: string | null;
+    isActive: boolean;
+};
+
 interface UnifiedOrganizationClientProps {
     branches: Branch[];
     departments: Department[];
     designations: Designation[];
     bonuses: Bonus[];
     allowances: Allowance[];
+    leaveTypes: LeaveType[];
     systemSettings: {
         medicalClaimLimit: number;
     };
@@ -96,6 +109,7 @@ export function UnifiedOrganizationClient({
     designations,
     bonuses,
     allowances,
+    leaveTypes,
     systemSettings,
 }: UnifiedOrganizationClientProps) {
     return (
@@ -398,6 +412,108 @@ export function UnifiedOrganizationClient({
                     </CardContent>
                 </Card>
                 </div>
+            </section>
+
+            {/* Section 5: Leave Types */}
+            <section id="leave-types" className="scroll-mt-20">
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <CalendarDays className="h-5 w-5 text-primary" />
+                                <div>
+                                    <CardTitle>Leave Types</CardTitle>
+                                    <CardDescription>Manage different types of leaves and their allocations</CardDescription>
+                                </div>
+                            </div>
+                            <AddLeaveTypeDialog branches={branches.filter(b => b.isActive)} />
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-muted/50">
+                                        <TableHead className="font-semibold">Leave Type</TableHead>
+                                        <TableHead className="font-semibold">Days per Year</TableHead>
+                                        <TableHead className="font-semibold">Requires Approval</TableHead>
+                                        <TableHead className="font-semibold">Applicable Branches</TableHead>
+                                        <TableHead className="font-semibold text-center">Status</TableHead>
+                                        <TableHead className="font-semibold text-right pr-6">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {leaveTypes.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                                                <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
+                                                <p>No leave types found</p>
+                                                <p className="text-sm">Add your first leave type to get started</p>
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        leaveTypes.map((leaveType) => {
+                                            const applicableBranchIds = JSON.parse(leaveType.applicableBranches || '[]');
+                                            const applicableBranches = branches.filter(branch => 
+                                                applicableBranchIds.includes(branch.id)
+                                            );
+
+                                            return (
+                                                <TableRow key={leaveType.id} className="hover:bg-muted/30 transition-colors">
+                                                    <TableCell className="font-medium">{leaveType.name}</TableCell>
+                                                    <TableCell>
+                                                        <div className="font-semibold text-blue-600">
+                                                            {leaveType.allocatedDays} days
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge 
+                                                            variant={leaveType.requiresApproval ? "destructive" : "secondary"}
+                                                        >
+                                                            {leaveType.requiresApproval ? "Yes" : "No"}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {applicableBranches.length === 0 ? (
+                                                                <Badge variant="outline" className="text-xs">None</Badge>
+                                                            ) : applicableBranches.length === branches.length ? (
+                                                                <Badge variant="outline" className="text-xs">All Branches</Badge>
+                                                            ) : (
+                                                                applicableBranches.slice(0, 2).map(branch => (
+                                                                    <Badge key={branch.id} variant="outline" className="text-xs">
+                                                                        {branch.name}
+                                                                    </Badge>
+                                                                ))
+                                                            )}
+                                                            {applicableBranches.length > 2 && (
+                                                                <Badge variant="outline" className="text-xs">
+                                                                    +{applicableBranches.length - 2} more
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <LeaveTypeToggle 
+                                                            leaveTypeId={leaveType.id} 
+                                                            isActive={leaveType.isActive} 
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="text-right pr-6">
+                                                        <EditLeaveTypeDialog 
+                                                            leaveType={leaveType} 
+                                                            branches={branches.filter(b => b.isActive)}
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
             </section>
         </div>
     );
