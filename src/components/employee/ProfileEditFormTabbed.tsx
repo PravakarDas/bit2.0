@@ -34,6 +34,7 @@ import { updateEmployeeProfile } from "@/actions/employee.actions";
 import { getActiveDepartments } from "@/actions/department.actions";
 import { getDesignationsByDepartment } from "@/actions/designation.actions";
 import { getActiveLeaveTypes, getUserLeaveEntitlements, assignLeaveToUser, removeLeaveFromUser } from "@/actions/leave.actions";
+import { getAllowanceTypes, getEmployeeAllowances, assignEmployeeAllowance, removeEmployeeAllowance } from "@/actions/settings.actions";
 import { Badge } from "@/components/ui/badge";
 import { 
   Loader2, 
@@ -157,18 +158,26 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
   const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
   const [selectedLeaveTypeId, setSelectedLeaveTypeId] = useState<string>("");
   const [customLeaveDays, setCustomLeaveDays] = useState<string>("");
+  
+  // Allowance Management State
+  const [allowanceTypes, setAllowanceTypes] = useState<any[]>([]);
+  const [userAllowances, setUserAllowances] = useState<any[]>([]);
+  const [isAllowanceDialogOpen, setIsAllowanceDialogOpen] = useState(false);
+  const [selectedAllowanceId, setSelectedAllowanceId] = useState<string>("");
 
-  // Load departments, designations, and leave types for admin
+  // Load departments, designations, leave types, and allowances for admin
   useEffect(() => {
     if (isAdmin) {
       const loadData = async () => {
         try {
-          const [depts, leaveTypesData] = await Promise.all([
+          const [depts, leaveTypesData, allowanceTypesData] = await Promise.all([
             getActiveDepartments(),
-            getActiveLeaveTypes()
+            getActiveLeaveTypes(),
+            getAllowanceTypes()
           ]);
           setDepartments(depts);
           setLeaveTypes(leaveTypesData);
+          setAllowanceTypes(allowanceTypesData);
         } catch (error) {
           console.error("Failed to load reference data:", error);
         }
@@ -188,6 +197,19 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
       }
     };
     loadLeaveEntitlements();
+  }, [user.id]);
+
+  // Load user allowances
+  useEffect(() => {
+    const loadUserAllowances = async () => {
+      try {
+        const allowances = await getEmployeeAllowances(user.id);
+        setUserAllowances(allowances);
+      } catch (error) {
+        console.error("Failed to load user allowances:", error);
+      }
+    };
+    loadUserAllowances();
   }, [user.id]);
 
   useEffect(() => {
@@ -399,6 +421,52 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
     await handleAssignLeave(leaveTypeId, newDays);
   };
 
+  // Allowance management functions
+  const handleAssignAllowance = async (allowanceId: string) => {
+    try {
+      const result = await assignEmployeeAllowance(user.id, allowanceId);
+      if (result.success) {
+        toast.success("Allowance assigned successfully");
+        // Reload user allowances
+        const allowances = await getEmployeeAllowances(user.id);
+        setUserAllowances(allowances);
+        setIsAllowanceDialogOpen(false);
+        setSelectedAllowanceId("");
+      } else {
+        toast.error(result.error || "Failed to assign allowance");
+      }
+    } catch (error) {
+      console.error("Error assigning allowance:", error);
+      toast.error("Failed to assign allowance");
+    }
+  };
+
+  const handleRemoveAllowance = async (allowanceId: string) => {
+    try {
+      const result = await removeEmployeeAllowance(user.id, allowanceId);
+      if (result.success) {
+        toast.success("Allowance removed successfully");
+        // Reload user allowances
+        const allowances = await getEmployeeAllowances(user.id);
+        setUserAllowances(allowances);
+      } else {
+        toast.error(result.error || "Failed to remove allowance");
+      }
+    } catch (error) {
+      console.error("Error removing allowance:", error);
+      toast.error("Failed to remove allowance");
+    }
+  };
+
+  const handleAddAllowance = () => {
+    if (!selectedAllowanceId) {
+      toast.error("Please select an allowance type");
+      return;
+    }
+    
+    handleAssignAllowance(selectedAllowanceId);
+  };
+
   const handleAddLeaveType = () => {
     if (!selectedLeaveTypeId) {
       toast.error("Please select a leave type");
@@ -422,6 +490,13 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
   const availableLeaveTypes = leaveTypes.filter(
     leaveType => !userLeaveEntitlements.some(
       entitlement => entitlement.leaveType.id === leaveType.id
+    )
+  );
+
+  // Get available allowance types (not yet assigned to user and active)
+  const availableAllowanceTypes = allowanceTypes.filter(
+    allowanceType => allowanceType.isActive && !userAllowances.some(
+      userAllowance => userAllowance.allowanceId === allowanceType.id && userAllowance.isActive
     )
   );
 
@@ -996,11 +1071,10 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
                             >
                               <FormControl>
                                 <SelectTrigger>
-                                  <SelectValue placeholder="Select branch" />
+                                  <SelectValue placeholder="Select branch (optional)" />
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                <SelectItem value="">No Branch</SelectItem>
                                 {branches.map((branch) => (
                                   <SelectItem key={branch.id} value={branch.id}>
                                     {branch.name} - {branch.location}
@@ -1030,11 +1104,10 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
                             >
                               <FormControl>
                                 <SelectTrigger>
-                                  <SelectValue placeholder="Select department" />
+                                  <SelectValue placeholder="Select department (optional)" />
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                <SelectItem value="">No Department</SelectItem>
                                 {departments.map((dept) => (
                                   <SelectItem key={dept.id} value={dept.id}>
                                     {dept.name}
@@ -1060,11 +1133,10 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
                             >
                               <FormControl>
                                 <SelectTrigger>
-                                  <SelectValue placeholder="Select designation" />
+                                  <SelectValue placeholder="Select designation (optional)" />
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                <SelectItem value="">No Designation</SelectItem>
                                 {designations.map((designation) => (
                                   <SelectItem key={designation.id} value={designation.id}>
                                     {designation.name}
@@ -1267,23 +1339,126 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
               </CardContent>
             </Card>
 
-            {/* Allowance Management Placeholder */}
+            {/* Allowance Management */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  Allowance Management
-                </CardTitle>
-                <CardDescription>
-                  {isAdmin ? "Configure allowances for this employee" : "View your allowance details"}
-                </CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5" />
+                    Allowance Management
+                  </CardTitle>
+                  <CardDescription>
+                    {isAdmin ? "Manage allowances for this employee" : "View your assigned allowances"}
+                  </CardDescription>
+                </div>
+                {isAdmin && (
+                  <Dialog open={isAllowanceDialogOpen} onOpenChange={setIsAllowanceDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Allowance
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Assign Allowance</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-sm font-medium">Allowance Type</label>
+                          <Select value={selectedAllowanceId} onValueChange={setSelectedAllowanceId}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select an allowance type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableAllowanceTypes.map(allowanceType => (
+                                <SelectItem key={allowanceType.id} value={allowanceType.id}>
+                                  {allowanceType.name} - {allowanceType.valueType === 'PERCENTAGE' ? `${allowanceType.amount}%` : `$${allowanceType.amount}`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => setIsAllowanceDialogOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button onClick={handleAddAllowance}>
+                            Assign Allowance
+                          </Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                )}
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <DollarSign className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-                  <p className="text-sm font-medium">Allowance Management</p>
-                  <p className="text-xs">Allowance configuration will be implemented based on requirements</p>
-                </div>
+                {userAllowances.filter(allowance => allowance.isActive).length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <DollarSign className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
+                    <p className="text-sm font-medium">No Allowances Assigned</p>
+                    <p className="text-xs">
+                      {isAdmin 
+                        ? "Click 'Add Allowance' to assign allowances to this employee"
+                        : "Contact your admin to get allowances assigned"
+                      }
+                    </p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Allowance Name</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Scope</TableHead>
+                        <TableHead>Status</TableHead>
+                        {isAdmin && <TableHead>Actions</TableHead>}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {userAllowances.filter(userAllowance => userAllowance.isActive).map((userAllowance) => (
+                        <TableRow key={userAllowance.id}>
+                          <TableCell className="font-medium">
+                            {userAllowance.allowance.name}
+                          </TableCell>
+                          <TableCell>
+                            {userAllowance.allowance.valueType === 'PERCENTAGE' 
+                              ? `${userAllowance.allowance.amount}%` 
+                              : `$${userAllowance.allowance.amount}`
+                            }
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={userAllowance.allowance.valueType === 'PERCENTAGE' ? "default" : "secondary"}>
+                              {userAllowance.allowance.valueType === 'PERCENTAGE' ? "Percentage" : "Fixed"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              {userAllowance.allowance.scope}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="default">
+                              Active
+                            </Badge>
+                          </TableCell>
+                          {isAdmin && (
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleRemoveAllowance(userAllowance.allowanceId)}
+                              >
+                                <Minus className="h-3 w-3" />
+                              </Button>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
