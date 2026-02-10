@@ -169,6 +169,7 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <InfoItem label="Role" value={user.role} />
           <InfoItem label="Designation" value={user.designation?.name} />
           <InfoItem label="Department" value={user.department?.name} />
           <InfoItem label="Date of Joining" value={formatDate(user.dateOfJoining)} icon={<Calendar className="h-4 w-4" />} />

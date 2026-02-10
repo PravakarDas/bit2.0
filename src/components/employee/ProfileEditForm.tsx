@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { User } from "@prisma/client";
+import { User, Role } from "@prisma/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Form,
   FormControl,
@@ -18,10 +19,12 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
 import { toast } from "sonner";
 import { submitProfileUpdateRequest, updateUserProfileByAdmin } from "@/actions/profile.actions";
-import { Loader2 } from "lucide-react";
+import { updateEmployeeProfile } from "@/actions/employee.actions";
+import { getActiveDepartments } from "@/actions/department.actions";
+import { getDesignationsByDepartment } from "@/actions/designation.actions";
+import { Loader2, UserCog, CalendarDays, DollarSign } from "lucide-react";
 
 const profileFormSchema = z.object({
   // Personal Information
@@ -67,19 +70,83 @@ const profileFormSchema = z.object({
   portfolioLink: z.string().url().optional().or(z.literal("")),
   githubLink: z.string().url().optional().or(z.literal("")),
   linkedinLink: z.string().url().optional().or(z.literal("")),
+
+  // Employment Details (Admin only)
+  role: z.enum(["USER", "ADMIN", "SUPERADMIN", "MANAGER"]).optional(),
+  branchId: z.string().optional(),
+  departmentId: z.string().optional(),
+  designationId: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
+interface Branch {
+  id: string;
+  name: string;
+  location: string;
+}
+
+interface Department {
+  id: string;
+  name: string;
+}
+
+interface Designation {
+  id: string;
+  name: string;
+}
+
 interface ProfileEditFormProps {
-  user: User;
+  user: User & {
+    branch?: { id: string; name: string; location: string } | null;
+    department?: { id: string; name: string } | null;
+    designation?: { id: string; name: string } | null;
+  };
+  branches?: Branch[];
   isAdmin?: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: ProfileEditFormProps) {
+export function ProfileEditForm({ user, branches = [], isAdmin = false, onSuccess, onCancel }: ProfileEditFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState("personal");
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [designations, setDesignations] = useState<Designation[]>([]);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>(
+    user.departmentId || ""
+  );
+
+  // Load departments and designations for admin
+  useEffect(() => {
+    if (isAdmin) {
+      const loadDepartments = async () => {
+        try {
+          const depts = await getActiveDepartments();
+          setDepartments(depts);
+        } catch (error) {
+          console.error("Failed to load departments:", error);
+        }
+      };
+      loadDepartments();
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin && selectedDepartmentId) {
+      const loadDesignations = async () => {
+        try {
+          const desigs = await getDesignationsByDepartment(selectedDepartmentId);
+          setDesignations(desigs);
+        } catch (error) {
+          console.error("Failed to load designations:", error);
+        }
+      };
+      loadDesignations();
+    } else {
+      setDesignations([]);
+    }
+  }, [selectedDepartmentId, isAdmin]);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -112,6 +179,11 @@ export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: 
       portfolioLink: user.portfolioLink || "",
       githubLink: user.githubLink || "",
       linkedinLink: user.linkedinLink || "",
+      // Employment details
+      role: user.role as Role,
+      branchId: user.branchId || "",
+      departmentId: user.departmentId || "",
+      designationId: user.designationId || "",
     },
   });
 
@@ -136,7 +208,7 @@ export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: 
       }
 
       // Convert date strings to Date objects
-      const { workingDaysInMonth, ...rest } = data;
+      const { workingDaysInMonth, role, branchId, departmentId, designationId, ...rest } = data;
       const formattedData = {
         ...rest,
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
@@ -146,8 +218,26 @@ export function ProfileEditForm({ user, isAdmin = false, onSuccess, onCancel }: 
 
       let result;
       if (isAdmin) {
-        // Admin can update directly
-        result = await updateUserProfileByAdmin(user.id, formattedData);
+        // Admin can update profile and employment details
+        const profileResult = await updateUserProfileByAdmin(user.id, formattedData);
+        
+        // Update employment details if any have changed
+        if (role || branchId || departmentId || designationId) {
+          const employmentData = {
+            role: role as Role,
+            branchId: branchId || null,
+            departmentId: departmentId || null,
+            designationId: designationId || null,
+          };
+          const employmentResult = await updateEmployeeProfile(user.id, employmentData);
+          
+          if (!employmentResult.success) {
+            toast.error(employmentResult.error || "Failed to update employment details");
+            setIsSubmitting(false);
+            return;
+          }
+        }
+        result = profileResult;
       } else {
         // Employee submits update request
         result = await submitProfileUpdateRequest(formattedData);

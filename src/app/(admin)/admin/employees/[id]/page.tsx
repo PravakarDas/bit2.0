@@ -9,11 +9,9 @@ import { ProfileView } from "@/components/employee/ProfileView";
 import { ProfileEditForm } from "@/components/employee/ProfileEditForm";
 import { getUserProfileById } from "@/actions/profile.actions";
 import { User } from "@prisma/client";
-import { Loader2, ArrowLeft, Wallet, History } from "lucide-react";
+import { Loader2, ArrowLeft, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { ManageEmployeeDialog } from "@/components/admin/ManageEmployeeDialog";
-import { EditEmployeeDialog } from "@/components/admin/EditEmployeeDialog";
 import { getActiveBranches } from "@/actions/branch.actions";
 
 type UserWithBranch = User & {
@@ -104,63 +102,38 @@ export default function AdminEmployeeDetailPage() {
             <p className="text-muted-foreground">{user.email}</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <EditEmployeeDialog
-            user={{
-              id: user.id,
-              email: user.email,
-              role: user.role,
-              branchId: user.branchId,
-              departmentId: user.departmentId,
-              designationId: user.designationId,
-            }}
-            branches={branches}
-            onUpdate={fetchData}
-          />
-          <Link href={`/employees/${userId}/salary`}>
-            <Button variant="outline">
-              <History className="mr-2 h-4 w-4" />
-              Salary History
-            </Button>
-          </Link>
-          <ManageEmployeeDialog
-            user={{
-              id: user.id,
-              email: user.email,
-              role: user.role,
-              branchId: user.branchId,
-            }}
-            branches={branches}
-          />
-        </div>
       </div>
 
       {/* Wallet & Salary Quick Info */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className="bg-primary/5 border-primary/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5" />
-              Wallet Balance
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">
-              ৳{user.walletBalance.toLocaleString("en-BD")}
-            </div>
-          </CardContent>
-        </Card>
+        <Link href={`/admin/employees/${userId}/wallet`}>
+          <Card className="bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors cursor-pointer">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                Wallet Balance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-primary">
+                ৳{user.walletBalance.toLocaleString("en-BD")}
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Base Salary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">
-              ৳{user.baseSalary.toLocaleString("en-BD")}
-            </div>
-          </CardContent>
-        </Card>
+        <Link href={`/admin/employees/${userId}/salary`}>
+          <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
+            <CardHeader>
+              <CardTitle>Base Salary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">
+                ৳{user.baseSalary.toLocaleString("en-BD")}
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -180,6 +153,7 @@ export default function AdminEmployeeDetailPage() {
         <TabsContent value="edit" className="mt-6">
           <ProfileEditForm
             user={user}
+            branches={branches}
             isAdmin={true}
             onSuccess={() => {
               setActiveTab("view");
