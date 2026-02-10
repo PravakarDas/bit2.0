@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProfileView } from "@/components/employee/ProfileView";
-import { ProfileEditForm } from "@/components/employee/ProfileEditForm";
+import { ProfileEditFormTabbed as ProfileEditForm } from "@/components/employee/ProfileEditFormTabbed";
 import { getUserProfileById } from "@/actions/profile.actions";
 import { User } from "@prisma/client";
 import { Loader2, ArrowLeft, Wallet } from "lucide-react";
@@ -106,7 +106,7 @@ export default function AdminEmployeeDetailPage() {
 
       {/* Wallet & Salary Quick Info */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Link href={`/admin/employees/${userId}/wallet`}>
+        <Link href={`/employees/${userId}/wallet`}>
           <Card className="bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors cursor-pointer">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -122,7 +122,7 @@ export default function AdminEmployeeDetailPage() {
           </Card>
         </Link>
 
-        <Link href={`/admin/employees/${userId}/salary`}>
+        <Link href={`/employees/${userId}/salary`}>
           <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
             <CardHeader>
               <CardTitle>Base Salary</CardTitle>

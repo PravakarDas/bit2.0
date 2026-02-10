@@ -137,3 +137,15 @@ export async function getWalletTransactionsForUser(userId: string) {
         orderBy: { createdAt: 'desc' }
     });
 }
+
+export async function getWalletRequestsForUser(userId: string) {
+    const admin = await getDbUser();
+    if (!admin || !["SUPERADMIN", "HR"].includes(admin.role)) {
+        throw new Error("Unauthorized");
+    }
+
+    return await prisma.walletRequest.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' }
+    });
+}

@@ -23,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { DollarSign, Loader2 } from "lucide-react";
+import { adjustWalletBalance } from "@/actions/wallet.actions";
 
 interface WalletAdjustmentDialogProps {
     userId: string;
@@ -60,15 +61,9 @@ export function WalletAdjustmentDialog({
 
         setIsLoading(true);
         try {
-            // TODO: Implement actual wallet adjustment API call
-            // const result = await adjustWalletBalance(userId, {
-            //     type: adjustmentType,
-            //     amount: adjustmentAmount,
-            //     reason: reason.trim()
-            // });
-
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            const finalAmount = adjustmentType === "DEBIT" ? -adjustmentAmount : adjustmentAmount;
+            
+            await adjustWalletBalance(userId, finalAmount, reason.trim());
             
             toast.success(
                 `Wallet ${adjustmentType.toLowerCase()} of ৳${adjustmentAmount.toLocaleString("en-BD")} applied successfully`
@@ -99,7 +94,7 @@ export function WalletAdjustmentDialog({
                 <DialogHeader>
                     <DialogTitle>Wallet Adjustment</DialogTitle>
                     <DialogDescription>
-                        Make credit or debit adjustments to the employee's wallet balance.
+                        Make credit or debit adjustments to the employee wallet balance.
                         Current balance: ৳{currentBalance.toLocaleString("en-BD")}
                     </DialogDescription>
                 </DialogHeader>

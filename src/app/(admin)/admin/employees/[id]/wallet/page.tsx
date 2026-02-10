@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getUserProfileById } from "@/actions/profile.actions";
-import { User } from "@prisma/client";
+import { getWalletTransactionsForUser, getWalletRequestsForUser, updateWalletRequestStatus } from "@/actions/wallet.actions";
+import { User, WalletTransaction, WalletRequest } from "@prisma/client";
 import { 
   ArrowLeft, 
   Wallet, 
@@ -26,7 +27,8 @@ import {
   Plus,
   Minus,
   CreditCard,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -48,74 +50,35 @@ type UserWithWallet = User & {
   } | null;
 };
 
-// Mock data - replace with actual API calls
-const mockTransactions = [
-  {
-    id: "1",
-    type: "CREDIT",
-    amount: 50000,
-    description: "Salary Credit - January 2026",
-    date: "2026-01-31T10:00:00Z",
-    status: "COMPLETED",
-    reference: "SAL-JAN-2026"
-  },
-  {
-    id: "2", 
-    type: "DEBIT",
-    amount: 15000,
-    description: "Loan Deduction",
-    date: "2026-01-31T10:00:00Z",
-    status: "COMPLETED",
-    reference: "LOAN-001"
-  },
-  {
-    id: "3",
-    type: "ADJUSTMENT",
-    amount: 5000,
-    description: "Bonus Adjustment",
-    date: "2026-01-25T14:30:00Z",
-    status: "PENDING",
-    reference: "ADJ-001"
-  }
-];
-
-const mockPendingRequests = [
-  {
-    id: "1",
-    type: "WITHDRAWAL",
-    amount: 10000,
-    reason: "Medical Emergency",
-    date: "2026-02-09T09:00:00Z",
-    status: "PENDING"
-  },
-  {
-    id: "2", 
-    type: "ADVANCE",
-    amount: 25000,
-    reason: "House Rent Payment",
-    date: "2026-02-08T16:30:00Z", 
-    status: "PENDING"
-  }
-];
-
 export default function EmployeeWalletPage() {
   const params = useParams();
   const router = useRouter();
   const userId = params.id as string;
   
   const [user, setUser] = useState<UserWithWallet | null>(null);
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [walletRequests, setWalletRequests] = useState<WalletRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isApproving, setIsApproving] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const result = await getUserProfileById(userId);
-      if (result.success && result.data) {
-        setUser(result.data as UserWithWallet);
+      const [userResult, transactionsResult, requestsResult] = await Promise.all([
+        getUserProfileById(userId),
+        getWalletTransactionsForUser(userId),
+        getWalletRequestsForUser(userId)
+      ]);
+
+      if (userResult.success && userResult.data) {
+        setUser(userResult.data as UserWithWallet);
       } else {
-        toast.error(result.error || "Failed to load employee profile");
+        toast.error(userResult.error || "Failed to load employee profile");
       }
+
+      setTransactions(transactionsResult);
+      setWalletRequests(requestsResult);
     } catch (error) {
       console.error(error);
       toast.error("Failed to load data");
@@ -128,14 +91,60 @@ export default function EmployeeWalletPage() {
     fetchData();
   }, [userId]);
 
-  const handleApproveRequest = (requestId: string) => {
-    toast.success("Request approved successfully");
-    // Implement actual approval logic
+  // Calculate monthly totals
+  const thisMonthTransactions = transactions.filter(t => {
+    const transactionDate = new Date(t.createdAt);
+    const currentDate = new Date();
+    return transactionDate.getMonth() === currentDate.getMonth() && 
+           transactionDate.getFullYear() === currentDate.getFullYear();
+  });
+
+  const monthlyCredits = thisMonthTransactions
+    .filter(t => t.amount > 0)
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const monthlyDebits = thisMonthTransactions
+    .filter(t => t.amount < 0)
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+  const netMonthlyAmount = monthlyCredits - monthlyDebits;
+
+  // Get pending requests
+  const pendingRequests = walletRequests.filter(r => r.status === "PENDING");
+
+  // Format transaction type for display
+  const getTransactionType = (amount: number, type: string) => {
+    if (amount > 0) return "CREDIT";
+    if (amount < 0) return "DEBIT";
+    return type.toUpperCase();
   };
 
-  const handleRejectRequest = (requestId: string) => {
-    toast.success("Request rejected successfully");
-    // Implement actual rejection logic
+  const handleApproveRequest = async (requestId: string) => {
+    setIsApproving(requestId);
+    try {
+      await updateWalletRequestStatus(requestId, "APPROVED");
+      toast.success("Request approved successfully");
+      fetchData(); // Refresh data
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to approve request");
+    } finally {
+      setIsApproving(null);
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    setIsApproving(requestId);
+    try {
+      await updateWalletRequestStatus(requestId, "REJECTED");
+      toast.success("Request rejected successfully");
+      fetchData(); // Refresh data
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to reject request");
+    } finally {
+      setIsApproving(null);
+    }
   };
 
   if (isLoading || !user) {
@@ -192,8 +201,10 @@ export default function EmployeeWalletPage() {
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">৳35,000</div>
-            <p className="text-xs text-muted-foreground">Net credits this month</p>
+            <div className={`text-2xl font-bold ${netMonthlyAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {netMonthlyAmount >= 0 ? '+' : ''}৳{netMonthlyAmount.toLocaleString("en-BD")}
+            </div>
+            <p className="text-xs text-muted-foreground">Net amount this month</p>
           </CardContent>
         </Card>
 
@@ -203,7 +214,7 @@ export default function EmployeeWalletPage() {
             <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{mockPendingRequests.length}</div>
+            <div className="text-2xl font-bold text-yellow-600">{pendingRequests.length}</div>
             <p className="text-xs text-muted-foreground">Pending requests</p>
           </CardContent>
         </Card>
@@ -235,43 +246,51 @@ export default function EmployeeWalletPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockTransactions.slice(0, 5).map((transaction) => (
-                    <TableRow key={transaction.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {transaction.type === "CREDIT" ? (
-                            <TrendingUp className="h-4 w-4 text-green-600" />
-                          ) : transaction.type === "DEBIT" ? (
-                            <TrendingDown className="h-4 w-4 text-red-600" />
-                          ) : (
-                            <DollarSign className="h-4 w-4 text-blue-600" />
-                          )}
-                          <span className="capitalize">{transaction.type.toLowerCase()}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{transaction.description}</TableCell>
-                      <TableCell className={`font-medium ${
-                        transaction.type === "CREDIT" ? "text-green-600" : 
-                        transaction.type === "DEBIT" ? "text-red-600" : "text-blue-600"
-                      }`}>
-                        {transaction.type === "CREDIT" ? "+" : transaction.type === "DEBIT" ? "-" : "±"}
-                        ৳{transaction.amount.toLocaleString("en-BD")}
-                      </TableCell>
-                      <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        <Badge variant={transaction.status === "COMPLETED" ? "default" : "secondary"}>
-                          {transaction.status}
-                        </Badge>
+                  {transactions.slice(0, 5).map((transaction) => {
+                    const transactionType = getTransactionType(transaction.amount, transaction.type);
+                    return (
+                      <TableRow key={transaction.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {transactionType === "CREDIT" ? (
+                              <TrendingUp className="h-4 w-4 text-green-600" />
+                            ) : transactionType === "DEBIT" ? (
+                              <TrendingDown className="h-4 w-4 text-red-600" />
+                            ) : (
+                              <DollarSign className="h-4 w-4 text-blue-600" />
+                            )}
+                            <span className="capitalize">{transactionType.toLowerCase()}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{transaction.description}</TableCell>
+                        <TableCell className={`font-medium ${
+                          transactionType === "CREDIT" ? "text-green-600" : 
+                          transactionType === "DEBIT" ? "text-red-600" : "text-blue-600"
+                        }`}>
+                          {transactionType === "CREDIT" ? "+" : transactionType === "DEBIT" ? "-" : "±"}
+                          ৳{Math.abs(transaction.amount).toLocaleString("en-BD")}
+                        </TableCell>
+                        <TableCell>{new Date(transaction.createdAt).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Badge variant="default">COMPLETED</Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {transactions.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        No transactions found
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
 
           {/* Pending Requests */}
-          {mockPendingRequests.length > 0 && (
+          {pendingRequests.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -281,14 +300,14 @@ export default function EmployeeWalletPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {mockPendingRequests.map((request) => (
+                  {pendingRequests.map((request) => (
                     <div key={request.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div>
-                        <div className="font-medium">{request.type} Request</div>
-                        <div className="text-sm text-muted-foreground">{request.reason}</div>
+                        <div className="font-medium">Wallet Request</div>
+                        <div className="text-sm text-muted-foreground">{request.description}</div>
                         <div className="text-sm text-muted-foreground">
                           Amount: ৳{request.amount.toLocaleString("en-BD")} • 
-                          {new Date(request.date).toLocaleDateString()}
+                          {new Date(request.createdAt).toLocaleDateString()}
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -297,16 +316,32 @@ export default function EmployeeWalletPage() {
                           variant="outline"
                           className="text-green-600 border-green-600 hover:bg-green-50"
                           onClick={() => handleApproveRequest(request.id)}
+                          disabled={isApproving === request.id}
                         >
-                          Approve
+                          {isApproving === request.id ? (
+                            <>
+                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                              Approving...
+                            </>
+                          ) : (
+                            "Approve"
+                          )}
                         </Button>
                         <Button
                           size="sm" 
                           variant="outline"
                           className="text-red-600 border-red-600 hover:bg-red-50"
                           onClick={() => handleRejectRequest(request.id)}
+                          disabled={isApproving === request.id}
                         >
-                          Reject
+                          {isApproving === request.id ? (
+                            <>
+                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                              Rejecting...
+                            </>
+                          ) : (
+                            "Reject"
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -335,37 +370,45 @@ export default function EmployeeWalletPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockTransactions.map((transaction) => (
-                    <TableRow key={transaction.id}>
-                      <TableCell className="font-mono text-sm">{transaction.reference}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {transaction.type === "CREDIT" ? (
-                            <TrendingUp className="h-4 w-4 text-green-600" />
-                          ) : transaction.type === "DEBIT" ? (
-                            <TrendingDown className="h-4 w-4 text-red-600" />
-                          ) : (
-                            <DollarSign className="h-4 w-4 text-blue-600" />
-                          )}
-                          <span className="capitalize">{transaction.type.toLowerCase()}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{transaction.description}</TableCell>
-                      <TableCell className={`font-medium ${
-                        transaction.type === "CREDIT" ? "text-green-600" : 
-                        transaction.type === "DEBIT" ? "text-red-600" : "text-blue-600"
-                      }`}>
-                        {transaction.type === "CREDIT" ? "+" : transaction.type === "DEBIT" ? "-" : "±"}
-                        ৳{transaction.amount.toLocaleString("en-BD")}
-                      </TableCell>
-                      <TableCell>{new Date(transaction.date).toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Badge variant={transaction.status === "COMPLETED" ? "default" : "secondary"}>
-                          {transaction.status}
-                        </Badge>
+                  {transactions.map((transaction) => {
+                    const transactionType = getTransactionType(transaction.amount, transaction.type);
+                    return (
+                      <TableRow key={transaction.id}>
+                        <TableCell className="font-mono text-sm">{transaction.id.slice(-8).toUpperCase()}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {transactionType === "CREDIT" ? (
+                              <TrendingUp className="h-4 w-4 text-green-600" />
+                            ) : transactionType === "DEBIT" ? (
+                              <TrendingDown className="h-4 w-4 text-red-600" />
+                            ) : (
+                              <DollarSign className="h-4 w-4 text-blue-600" />
+                            )}
+                            <span className="capitalize">{transactionType.toLowerCase()}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{transaction.description}</TableCell>
+                        <TableCell className={`font-medium ${
+                          transactionType === "CREDIT" ? "text-green-600" : 
+                          transactionType === "DEBIT" ? "text-red-600" : "text-blue-600"
+                        }`}>
+                          {transactionType === "CREDIT" ? "+" : transactionType === "DEBIT" ? "-" : "±"}
+                          ৳{Math.abs(transaction.amount).toLocaleString("en-BD")}
+                        </TableCell>
+                        <TableCell>{new Date(transaction.createdAt).toLocaleString()}</TableCell>
+                        <TableCell>
+                          <Badge variant="default">COMPLETED</Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {transactions.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        No transactions found
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -378,25 +421,25 @@ export default function EmployeeWalletPage() {
               <CardTitle>Pending Approval Requests</CardTitle>
             </CardHeader>
             <CardContent>
-              {mockPendingRequests.length === 0 ? (
+              {pendingRequests.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
                   <p>No pending requests</p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {mockPendingRequests.map((request) => (
+                  {pendingRequests.map((request) => (
                     <Card key={request.id}>
                       <CardContent className="pt-6">
                         <div className="flex items-center justify-between">
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline">{request.type}</Badge>
+                              <Badge variant="outline">WALLET REQUEST</Badge>
                               <span className="font-medium">৳{request.amount.toLocaleString("en-BD")}</span>
                             </div>
-                            <div className="text-sm text-muted-foreground">{request.reason}</div>
+                            <div className="text-sm text-muted-foreground">{request.description}</div>
                             <div className="text-xs text-muted-foreground">
-                              Requested on {new Date(request.date).toLocaleString()}
+                              Requested on {new Date(request.createdAt).toLocaleString()}
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -404,16 +447,32 @@ export default function EmployeeWalletPage() {
                               size="sm"
                               className="bg-green-600 hover:bg-green-700"
                               onClick={() => handleApproveRequest(request.id)}
+                              disabled={isApproving === request.id}
                             >
-                              Approve
+                              {isApproving === request.id ? (
+                                <>
+                                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                  Approving...
+                                </>
+                              ) : (
+                                "Approve"
+                              )}
                             </Button>
                             <Button
                               size="sm" 
                               variant="outline"
                               className="text-red-600 border-red-600 hover:bg-red-50"
                               onClick={() => handleRejectRequest(request.id)}
+                              disabled={isApproving === request.id}
                             >
-                              Reject
+                              {isApproving === request.id ? (
+                                <>
+                                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                  Rejecting...
+                                </>
+                              ) : (
+                                "Reject"
+                              )}
                             </Button>
                           </div>
                         </div>

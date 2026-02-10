@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProfileView } from "@/components/employee/ProfileView";
-import { ProfileEditForm } from "@/components/employee/ProfileEditForm";
+import { ProfileEditFormTabbed as ProfileEditForm } from "@/components/employee/ProfileEditFormTabbed";
 import { NotificationPanel } from "@/components/employee/NotificationPanel";
 import { getCurrentUserProfile, getMyProfileUpdateRequests } from "@/actions/profile.actions";
 import { User } from "@prisma/client";

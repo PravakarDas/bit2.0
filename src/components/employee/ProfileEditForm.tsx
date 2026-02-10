@@ -24,7 +24,7 @@ import { submitProfileUpdateRequest, updateUserProfileByAdmin } from "@/actions/
 import { updateEmployeeProfile } from "@/actions/employee.actions";
 import { getActiveDepartments } from "@/actions/department.actions";
 import { getDesignationsByDepartment } from "@/actions/designation.actions";
-import { Loader2, UserCog, CalendarDays, DollarSign } from "lucide-react";
+import { Loader2, UserCog, CalendarDays, DollarSign, User, Briefcase, Calendar } from "lucide-react";
 
 const profileFormSchema = z.object({
   // Personal Information
@@ -264,8 +264,26 @@ export function ProfileEditForm({ user, branches = [], isAdmin = false, onSucces
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Personal Information */}
-        <Card>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="personal" className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Personal Info
+            </TabsTrigger>
+            <TabsTrigger value="employment" className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4" />
+              Employment
+            </TabsTrigger>
+            <TabsTrigger value="leave-allowance" className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Leave & Allowance
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Personal Info Tab */}
+          <TabsContent value="personal" className="space-y-6">
+            {/* Personal Information */}
+            <Card>
           <CardHeader>
             <CardTitle>Personal Information</CardTitle>
             <CardDescription>Update your personal details</CardDescription>
