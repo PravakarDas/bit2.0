@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Building2, Briefcase, DollarSign, Gift, CalendarDays } from "lucide-react";
 import { AddBranchDialog } from "./AddBranchDialog";
+import { EditBranchDialog } from "./EditBranchDialog";
 import { BranchToggle } from "./BranchToggle";
 import { DepartmentClient } from "./DepartmentClient";
 import { DesignationClient } from "./DesignationClient";
@@ -30,6 +31,10 @@ type Branch = {
     id: string;
     name: string;
     location: string;
+    checkInTime: string;
+    checkOutTime: string;
+    breakDuration: string;
+    weeklyOffDays: string[];
     isActive: boolean;
 };
 
@@ -166,7 +171,10 @@ export function UnifiedOrganizationClient({
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right pr-6">
-                                                    <BranchToggle branchId={branch.id} initialStatus={branch.isActive} />
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <EditBranchDialog branch={branch} />
+                                                        <BranchToggle branchId={branch.id} initialStatus={branch.isActive} />
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))

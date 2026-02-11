@@ -107,3 +107,32 @@ export async function updateBranchTimelineSettings(branchId: string, data: {
         return { success: false, error: "Failed to update branch timeline settings" };
     }
 }
+
+export async function updateBranch(id: string, data: { 
+    name: string; 
+    location: string;
+    checkInTime?: string;
+    checkOutTime?: string;
+    breakDuration?: string;
+    weeklyOffDays?: string[];
+}) {
+    try {
+        const branch = await prisma.branch.update({
+            where: { id },
+            data: {
+                name: data.name,
+                location: data.location,
+                checkInTime: data.checkInTime || "09:00",
+                checkOutTime: data.checkOutTime || "18:00",
+                breakDuration: data.breakDuration || "01:00",
+                weeklyOffDays: data.weeklyOffDays || ["SUNDAY"]
+            },
+        });
+        revalidatePath("/admin/branches");
+        revalidatePath("/admin/organization");
+        return { success: true, branch };
+    } catch (error) {
+        console.error("Error updating branch:", error);
+        return { success: false, error: "Failed to update branch" };
+    }
+}
