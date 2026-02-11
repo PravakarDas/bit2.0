@@ -7,10 +7,8 @@ import {
     Banknote,
     Stethoscope,
     CircleDollarSign,
-    Settings,
     UserCircle,
     History,
-    Wrench,
     ScrollText,
     Archive,
     Wallet,
@@ -57,7 +55,6 @@ const adminItems = [
     { title: "Medical", url: "/admin/medical", icon: Stethoscope },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
     { title: "Payroll", url: "/admin/payroll", icon: CircleDollarSign },
-    { title: "Settings", url: "/admin/settings", icon: Wrench },
     { title: "Timeline", url: "/admin/timeline", icon: Clock },
     { title: "Wallet", url: "/admin/wallet", icon: Wallet },
 ];
