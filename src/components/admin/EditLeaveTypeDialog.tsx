@@ -26,7 +26,7 @@ interface LeaveType {
     name: string;
     allocatedDays: number;
     requiresApproval: boolean;
-    applicableBranches: string;
+    applicableBranches: string | null;
     isActive: boolean;
 }
 

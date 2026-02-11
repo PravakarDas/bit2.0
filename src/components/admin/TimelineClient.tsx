@@ -21,6 +21,7 @@ import { toast } from "sonner";
 interface TimeRecord {
   id: string;
   date: Date;
+  status: "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF";
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
   requiredBreakTime: string | null;
@@ -30,6 +31,7 @@ interface TimeRecord {
   requiredActiveTime: string | null;
   actualActiveTime: string | null;
   overtimeUndertime: string | null;
+  autoDeductedLeaveType: string | null;
   user: {
     id: string;
     firstName: string | null;
@@ -326,7 +328,6 @@ export default function TimelineClient() {
             <TimelineCalendarView
               records={timeRecords}
               loading={loading}
-              onRecordUpdate={loadTimeRecords}
             />
           )}
         </CardContent>

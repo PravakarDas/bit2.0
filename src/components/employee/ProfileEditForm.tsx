@@ -24,7 +24,7 @@ import { submitProfileUpdateRequest, updateUserProfileByAdmin } from "@/actions/
 import { updateEmployeeProfile } from "@/actions/employee.actions";
 import { getActiveDepartments } from "@/actions/department.actions";
 import { getDesignationsByDepartment } from "@/actions/designation.actions";
-import { Loader2, UserCog, CalendarDays, DollarSign, User, Briefcase, Calendar } from "lucide-react";
+import { Loader2, UserCog, CalendarDays, DollarSign, User as UserIcon, Briefcase, Calendar } from "lucide-react";
 
 const profileFormSchema = z.object({
   // Personal Information
@@ -72,7 +72,7 @@ const profileFormSchema = z.object({
   linkedinLink: z.string().url().optional().or(z.literal("")),
 
   // Employment Details (Admin only)
-  role: z.enum(["USER", "ADMIN", "SUPERADMIN", "MANAGER"]).optional(),
+  role: z.enum(["SUPERADMIN", "HR", "MANAGER", "EMPLOYEE"]).optional(),
   branchId: z.string().optional(),
   departmentId: z.string().optional(),
   designationId: z.string().optional(),
@@ -267,7 +267,7 @@ export function ProfileEditForm({ user, branches = [], isAdmin = false, onSucces
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="personal" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
+              <UserIcon className="h-4 w-4" />
               Personal Info
             </TabsTrigger>
             <TabsTrigger value="employment" className="flex items-center gap-2">
@@ -778,6 +778,140 @@ export function ProfileEditForm({ user, branches = [], isAdmin = false, onSucces
             />
           </CardContent>
         </Card>
+          </TabsContent>
+
+          {/* Employment Tab */}
+          <TabsContent value="employment" className="space-y-6">
+            {isAdmin && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Employment Management</CardTitle>
+                  <CardDescription>Administrative employment settings</CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Role</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="EMPLOYEE">Employee</SelectItem>
+                            <SelectItem value="MANAGER">Manager</SelectItem>
+                            <SelectItem value="HR">HR</SelectItem>
+                            <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="branchId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Branch</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select branch" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {branches.map((branch) => (
+                              <SelectItem key={branch.id} value={branch.id}>
+                                {branch.name} - {branch.location}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="departmentId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Department</FormLabel>
+                        <Select onValueChange={(value) => {
+                          field.onChange(value);
+                          setSelectedDepartmentId(value);
+                          // Reset designation when department changes
+                          form.setValue("designationId", "");
+                        }} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select department" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {departments.map((department) => (
+                              <SelectItem key={department.id} value={department.id}>
+                                {department.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="designationId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Designation</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select designation" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {designations.map((designation) => (
+                              <SelectItem key={designation.id} value={designation.id}>
+                                {designation.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* Leave & Allowance Tab */}
+          <TabsContent value="leave-allowance" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Leave & Allowance Information</CardTitle>
+                <CardDescription>View your leave balance and allowance details</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm text-muted-foreground">
+                  Leave and allowance information will be displayed here based on your employment records.
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         <div className="flex justify-end gap-4">
           {onCancel && (
