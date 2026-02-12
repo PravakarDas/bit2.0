@@ -124,9 +124,36 @@ export default function NotificationsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Check if notification allows actions
-  const allowsActions = (type: NotificationType) => {
-    return ['PROFILE_UPDATE_REQUEST', 'LEAVE_APPLICATION_PENDING', 'LOAN_APPLICATION_PENDING', 'WALLET_REQUEST_PENDING'].includes(type);
+  // Check if notification allows actions and hasn't been processed
+  const allowsActions = (notification: AdminNotification) => {
+    const actionableTypes = ['PROFILE_UPDATE_REQUEST', 'LEAVE_APPLICATION_PENDING', 'LOAN_APPLICATION_PENDING', 'WALLET_REQUEST_PENDING'];
+    const metadata = notification.metadata as any;
+    
+    // Check if notification type allows actions
+    if (!actionableTypes.includes(notification.type as string)) return false;
+    
+    // Check if action has been processed (look for processed status in metadata)
+    if (metadata && (metadata.processed === true || metadata.status === 'PROCESSED')) return false;
+    
+    return true;
+  };
+
+  // Trigger increment reminder check manually
+  const triggerIncrementCheck = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/cron/daily-notifications');
+      const result = await response.json();
+      if (result.success) {
+        toast.success(`Created ${result.reminders?.length || 0} increment reminders`);
+        await fetchNotifications();
+      } else {
+        toast.error('Failed to check for increment reminders');
+      }
+    } catch (error) {
+      toast.error('Error checking increment reminders');
+    }
+    setLoading(false);
   };
 
   return (
@@ -143,12 +170,16 @@ export default function NotificationsPage() {
         </div>
 
         <div className="flex gap-2">
-          <Button onClick={() => fetchNotifications()} variant="outline" disabled={loading}>
+          <Button onClick={() => fetchNotifications()} variant="outline" size="sm" disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Refresh'}
           </Button>
           
+          <Button onClick={triggerIncrementCheck} variant="outline" size="sm" disabled={loading}>
+            Check Increments
+          </Button>
+          
           {unreadCount > 0 && (
-            <Button onClick={markAllAsRead} variant="outline">
+            <Button onClick={markAllAsRead} variant="outline" size="sm">
               <Check className="h-4 w-4 mr-2" />
               Mark All as Read
             </Button>
@@ -169,34 +200,52 @@ export default function NotificationsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {notifications.map((notification) => (
-            <Card key={notification.id} className={notification.status === NotificationStatus.UNREAD ? 'bg-blue-50 border-blue-200' : ''}>
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-semibold">{notification.title}</h3>
+        <div className="space-y-3">
+          {notifications.map((notification) => {
+            const metadata = notification.metadata as any;
+            const isProcessed = metadata && metadata.processed === true;
+            
+            return (
+            <Card key={notification.id} className={`transition-all ${notification.status === NotificationStatus.UNREAD ? 'bg-blue-50 border-blue-200' : ''} ${isProcessed ? 'opacity-75' : ''}`}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-sm truncate">{notification.title}</h3>
                       {notification.status === NotificationStatus.UNREAD && (
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5">
                           New
                         </Badge>
                       )}
+                      {isProcessed && (
+                        <Badge variant="outline" className="text-xs px-2 py-0.5 bg-green-50 border-green-200 text-green-700">
+                          {metadata.action === 'approve' ? 'Approved' : 'Declined'}
+                        </Badge>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground mb-3">
+                    <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
                       {notification.message}
                     </p>
+                    {isProcessed && metadata.adminNote && (
+                      <p className="text-xs text-muted-foreground mb-2 italic bg-gray-50 p-2 rounded">
+                        Admin note: {metadata.adminNote}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       {new Date(notification.createdAt).toLocaleString()}
+                      {isProcessed && metadata.processedAt && (
+                        <span className="ml-2">• Processed: {new Date(metadata.processedAt).toLocaleString()}</span>
+                      )}
                     </p>
 
                     {/* Action Buttons for actionable notifications */}
-                    {allowsActions(notification.type as NotificationType) && (
-                      <div className="flex gap-2 mt-4">
+                    {allowsActions(notification) && (
+                      <div className="flex gap-2 mt-3">
                         <Button 
                           size="sm" 
                           onClick={() => setSelectedNotification(notification)}
                           variant="default"
+                          className="h-7 px-3 text-xs"
                         >
                           <Check className="h-3 w-3 mr-1" />
                           Approve
@@ -206,6 +255,7 @@ export default function NotificationsPage() {
                           variant="outline"
                           onClick={() => handleAction(notification.id, 'decline')}
                           disabled={actionLoading}
+                          className="h-7 px-3 text-xs"
                         >
                           <X className="h-3 w-3 mr-1" />
                           Decline
@@ -214,10 +264,10 @@ export default function NotificationsPage() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex-shrink-0">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -251,7 +301,8 @@ export default function NotificationsPage() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 

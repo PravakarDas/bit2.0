@@ -214,8 +214,22 @@ export async function handleNotificationAction(notificationId: string, action: '
     }
 
     if (result?.success) {
-      // Mark notification as read after successful action
+      // Mark notification as read and processed after successful action
       await markNotificationAsRead(notificationId);
+      
+      // Update metadata to mark as processed
+      const updatedMetadata = {
+        ...metadata,
+        processed: true,
+        processedAt: new Date().toISOString(),
+        action: action,
+        adminNote: adminNote || null
+      };
+      
+      await prisma.adminNotification.update({
+        where: { id: notificationId },
+        data: { metadata: updatedMetadata }
+      });
     }
 
     return result;
