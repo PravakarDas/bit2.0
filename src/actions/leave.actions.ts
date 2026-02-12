@@ -249,8 +249,31 @@ export async function applyForLeave(data: {
                 leaveDate: leaveDate,
                 reason: data.reason,
                 status: entitlement.leaveType.requiresApproval ? "PENDING" : "APPROVED"
+            },
+            include: {
+                user: true,
+                leaveType: true
             }
         });
+        
+        // Create notification for admins if requires approval
+        if (entitlement.leaveType.requiresApproval) {
+            await prisma.adminNotification.create({
+                data: {
+                    type: "LEAVE_APPLICATION_PENDING",
+                    title: "New Leave Application",
+                    message: `${application.user.firstName} ${application.user.lastName} has applied for ${application.leaveType.name} on ${leaveDate.toLocaleDateString()}`,
+                    metadata: {
+                        applicationId: application.id,
+                        userId: application.userId,
+                        userName: `${application.user.firstName} ${application.user.lastName}`,
+                        leaveType: application.leaveType.name,
+                        leaveDate: application.leaveDate.toISOString(),
+                        reason: application.reason
+                    },
+                },
+            });
+        }
         
         // If doesn't require approval, automatically deduct from balance
         if (!entitlement.leaveType.requiresApproval) {
@@ -300,7 +323,7 @@ export async function getUserLeaveApplications(userId: string, year: number = ne
     });
 }
 
-export async function approveLeaveApplication(applicationId: string, approvedBy: string) {
+export async function approveLeaveApplication(applicationId: string, approvedBy: string = "SYSTEM", adminNote?: string) {
     try {
         const application = await prisma.leaveApplication.findUnique({
             where: { id: applicationId },
@@ -364,7 +387,7 @@ export async function approveLeaveApplication(applicationId: string, approvedBy:
     }
 }
 
-export async function rejectLeaveApplication(applicationId: string, approvedBy: string) {
+export async function rejectLeaveApplication(applicationId: string, approvedBy: string = "SYSTEM", adminNote?: string) {
     try {
         const application = await prisma.leaveApplication.findUnique({
             where: { id: applicationId }

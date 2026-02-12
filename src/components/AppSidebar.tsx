@@ -22,6 +22,7 @@ import {
     Gift,
     DollarSign,
     Zap,
+    Bell,
 } from "lucide-react";
 
 import {
@@ -47,9 +48,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import logo from "@/assets/logo.gif";
+import { NotificationWithBadge } from "@/components/NotificationWithBadge";
 
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
+    { title: "Notifications", url: "/admin/notifications", icon: Bell },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
     { title: "Loan", url: "/admin/loans", icon: Banknote },
     { title: "Medical", url: "/admin/medical", icon: Stethoscope },
@@ -139,7 +142,13 @@ export function AppSidebar({ role }: { role: string }) {
                                 <SidebarMenuItem key={item.title}>
                                     <SidebarMenuButton asChild isActive={pathname === item.url} tooltip={item.title}>
                                         <Link href={item.url}>
-                                            <item.icon className="h-4 w-4" />
+                                            {item.title === "Notifications" && role === "SUPERADMIN" ? (
+                                                <NotificationWithBadge>
+                                                    <item.icon className="h-4 w-4" />
+                                                </NotificationWithBadge>
+                                            ) : (
+                                                <item.icon className="h-4 w-4" />
+                                            )}
                                             <span>{item.title}</span>
                                         </Link>
                                     </SidebarMenuButton>

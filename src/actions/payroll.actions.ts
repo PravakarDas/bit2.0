@@ -3,13 +3,14 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { calculateEMI } from "@/lib/services/loan.service";
+import { LoanStatus, ClaimStatus, UserStatus } from "@prisma/client";
 
 export async function getPayrollAggregation(month: number, year: number) {
     const payrollMonth = `${year}-${month.toString().padStart(2, '0')}`;
 
     const users = await prisma.user.findMany({
         where: {
-            status: "APPROVED",
+            status: UserStatus.APPROVED,
             isArchived: false,
             role: { not: "SUPERADMIN" },
             salaryPayments: {
@@ -20,11 +21,11 @@ export async function getPayrollAggregation(month: number, year: number) {
         },
         include: {
             loans: {
-                where: { status: "ACTIVE" },
+                where: { status: LoanStatus.ACTIVE },
                 include: { emiState: true },
             },
             medicalClaims: {
-                where: { status: "APPROVED" },
+                where: { status: ClaimStatus.APPROVED },
             },
         },
     });

@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "if exist .next rmdir /s /q .next && npm run dev",
+    "dev:fresh": "npm run dev:clean",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
