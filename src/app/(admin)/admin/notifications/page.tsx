@@ -1,12 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, Check, X, Eye, EyeOff, Trash2, MoreHorizontal, Loader2 } from "lucide-react";
+import {
+  Bell,
+  Check,
+  X,
+  Eye,
+  EyeOff,
+  Trash2,
+  MoreHorizontal,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,24 +34,37 @@ import type { AdminNotification } from "@prisma/client";
 import { NotificationStatus } from "@prisma/client";
 import {
   getAllNotifications,
-  getUnreadCount, 
+  getUnreadCount,
   deleteNotification,
   markNotificationAsRead,
   markNotificationAsUnread,
   markAllNotificationsAsRead,
-  handleNotificationAction
+  handleNotificationAction,
 } from "@/actions/notification.actions";
 
-type NotificationType = 'TIMELINE_GENERATION_FAILED' | 'TIMELINE_BACKFILL_COMPLETED' | 'PROFILE_UPDATE_REQUEST' | 'LEAVE_APPLICATION_PENDING' | 'INCREMENT_REMINDER' | 'WALLET_REQUEST_PENDING' | 'LOAN_APPLICATION_PENDING' | 'EMPLOYEE_REGISTRATION_PENDING' | 'PAYROLL_NOTIFICATION' | 'SYSTEM_ALERT' | 'DEADLINE_REMINDER';
+/* ===============================
+   ✅ Proper Metadata Type
+================================ */
+type NotificationMetadata = {
+  processed?: boolean;
+  status?: string;
+  action?: "approve" | "decline";
+  adminNote?: string;
+  processedAt?: string | Date;
+};
 
 export default function NotificationsPage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedNotification, setSelectedNotification] = useState<AdminNotification | null>(null);
+  const [selectedNotification, setSelectedNotification] =
+    useState<AdminNotification | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Fetch unread count
+  /* ===============================
+     Fetch Functions
+  ================================ */
+
   const fetchUnreadCount = async () => {
     const result = await getUnreadCount();
     if (result.success) {
@@ -51,60 +72,83 @@ export default function NotificationsPage() {
     }
   };
 
-  // Fetch all notifications
   const fetchNotifications = async () => {
     setLoading(true);
     const result = await getAllNotifications(1, 50);
     if (result.success) {
       setNotifications(result.notifications);
-      setUnreadCount(result.notifications.filter(n => n.status === NotificationStatus.UNREAD).length);
+      setUnreadCount(
+        result.notifications.filter(
+          (n) => n.status === NotificationStatus.UNREAD
+        ).length
+      );
     }
     setLoading(false);
   };
 
-  // Mark as read/unread
-  const toggleReadStatus = async (notificationId: string, currentStatus: NotificationStatus) => {
-    const action = currentStatus === NotificationStatus.UNREAD ? markNotificationAsRead : markNotificationAsUnread;
+  /* ===============================
+     Actions
+  ================================ */
+
+  const toggleReadStatus = async (
+    notificationId: string,
+    currentStatus: NotificationStatus
+  ) => {
+    const action =
+      currentStatus === NotificationStatus.UNREAD
+        ? markNotificationAsRead
+        : markNotificationAsUnread;
+
     const result = await action(notificationId);
-    
+
     if (result.success) {
       await fetchNotifications();
       await fetchUnreadCount();
-      toast.success(`Marked as ${currentStatus === NotificationStatus.UNREAD ? 'read' : 'unread'}`);
+      toast.success(
+        `Marked as ${
+          currentStatus === NotificationStatus.UNREAD ? "read" : "unread"
+        }`
+      );
     } else {
-      toast.error('Failed to update notification');
+      toast.error("Failed to update notification");
     }
   };
 
-  // Mark all as read
   const markAllAsRead = async () => {
     const result = await markAllNotificationsAsRead();
     if (result.success) {
       await fetchNotifications();
       await fetchUnreadCount();
-      toast.success('All notifications marked as read');
+      toast.success("All notifications marked as read");
     } else {
-      toast.error('Failed to mark all notifications as read');
+      toast.error("Failed to mark all notifications as read");
     }
   };
 
-  // Delete notification
   const handleDelete = async (notificationId: string) => {
     const result = await deleteNotification(notificationId);
     if (result.success) {
       await fetchNotifications();
       await fetchUnreadCount();
-      toast.success('Notification deleted');
+      toast.success("Notification deleted");
     } else {
-      toast.error('Failed to delete notification');
+      toast.error("Failed to delete notification");
     }
   };
 
-  // Handle notification action (approve/decline)
-  const handleAction = async (notificationId: string, action: 'approve' | 'decline', adminNote: string = '') => {
+  const handleAction = async (
+    notificationId: string,
+    action: "approve" | "decline",
+    adminNote: string = ""
+  ) => {
     setActionLoading(true);
-    const result = await handleNotificationAction(notificationId, action, adminNote);
-    
+
+    const result = await handleNotificationAction(
+      notificationId,
+      action,
+      adminNote
+    );
+
     if (result.success) {
       await fetchNotifications();
       await fetchUnreadCount();
@@ -113,10 +157,14 @@ export default function NotificationsPage() {
     } else {
       toast.error(result.error || `Failed to ${action} request`);
     }
+
     setActionLoading(false);
   };
 
-  // Auto refresh every 30 seconds
+  /* ===============================
+     Effects
+  ================================ */
+
   useEffect(() => {
     fetchNotifications();
     fetchUnreadCount();
@@ -124,37 +172,35 @@ export default function NotificationsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Check if notification allows actions and hasn't been processed
+  /* ===============================
+     Helpers
+  ================================ */
+
   const allowsActions = (notification: AdminNotification) => {
-    const actionableTypes = ['PROFILE_UPDATE_REQUEST', 'LEAVE_APPLICATION_PENDING', 'LOAN_APPLICATION_PENDING', 'WALLET_REQUEST_PENDING'];
-    const metadata = notification.metadata as any;
-    
-    // Check if notification type allows actions
+    const actionableTypes = [
+      "PROFILE_UPDATE_REQUEST",
+      "LEAVE_APPLICATION_PENDING",
+      "LOAN_APPLICATION_PENDING",
+      "WALLET_REQUEST_PENDING",
+    ];
+
+    const metadata =
+      notification.metadata as NotificationMetadata | null;
+
     if (!actionableTypes.includes(notification.type as string)) return false;
-    
-    // Check if action has been processed (look for processed status in metadata)
-    if (metadata && (metadata.processed === true || metadata.status === 'PROCESSED')) return false;
-    
+
+    if (
+      metadata?.processed === true ||
+      metadata?.status === "PROCESSED"
+    )
+      return false;
+
     return true;
   };
 
-  // Trigger increment reminder check manually
-  const triggerIncrementCheck = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/cron/daily-notifications');
-      const result = await response.json();
-      if (result.success) {
-        toast.success(`Created ${result.reminders?.length || 0} increment reminders`);
-        await fetchNotifications();
-      } else {
-        toast.error('Failed to check for increment reminders');
-      }
-    } catch (error) {
-      toast.error('Error checking increment reminders');
-    }
-    setLoading(false);
-  };
+  /* ===============================
+     UI
+  ================================ */
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -164,186 +210,137 @@ export default function NotificationsPage() {
           <div>
             <h1 className="text-3xl font-bold">Notifications</h1>
             <p className="text-muted-foreground">
-              {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'All caught up!'}
+              {unreadCount > 0
+                ? `${unreadCount} unread notification${
+                    unreadCount > 1 ? "s" : ""
+                  }`
+                : "All caught up!"}
             </p>
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <Button onClick={() => fetchNotifications()} variant="outline" size="sm" disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Refresh'}
+        {unreadCount > 0 && (
+          <Button onClick={markAllAsRead} variant="outline" size="sm">
+            <Check className="h-4 w-4 mr-2" />
+            Mark All as Read
           </Button>
-          
-          <Button onClick={triggerIncrementCheck} variant="outline" size="sm" disabled={loading}>
-            Check Increments
-          </Button>
-          
-          {unreadCount > 0 && (
-            <Button onClick={markAllAsRead} variant="outline" size="sm">
-              <Check className="h-4 w-4 mr-2" />
-              Mark All as Read
-            </Button>
-          )}
-        </div>
+        )}
       </div>
 
-      {loading && notifications.length === 0 ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      ) : notifications.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Bell className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold">No notifications yet</h3>
-            <p className="text-muted-foreground">You'll see notifications when there are updates to review.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {notifications.map((notification) => {
-            const metadata = notification.metadata as any;
-            const isProcessed = metadata && metadata.processed === true;
-            
-            return (
-            <Card key={notification.id} className={`transition-all ${notification.status === NotificationStatus.UNREAD ? 'bg-blue-50 border-blue-200' : ''} ${isProcessed ? 'opacity-75' : ''}`}>
+      <div className="space-y-3">
+        {notifications.map((notification) => {
+          const metadata =
+            notification.metadata as NotificationMetadata | null;
+
+          const isProcessed = metadata?.processed === true;
+
+          return (
+            <Card
+              key={notification.id}
+              className={`transition-all ${
+                notification.status === NotificationStatus.UNREAD
+                  ? "bg-blue-50 border-blue-200"
+                  : ""
+              } ${isProcessed ? "opacity-75" : ""}`}
+            >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-sm truncate">{notification.title}</h3>
-                      {notification.status === NotificationStatus.UNREAD && (
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5">
+                      <h3 className="font-semibold text-sm truncate">
+                        {notification.title}
+                      </h3>
+
+                      {notification.status ===
+                        NotificationStatus.UNREAD && (
+                        <Badge className="bg-blue-100 text-blue-800 text-xs">
                           New
                         </Badge>
                       )}
+
                       {isProcessed && (
-                        <Badge variant="outline" className="text-xs px-2 py-0.5 bg-green-50 border-green-200 text-green-700">
-                          {metadata.action === 'approve' ? 'Approved' : 'Declined'}
+                        <Badge className="text-xs bg-green-50 border-green-200 text-green-700">
+                          {metadata?.action === "approve"
+                            ? "Approved"
+                            : "Declined"}
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+
+                    <p className="text-sm text-muted-foreground mb-2">
                       {notification.message}
                     </p>
-                    {isProcessed && metadata.adminNote && (
-                      <p className="text-xs text-muted-foreground mb-2 italic bg-gray-50 p-2 rounded">
+
+                    {metadata?.adminNote && (
+                      <p className="text-xs italic bg-gray-50 p-2 rounded">
                         Admin note: {metadata.adminNote}
                       </p>
                     )}
+
                     <p className="text-xs text-muted-foreground">
-                      {new Date(notification.createdAt).toLocaleString()}
-                      {isProcessed && metadata.processedAt && (
-                        <span className="ml-2">• Processed: {new Date(metadata.processedAt).toLocaleString()}</span>
+                      {new Date(
+                        notification.createdAt
+                      ).toLocaleString()}
+
+                      {metadata?.processedAt && (
+                        <span className="ml-2">
+                          • Processed:{" "}
+                          {new Date(
+                            metadata.processedAt
+                          ).toLocaleString()}
+                        </span>
                       )}
                     </p>
-
-                    {/* Action Buttons for actionable notifications */}
-                    {allowsActions(notification) && (
-                      <div className="flex gap-2 mt-3">
-                        <Button 
-                          size="sm" 
-                          onClick={() => setSelectedNotification(notification)}
-                          variant="default"
-                          className="h-7 px-3 text-xs"
-                        >
-                          <Check className="h-3 w-3 mr-1" />
-                          Approve
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => handleAction(notification.id, 'decline')}
-                          disabled={actionLoading}
-                          className="h-7 px-3 text-xs"
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Decline
-                        </Button>
-                      </div>
-                    )}
                   </div>
 
-                  <div className="flex-shrink-0">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem 
-                          onClick={() => toggleReadStatus(notification.id, notification.status)}
-                        >
-                          {notification.status === NotificationStatus.UNREAD ? (
-                            <>
-                              <Eye className="mr-2 h-4 w-4" />
-                              Mark as read
-                            </>
-                          ) : (
-                            <>
-                              <EyeOff className="mr-2 h-4 w-4" />
-                              Mark as unread
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                        <Separator className="my-1" />
-                        <DropdownMenuItem 
-                          onClick={() => handleDelete(notification.id)}
-                          className="text-red-600 focus:text-red-600"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() =>
+                          toggleReadStatus(
+                            notification.id,
+                            notification.status
+                          )
+                        }
+                      >
+                        {notification.status ===
+                        NotificationStatus.UNREAD ? (
+                          <>
+                            <Eye className="mr-2 h-4 w-4" />
+                            Mark as read
+                          </>
+                        ) : (
+                          <>
+                            <EyeOff className="mr-2 h-4 w-4" />
+                            Mark as unread
+                          </>
+                        )}
+                      </DropdownMenuItem>
+
+                      <Separator className="my-1" />
+
+                      <DropdownMenuItem
+                        onClick={() =>
+                          handleDelete(notification.id)
+                        }
+                        className="text-red-600"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </CardContent>
             </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Approval Dialog */}
-      <Dialog open={selectedNotification !== null} onOpenChange={(open) => !open && setSelectedNotification(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Approve Request</DialogTitle>
-            <DialogDescription>
-              You are about to approve this request. Add an optional note below.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Textarea 
-              placeholder="Add an optional admin note..."
-              id="adminNote"
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setSelectedNotification(null)}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={() => {
-                  const adminNote = (document.getElementById('adminNote') as HTMLTextAreaElement)?.value || '';
-                  if (selectedNotification) {
-                    handleAction(selectedNotification.id, 'approve', adminNote);
-                  }
-                }}
-                disabled={actionLoading}
-              >
-                {actionLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Check className="h-4 w-4 mr-2" />
-                )}
-                Approve
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          );
+        })}
+      </div>
     </div>
   );
 }

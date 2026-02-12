@@ -5,6 +5,35 @@ import { revalidatePath } from "next/cache";
 import { calculateEMI } from "@/lib/services/loan.service";
 import { LoanStatus, ClaimStatus, UserStatus } from "@prisma/client";
 
+interface EligibleBonus {
+    id: string;
+    name: string;
+    type: "FIXED" | "PERCENTAGE";
+    value: number;
+    amount: number;
+}
+
+interface PayrollAggregation {
+    userId: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    bankAccountNumber?: string;
+    baseSalary: number;
+    walletBalance: number;
+    eligibleBonuses: EligibleBonus[];
+    totalAllowances: number;
+    totalMedical: number;
+    activeLoans: {
+        id: string;
+        currentEmi: number;
+        carryForward: number;
+        remainingPrincipal: number;
+    }[];
+    totalLoanDeduction: number;
+    netPay: number;
+}
+
 export async function getPayrollAggregation(month: number, year: number) {
     const payrollMonth = `${year}-${month.toString().padStart(2, '0')}`;
 
@@ -121,6 +150,9 @@ export async function getPayrollAggregation(month: number, year: number) {
         return {
             userId: user.id,
             email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            bankAccountNumber: user.bankAccountNumber,
             baseSalary: user.baseSalary,
             walletBalance: user.walletBalance,
             eligibleBonuses: eligibleBonuses.map(b => ({
@@ -365,4 +397,31 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
 
         throw new Error(error.message || "Payroll processing failed");
     }
+}
+
+export async function generatePayrollCSVData(data: PayrollAggregation[], selectedBonuses: Record<string, string[]>) {
+    // Generate CSV data with employee name, account number, and net pay
+    const csvData = data.map(emp => {
+        const userBonusIds = selectedBonuses[emp.userId] || [];
+        const appliedBonuses = emp.eligibleBonuses.filter(b => userBonusIds.includes(b.id));
+        const totalBonuses = appliedBonuses.reduce((sum, b) => sum + b.amount, 0);
+        const finalNetPay = emp.netPay + totalBonuses + emp.walletBalance;
+        
+        const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.email;
+        
+        return {
+            userId: emp.userId,
+            employeeName: fullName,
+            accountNumber: emp.bankAccountNumber || 'N/A',
+            netPayAmount: finalNetPay.toFixed(2)
+        };
+    });
+
+    return csvData;
+}
+
+export async function getFailedEmployees(payrollMonth: string) {
+    const [yearStr, monthStr] = payrollMonth.split('-');
+    const remainingEmployees = await getPayrollAggregation(parseInt(monthStr), parseInt(yearStr));
+    return remainingEmployees.map(emp => emp.userId);
 }

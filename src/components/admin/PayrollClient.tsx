@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { toggleEmiCarryForward, processPayroll } from "@/actions/payroll.actions";
+import { toggleEmiCarryForward, processPayroll, generatePayrollCSVData, getFailedEmployees } from "@/actions/payroll.actions";
 import {
     Table,
     TableBody,
@@ -34,6 +34,9 @@ interface EligibleBonus {
 interface PayrollAggregation {
     userId: string;
     email: string;
+    firstName?: string;
+    lastName?: string;
+    bankAccountNumber?: string;
     baseSalary: number;
     walletBalance: number;
     eligibleBonuses: EligibleBonus[];
@@ -90,13 +93,56 @@ export function PayrollClient({
         return emp.netPay + bonusAmount + emp.walletBalance;
     };
 
+    const generateAndDownloadCSV = (csvData: any[], filename: string) => {
+        const headers = ['Employee Name', 'Account Number', 'Net Pay Amount'];
+        const csvContent = [
+            headers.join(','),
+            ...csvData.map(row => [
+                `"${row.employeeName}"`,
+                `"${row.accountNumber}"`,
+                row.netPayAmount
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const handleProcessPayroll = async () => {
         const payrollMonth = `${year}-${month.toString().padStart(2, '0')}`;
         setProcessing(true);
         try {
-            // Need to update processPayroll to accept selected bonuses
+            // 1. Generate CSV data BEFORE processing (when all employee data is available)
+            const initialCsvData = await generatePayrollCSVData(data, selectedBonuses);
+            
+            // 2. Process payroll
             await processPayroll(payrollMonth, selectedBonuses);
-            toast.success(`Payroll for ${payrollMonth} processed successfully`);
+            
+            // 3. Check for failed employees (employees still left after processing)
+            const failedEmployeeIds = await getFailedEmployees(payrollMonth);
+            
+            // 4. Remove failed employees from CSV data (keep only successfully processed employees)
+            const finalCsvData = initialCsvData.filter(row => !failedEmployeeIds.includes(row.userId));
+            
+            // 5. Download CSV file with only successfully processed employees
+            const fileName = `payroll-${payrollMonth}-${new Date().toISOString().split('T')[0]}.csv`;
+            generateAndDownloadCSV(finalCsvData, fileName);
+            
+            const processedCount = finalCsvData.length;
+            const failedCount = failedEmployeeIds.length;
+            
+            if (failedCount > 0) {
+                toast.success(`Payroll processed: ${processedCount} successful, ${failedCount} failed. CSV contains only successful employees.`);
+            } else {
+                toast.success(`Payroll for ${payrollMonth} processed successfully. CSV file downloaded.`);
+            }
         } catch (error: unknown) {
             toast.error((error instanceof Error) ? error.message : "Failed to process payroll");
         } finally {
