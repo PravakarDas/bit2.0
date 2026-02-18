@@ -1,6 +1,6 @@
 import { checkAndGenerateToday } from "@/actions/timeline.actions";
 import { syncAllEmployeesTimeData } from "@/actions/zkteco-sync.actions";
-import { processDailyLeaveAutomation } from "@/actions/leave-automation.actions";
+import { processAllUnprocessedDates } from "@/actions/leave-automation.actions";
 
 const CRON_GLOBAL_FLAG = "__dailyTimelineCronStarted";
 const ZKTECO_CRON_GLOBAL_FLAG = "__zkTecoSyncCronStarted";
@@ -146,7 +146,7 @@ function startLeaveAutomationCron() {
     lastRunDate = todayKey;
     try {
       console.log("Starting leave automation cron job...");
-      const result = await processDailyLeaveAutomation();
+      const result = await processAllUnprocessedDates();
       console.log("Leave automation cron completed:", result);
     } catch (error) {
       console.error("Leave automation cron failed:", error);

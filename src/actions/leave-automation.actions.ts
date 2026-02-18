@@ -59,16 +59,87 @@ function isWithinRequiredWindow(employee: any, processDate: Date, now: Date) {
 }
 
 /**
- * Main function to process daily leave automation
- * Should be called every day at 22:00 (10 PM)
+ * Process all unprocessed dates (including today and any dates with null values)
+ * This is the main function called by the cron job at 23:00
+ */
+export async function processAllUnprocessedDates() {
+    console.log("Starting comprehensive leave automation processing...");
+    
+    try {
+        const today = startOfDay(new Date());
+        const now = new Date();
+        
+        // Get dates to process: yesterday, today, and any dates with unprocessed records
+        const datesToProcess = new Set<string>();
+        
+        // Add yesterday (default processing)
+        datesToProcess.add(format(subDays(today, 1), 'yyyy-MM-dd'));
+        
+        // Add today (for current day processing)
+        datesToProcess.add(format(today, 'yyyy-MM-dd'));
+        
+        // Find dates with incomplete processing
+        const unprocessedRecords = await prisma.dailyTimeRecord.groupBy({
+            by: ['date'],
+            where: {
+                isProcessed: {
+                    not: true
+                }
+            },
+            orderBy: {
+                date: 'asc'
+            }
+        });
+        
+        // Add all dates with unprocessed records
+        unprocessedRecords.forEach(record => {
+            datesToProcess.add(format(record.date, 'yyyy-MM-dd'));
+        });
+
+        let totalProcessed = 0;
+        const results: any[] = [];
+
+        // Process each unique date
+        for (const dateStr of Array.from(datesToProcess).sort()) {
+            const processDate = startOfDay(new Date(dateStr));
+            const isToday = isSameDay(processDate, today);
+            
+            console.log(`Processing leave automation for date: ${dateStr}`);
+            
+            const result = await processDailyLeaveAutomation(processDate, {
+                skipIfWithinWindow: isToday,
+                now: isToday ? now : undefined
+            });
+            
+            if (result.success) {
+                totalProcessed += result.processedEmployees || 0;
+            }
+            
+            results.push({ date: dateStr, ...result });
+        }
+
+        console.log(`Completed processing ${datesToProcess.size} dates, ${totalProcessed} total employee records`);
+        return { 
+            success: true, 
+            datesProcessed: datesToProcess.size,
+            totalProcessed,
+            results 
+        };
+    } catch (error) {
+        console.error("Error processing all unprocessed dates:", error);
+        return { success: false, error: "Failed to process automation" };
+    }
+}
+
+/**
+ * Main function to process daily leave automation for a specific date
+ * Should be called every day at 23:00 (11 PM)
  */
 export async function processDailyLeaveAutomation(
     targetDate?: Date,
     options?: { skipIfWithinWindow?: boolean; now?: Date }
 ) {
     const processDate = targetDate ? startOfDay(targetDate) : startOfDay(subDays(new Date(), 1)); // Yesterday by default
-    
-    console.log(`Processing leave automation for date: ${format(processDate, 'yyyy-MM-dd')}`);
     
     try {
         // Get all active employees
@@ -102,7 +173,6 @@ export async function processDailyLeaveAutomation(
             await processEmployeeDailyRecord(employee, processDate, options);
         }
 
-        console.log(`Completed processing for ${activeEmployees.length} employees`);
         return { success: true, processedEmployees: activeEmployees.length };
     } catch (error) {
         console.error("Error processing daily leave automation:", error);

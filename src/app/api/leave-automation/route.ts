@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { processDailyLeaveAutomation, processBackfillLeaveAutomation } from '@/actions/leave-automation.actions';
+import { processAllUnprocessedDates, processDailyLeaveAutomation, processBackfillLeaveAutomation } from '@/actions/leave-automation.actions';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request) {
@@ -56,8 +56,8 @@ export async function POST(request: Request) {
                 result = await processBackfillLeaveAutomation(fromDate);
             }
         } else {
-            // Process yesterday's records
-            result = await processDailyLeaveAutomation();
+            // Process all unprocessed dates (including today and yesterday)
+            result = await processAllUnprocessedDates();
         }
         
         return NextResponse.json({
