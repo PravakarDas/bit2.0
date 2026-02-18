@@ -29,9 +29,11 @@ import {
   Clock, 
   Calendar,
   User,
-  Building2
+  Building2,
+  RefreshCw
 } from "lucide-react";
 import { updateTimelineRecord } from "@/actions/timeline.actions";
+import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
 
 interface TimeRecord {
   id: string;
@@ -89,6 +91,7 @@ export default function TimelineTableView({
     actualBreakTime: ''
   });
   const [saving, setSaving] = useState(false);
+  const [syncingUsers, setSyncingUsers] = useState<Set<string>>(new Set());
 
   const openEditDialog = (record: TimeRecord) => {
     setEditingRecord(record);
@@ -131,6 +134,37 @@ export default function TimelineTableView({
       alert('Error updating record');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSync = async (userId: string) => {
+    setSyncingUsers(prev => new Set(prev).add(userId));
+    try {
+      const result = await manualSyncEmployee(userId);
+      
+      if (result.success) {
+        // Show success message
+        if (result.syncedRecords > 0) {
+          alert(`Successfully synced ${result.syncedRecords} record(s)!`);
+        } else {
+          alert(result.message);
+        }
+        onRecordUpdate(); // Refresh the table
+      } else {
+        alert(`Sync failed: ${result.message}`);
+        if (result.errors.length > 0) {
+          console.error('Sync errors:', result.errors);
+        }
+      }
+    } catch (error) {
+      console.error('Error syncing employee data:', error);
+      alert('Error syncing employee data');
+    } finally {
+      setSyncingUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userId);
+        return newSet;
+      });
     }
   };
 
@@ -186,7 +220,7 @@ export default function TimelineTableView({
               <TableHead>Actual</TableHead>
               <TableHead>Active Time</TableHead>
               <TableHead>OT/UT</TableHead>
-              <TableHead>Action</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -262,16 +296,28 @@ export default function TimelineTableView({
                     {getOvertimeBadge(record.overtimeUndertime)}
                   </TableCell>
                   <TableCell>
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => openEditDialog(record)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSync(record.user.id)}
+                        disabled={syncingUsers.has(record.user.id)}
+                        title="Sync attendance data from ZKTeco"
+                      >
+                        <RefreshCw 
+                          className={`h-4 w-4 ${syncingUsers.has(record.user.id) ? 'animate-spin' : ''}`} 
+                        />
+                      </Button>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => openEditDialog(record)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </DialogTrigger>
                       <DialogContent className="max-w-md">
                         <DialogHeader>
                           <DialogTitle>Edit Time Record</DialogTitle>
@@ -388,6 +434,7 @@ export default function TimelineTableView({
                         </div>
                       </DialogContent>
                     </Dialog>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
