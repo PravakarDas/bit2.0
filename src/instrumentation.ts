@@ -1,8 +1,10 @@
 import { checkAndGenerateToday } from "@/actions/timeline.actions";
 import { syncAllEmployeesTimeData } from "@/actions/zkteco-sync.actions";
+import { processDailyLeaveAutomation } from "@/actions/leave-automation.actions";
 
 const CRON_GLOBAL_FLAG = "__dailyTimelineCronStarted";
 const ZKTECO_CRON_GLOBAL_FLAG = "__zkTecoSyncCronStarted";
+const LEAVE_AUTOMATION_CRON_GLOBAL_FLAG = "__leaveAutomationCronStarted";
 
 function getLocalTimeParts(timeZone?: string) {
   if (!timeZone) {
@@ -47,11 +49,13 @@ function startDailyTimelineCron() {
   globalAny[CRON_GLOBAL_FLAG] = true;
 
   const timezone = process.env.APP_TIMEZONE;
+  const targetHour = parseInt(process.env.CRON_TIMELINE_HOUR || "0");
+  const targetMinute = parseInt(process.env.CRON_TIMELINE_MINUTE || "1");
   let lastRunDate = "";
 
   const runIfDue = async () => {
     const { year, month, day, hour, minute } = getLocalTimeParts(timezone);
-    if (hour !== 0 || minute !== 1) {
+    if (hour !== targetHour || minute !== targetMinute) {
       return;
     }
 
@@ -81,13 +85,14 @@ function startZKTecoSyncCron() {
   globalAny[ZKTECO_CRON_GLOBAL_FLAG] = true;
 
   const timezone = process.env.APP_TIMEZONE;
+  const targetHour = parseInt(process.env.CRON_ZKTECO_HOUR || "11");
+  const targetMinute = parseInt(process.env.CRON_ZKTECO_MINUTE || "0");
   let lastRunDate = "";
 
   const runIfDue = async () => {
     const { year, month, day, hour, minute } = getLocalTimeParts(timezone);
     
-    // Run at 11:00 AM
-    if (hour !== 11 || minute !== 0) {
+    if (hour !== targetHour || minute !== targetMinute) {
       return;
     }
 
@@ -113,9 +118,49 @@ function startZKTecoSyncCron() {
   setInterval(runIfDue, 60_000);
 }
 
+function startLeaveAutomationCron() {
+  const globalAny = global as unknown as Record<string, boolean>;
+  if (globalAny[LEAVE_AUTOMATION_CRON_GLOBAL_FLAG]) {
+    return;
+  }
+
+  globalAny[LEAVE_AUTOMATION_CRON_GLOBAL_FLAG] = true;
+
+  const timezone = process.env.APP_TIMEZONE;
+  const targetHour = parseInt(process.env.CRON_LEAVE_AUTOMATION_HOUR || "23");
+  const targetMinute = parseInt(process.env.CRON_LEAVE_AUTOMATION_MINUTE || "0");
+  let lastRunDate = "";
+
+  const runIfDue = async () => {
+    const { year, month, day, hour, minute } = getLocalTimeParts(timezone);
+    
+    if (hour !== targetHour || minute !== targetMinute) {
+      return;
+    }
+
+    const todayKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (lastRunDate === todayKey) {
+      return;
+    }
+
+    lastRunDate = todayKey;
+    try {
+      console.log("Starting leave automation cron job...");
+      const result = await processDailyLeaveAutomation();
+      console.log("Leave automation cron completed:", result);
+    } catch (error) {
+      console.error("Leave automation cron failed:", error);
+    }
+  };
+
+  runIfDue();
+  setInterval(runIfDue, 60_000);
+}
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     startDailyTimelineCron();
     startZKTecoSyncCron();
+    startLeaveAutomationCron();
   }
 }
