@@ -167,7 +167,48 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
     };
 
     const weeklyData = processWeeklyAttendance();
+    // Process attendance trends data (past weeks)
+    const processAttendanceTrends = () => {
+        if (!data.weeklyAttendanceData || data.weeklyAttendanceData.length === 0) {
+            return [];
+        }
 
+        // Group by week
+        const weeklyGroups: Record<string, any[]> = {};
+        data.weeklyAttendanceData.forEach(record => {
+            const date = new Date(record.date);
+            const weekStart = new Date(date);
+            weekStart.setDate(date.getDate() - date.getDay() + 1); // Monday
+            const weekKey = weekStart.toISOString().split('T')[0];
+            
+            if (!weeklyGroups[weekKey]) {
+                weeklyGroups[weekKey] = [];
+            }
+            weeklyGroups[weekKey].push(record);
+        });
+
+        // Calculate metrics for each week
+        return Object.entries(weeklyGroups)
+            .map(([weekKey, records]) => {
+                const presentCount = records.filter(r => r.status === 'PRESENT').length;
+                const totalCount = records.length;
+                const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
+                
+                const weekDate = new Date(weekKey);
+                const weekLabel = `Week ${Math.ceil(weekDate.getDate() / 7)} - ${weekDate.toLocaleDateString('en-US', { month: 'short' })}`;
+                
+                return {
+                    week: weekLabel,
+                    attendanceRate,
+                    presentCount,
+                    totalCount
+                };
+            })
+            .sort((a, b) => a.week.localeCompare(b.week))
+            .slice(-8); // Last 8 weeks
+    };
+
+    const attendanceTrendsData = processAttendanceTrends();
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -366,17 +407,25 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
                             </ResponsiveContainer>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={data.monthlyPayrollTrends}>
+                                <LineChart data={attendanceTrendsData}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                                    <XAxis dataKey="month" stroke="#6b7280" />
-                                    <YAxis stroke="#6b7280" />
-                                    <Tooltip />
+                                    <XAxis dataKey="week" stroke="#6b7280" />
+                                    <YAxis stroke="#6b7280" domain={[0, 100]} />
+                                    <Tooltip 
+                                        formatter={(value: number | undefined, name: string | undefined) => [
+                                            `${value || 0}%`,
+                                            name === 'attendanceRate' ? 'Attendance Rate' : name
+                                        ]}
+                                        labelStyle={{ color: '#1f2937' }}
+                                    />
+                                    <Legend />
                                     <Line 
                                         type="monotone" 
-                                        dataKey="count" 
+                                        dataKey="attendanceRate" 
                                         stroke="#1f2937" 
                                         strokeWidth={2}
-                                        name="Attendance Rate"
+                                        name="Attendance Rate (%)"
+                                        dot={{ fill: '#1f2937', strokeWidth: 2, r: 4 }}
                                     />
                                 </LineChart>
                             </ResponsiveContainer>

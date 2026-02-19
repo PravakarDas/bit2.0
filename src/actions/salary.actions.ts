@@ -12,6 +12,23 @@ export async function getSalaryHistory(userId: string) {
     });
 }
 
+export async function getSalaryPaymentHistory(userId: string) {
+    return await prisma.salaryPayment.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+    });
+}
+
+export async function getMySalaryPaymentHistory() {
+    const user = await getDbUser();
+    if (!user) throw new Error("Unauthorized");
+    
+    return await prisma.salaryPayment.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+    });
+}
+
 export async function updateEmployeeSalary(data: {
     userId: string;
     amount: number;
