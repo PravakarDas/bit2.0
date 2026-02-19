@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, User, Mail, Building, Calendar, Banknote } from "lucide-react";
+import { ArrowLeft, User, Mail, Building, Calendar, Banknote, Phone, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { AssignBranchSelect } from "@/components/admin/AssignBranchSelect";
 import { EmployeeStatusSelect } from "@/components/admin/EmployeeStatusSelect";
@@ -156,6 +156,99 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
                     </div>
                 </CardContent>
             </Card>
+
+            <div className="grid gap-6 md:grid-cols-2">
+                {/* Emergency Contact */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Phone className="h-5 w-5" />
+                            Emergency Contact
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Name</label>
+                            <p className="font-medium">{user.emergencyContactName || "Not provided"}</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Relationship</label>
+                            <p className="font-medium">{user.emergencyContactRelationship || "Not provided"}</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                            <p className="font-medium flex items-center gap-2">
+                                {user.emergencyContactPhone ? (
+                                    <>
+                                        <Phone className="h-4 w-4" />
+                                        {user.emergencyContactPhone}
+                                    </>
+                                ) : (
+                                    "Not provided"
+                                )}
+                            </p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">NID Number</label>
+                            <p className="font-medium">{user.emergencyContactNid || "Not provided"}</p>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Nominee Details */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5" />
+                            Nominee Details
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Name</label>
+                            <p className="font-medium">{user.nomineeName || "Not provided"}</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Relationship</label>
+                            <p className="font-medium">{user.nomineeRelationship || "Not provided"}</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                            <p className="font-medium flex items-center gap-2">
+                                {user.nomineePhone ? (
+                                    <>
+                                        <Phone className="h-4 w-4" />
+                                        {user.nomineePhone}
+                                    </>
+                                ) : (
+                                    "Not provided"
+                                )}
+                            </p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Email</label>
+                            <p className="font-medium flex items-center gap-2">
+                                {user.nomineeEmail ? (
+                                    <>
+                                        <Mail className="h-4 w-4" />
+                                        {user.nomineeEmail}
+                                    </>
+                                ) : (
+                                    "Not provided"
+                                )}
+                            </p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">NID Number</label>
+                            <p className="font-medium">{user.nomineeNid || "Not provided"}</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Address</label>
+                            <p className="font-medium">{user.nomineeAddress || "Not provided"}</p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* Quick Actions */}
             <Card>

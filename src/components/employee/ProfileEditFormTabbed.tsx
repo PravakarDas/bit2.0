@@ -83,6 +83,15 @@ const profileFormSchema = z.object({
   emergencyContactPhone: z.string().optional(),
   emergencyContactEmail: z.string().email().optional().or(z.literal("")),
   emergencyContactAddress: z.string().optional(),
+  emergencyContactNid: z.string().optional(),
+
+  // Nominee Details
+  nomineeName: z.string().optional(),
+  nomineeRelationship: z.string().optional(),
+  nomineePhone: z.string().optional(),
+  nomineeEmail: z.string().email().optional().or(z.literal("")),
+  nomineeNid: z.string().optional(),
+  nomineeAddress: z.string().optional(),
 
   // Banking Information
   bankAccountNumber: z.string().optional(),
@@ -255,6 +264,13 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
       emergencyContactPhone: user.emergencyContactPhone || "",
       emergencyContactEmail: user.emergencyContactEmail || "",
       emergencyContactAddress: user.emergencyContactAddress || "",
+      emergencyContactNid: user.emergencyContactNid || "",
+      nomineeName: user.nomineeName || "",
+      nomineeRelationship: user.nomineeRelationship || "",
+      nomineePhone: user.nomineePhone || "",
+      nomineeEmail: user.nomineeEmail || "",
+      nomineeNid: user.nomineeNid || "",
+      nomineeAddress: user.nomineeAddress || "",
       bankAccountNumber: user.bankAccountNumber || "",
       portfolioLink: user.portfolioLink || "",
       githubLink: user.githubLink || "",
@@ -324,6 +340,15 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
         emergencyContactPhone: data.emergencyContactPhone || null,
         emergencyContactEmail: data.emergencyContactEmail || null,
         emergencyContactAddress: data.emergencyContactAddress || null,
+        emergencyContactNid: data.emergencyContactNid || null,
+
+        // Nominee Details
+        nomineeName: data.nomineeName || null,
+        nomineeRelationship: data.nomineeRelationship || null,
+        nomineePhone: data.nomineePhone || null,
+        nomineeEmail: data.nomineeEmail || null,
+        nomineeNid: data.nomineeNid || null,
+        nomineeAddress: data.nomineeAddress || null,
 
         // Banking Information
         bankAccountNumber: data.bankAccountNumber || null,
@@ -881,84 +906,72 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name="emergencyContactNid"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>NID Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="National ID number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </CardContent>
             </Card>
 
-            {/* Banking and Professional Links */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Banking Information */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Banking Information</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <FormField
-                    control={form.control}
-                    name="bankAccountNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Bank Account Number</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Account number" {...field} />
-                        </FormControl>
-                        <FormDescription>This information is kept confidential</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
+            {/* Professional Links */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Professional Links</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="portfolioLink"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Portfolio</FormLabel>
+                      <FormControl>
+                        <Input type="url" placeholder="https://myportfolio.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              {/* Professional Links */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Professional Links</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="portfolioLink"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Portfolio</FormLabel>
-                        <FormControl>
-                          <Input type="url" placeholder="https://myportfolio.com" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <FormField
+                  control={form.control}
+                  name="githubLink"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>GitHub</FormLabel>
+                      <FormControl>
+                        <Input type="url" placeholder="https://github.com/username" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="githubLink"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>GitHub</FormLabel>
-                        <FormControl>
-                          <Input type="url" placeholder="https://github.com/username" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="linkedinLink"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>LinkedIn</FormLabel>
-                        <FormControl>
-                          <Input type="url" placeholder="https://linkedin.com/in/username" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
-            </div>
+                <FormField
+                  control={form.control}
+                  name="linkedinLink"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>LinkedIn</FormLabel>
+                      <FormControl>
+                        <Input type="url" placeholder="https://linkedin.com/in/username" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Employment Details Tab */}
@@ -1188,6 +1201,122 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Nominee Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Nominee Details</CardTitle>
+                <CardDescription>Person who will receive benefits in case of emergency</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="nomineeName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nominee name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nomineeRelationship"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Relationship</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Father, Mother, Spouse, Child" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nomineePhone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+1234567890" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nomineeEmail"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email (Optional)</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="nominee@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nomineeNid"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>NID Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="National ID number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nomineeAddress"
+                  render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nominee's complete address" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Banking Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Banking Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <FormField
+                  control={form.control}
+                  name="bankAccountNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bank Account Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Account number" {...field} />
+                      </FormControl>
+                      <FormDescription>This information is kept confidential</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </CardContent>
             </Card>
           </TabsContent>

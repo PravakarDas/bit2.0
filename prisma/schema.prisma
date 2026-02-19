@@ -179,6 +179,15 @@ model User {
   emergencyContactPhone         String?
   emergencyContactEmail         String?
   emergencyContactAddress       String?
+  emergencyContactNid           String?
+  
+  // Nominee Details
+  nomineeName                   String?
+  nomineeRelationship           String?
+  nomineePhone                  String?
+  nomineeEmail                  String?
+  nomineeNid                    String?
+  nomineeAddress                String?
   
   // Banking Information
   bankAccountNumber    String?

@@ -184,10 +184,10 @@ export async function getAllWalletTransactionsHistory() {
     const stats = {
         total: transactions.length,
         totalReimbursement: transactions.filter(t => t.type === "REIMBURSEMENT").reduce((sum, t) => sum + Number(t.amount), 0),
-        totalDeduction: transactions.filter(t => t.type === "DEDUCTION").reduce((sum, t) => sum + Number(t.amount), 0),
+        totalDeduction: transactions.filter(t => t.type === "LOAN_DEDUCTION").reduce((sum, t) => sum + Number(t.amount), 0),
         totalAdjustment: transactions.filter(t => t.type === "ADJUSTMENT").reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0),
         reimbursementCount: transactions.filter(t => t.type === "REIMBURSEMENT").length,
-        deductionCount: transactions.filter(t => t.type === "DEDUCTION").length,
+        deductionCount: transactions.filter(t => t.type === "LOAN_DEDUCTION").length,
         adjustmentCount: transactions.filter(t => t.type === "ADJUSTMENT").length,
     };
 

@@ -198,9 +198,28 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
           <InfoItem label="Relationship" value={user.emergencyContactRelationship} />
           <InfoItem label="Phone" value={user.emergencyContactPhone} icon={<Phone className="h-4 w-4" />} />
           <InfoItem label="Email" value={user.emergencyContactEmail} icon={<Mail className="h-4 w-4" />} />
+          <InfoItem label="NID Number" value={user.emergencyContactNid} />
           <div className="md:col-span-2">
             <InfoItem label="Address" value={user.emergencyContactAddress} />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Nominee Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5" />
+            Nominee Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <InfoItem label="Name" value={user.nomineeName} />
+          <InfoItem label="Relationship" value={user.nomineeRelationship} />
+          <InfoItem label="Phone" value={user.nomineePhone} icon={<Phone className="h-4 w-4" />} />
+          <InfoItem label="Email" value={user.nomineeEmail} icon={<Mail className="h-4 w-4" />} />
+          <InfoItem label="NID Number" value={user.nomineeNid} />
+          <InfoItem label="Address" value={user.nomineeAddress} className="md:col-span-2" />
         </CardContent>
       </Card>
 
@@ -259,14 +278,16 @@ function InfoItem({
   value,
   icon,
   isLink = false,
+  className,
 }: {
   label: string;
   value?: string | null;
   icon?: React.ReactNode;
   isLink?: boolean;
+  className?: string;
 }) {
   return (
-    <div className="space-y-1">
+    <div className={`space-y-1 ${className || ""}`}>
       <p className="text-sm font-medium text-muted-foreground">{label}</p>
       <div className="flex items-center gap-2">
         {icon && <span className="text-muted-foreground">{icon}</span>}
