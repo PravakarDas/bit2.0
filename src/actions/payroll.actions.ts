@@ -5,6 +5,43 @@ import { revalidatePath } from "next/cache";
 import { calculateEMI } from "@/lib/services/loan.service";
 import { LoanStatus, ClaimStatus, UserStatus } from "@prisma/client";
 
+export async function getAllProcessedPayrolls() {
+    const payments = await prisma.salaryPayment.findMany({
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    bankAccountNumber: true,
+                    branch: {
+                        select: {
+                            name: true,
+                        },
+                    },
+                    department: {
+                        select: {
+                            name: true,
+                        },
+                    },
+                    designation: {
+                        select: {
+                            name: true,
+                        },
+                    },
+                },
+            },
+        },
+        orderBy: [
+            { month: 'desc' },
+            { createdAt: 'desc' },
+        ],
+    });
+
+    return payments;
+}
+
 interface EligibleBonus {
     id: string;
     name: string;

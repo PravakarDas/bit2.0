@@ -57,7 +57,6 @@ const adminItems = [
     { title: "Loan", url: "/admin/loans", icon: Banknote },
     { title: "Medical", url: "/admin/medical", icon: Stethoscope },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
-    { title: "Payroll", url: "/admin/payroll", icon: CircleDollarSign },
     { title: "Timeline", url: "/admin/timeline", icon: Clock },
     { title: "Wallet", url: "/admin/wallet", icon: Wallet },
 ];
@@ -65,6 +64,11 @@ const adminItems = [
 const employeeSubItems = [
     { title: "Employee Management", url: "/admin/employees", icon: Users },
     { title: "Archived Employees", url: "/admin/archived-employees", icon: Archive },
+];
+
+const payrollSubItems = [
+    { title: "Process Payroll", url: "/admin/payroll", icon: Zap },
+    { title: "Processed Payroll", url: "/admin/payroll/processed", icon: FileCheck },
 ];
 
 const requestSubItems = [
@@ -97,6 +101,7 @@ export function AppSidebar({ role }: { role: string }) {
     const items = role === "SUPERADMIN" ? adminItems : employeeItems;
     const [isOrganizationOpen, setIsOrganizationOpen] = React.useState(false);
     const [isEmployeeOpen, setIsEmployeeOpen] = React.useState(false);
+    const [isPayrollOpen, setIsPayrollOpen] = React.useState(false);
     const [isRequestOpen, setIsRequestOpen] = React.useState(false);
 
     // Auto-open menus based on current page
@@ -106,6 +111,9 @@ export function AppSidebar({ role }: { role: string }) {
         }
         if (pathname === "/admin/employees" || pathname === "/admin/archived-employees") {
             setIsEmployeeOpen(true);
+        }
+        if (pathname === "/admin/payroll" || pathname === "/admin/payroll/processed") {
+            setIsPayrollOpen(true);
         }
         if (pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications") {
             setIsRequestOpen(true);
@@ -154,6 +162,42 @@ export function AppSidebar({ role }: { role: string }) {
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}
+                            
+                            {/* Payroll Collapsible Menu (Admin Only) */}
+                            {role === "SUPERADMIN" && (
+                                <Collapsible open={isPayrollOpen} onOpenChange={setIsPayrollOpen}>
+                                    <SidebarMenuItem>
+                                        <CollapsibleTrigger asChild>
+                                            <SidebarMenuButton 
+                                                isActive={pathname === "/admin/payroll" || pathname === "/admin/payroll/processed"}
+                                                tooltip="Payroll"
+                                            >
+                                                <CircleDollarSign className="h-4 w-4" />
+                                                <span>Payroll</span>
+                                                {isPayrollOpen ? (
+                                                    <ChevronDown className="ml-auto h-4 w-4 transition-transform" />
+                                                ) : (
+                                                    <ChevronRight className="ml-auto h-4 w-4 transition-transform" />
+                                                )}
+                                            </SidebarMenuButton>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                            <SidebarMenuSub>
+                                                {payrollSubItems.map((subItem) => (
+                                                    <SidebarMenuSubItem key={subItem.title}>
+                                                        <SidebarMenuSubButton asChild isActive={pathname === subItem.url}>
+                                                            <Link href={subItem.url}>
+                                                                <subItem.icon className="h-3.5 w-3.5" />
+                                                                <span className="text-xs">{subItem.title}</span>
+                                                            </Link>
+                                                        </SidebarMenuSubButton>
+                                                    </SidebarMenuSubItem>
+                                                ))}
+                                            </SidebarMenuSub>
+                                        </CollapsibleContent>
+                                    </SidebarMenuItem>
+                                </Collapsible>
+                            )}
                             
                             {/* Employee Collapsible Menu (Admin Only) */}
                             {role === "SUPERADMIN" && (

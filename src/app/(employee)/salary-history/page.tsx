@@ -140,6 +140,7 @@ export default function SalaryHistoryPage() {
                             <TableHeader>
                                 <TableRow className="bg-muted/50">
                                     <TableHead>Month</TableHead>
+                                    <TableHead>Processed Date</TableHead>
                                     <TableHead className="text-right">Base Salary</TableHead>
                                     <TableHead className="text-right">Allowances</TableHead>
                                     <TableHead className="text-right">Bonuses</TableHead>
@@ -152,7 +153,7 @@ export default function SalaryHistoryPage() {
                             <TableBody>
                                 {salaryPayments.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                                        <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                                             No salary payments found.
                                         </TableCell>
                                     </TableRow>
@@ -164,6 +165,13 @@ export default function SalaryHistoryPage() {
                                             <TableRow key={payment.id} className="hover:bg-muted/30 transition-colors">
                                                 <TableCell className="font-medium">
                                                     {formatMonth(payment.month)}
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground">
+                                                    {new Date(payment.createdAt).toLocaleDateString('en-US', {
+                                                        year: 'numeric',
+                                                        month: 'short',
+                                                        day: 'numeric'
+                                                    })}
                                                 </TableCell>
                                                 <TableCell className="text-right tabular-nums">
                                                     ৳{payment.baseSalary.toLocaleString("en-BD")}
