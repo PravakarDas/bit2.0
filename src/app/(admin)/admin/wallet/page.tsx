@@ -1,25 +1,38 @@
-import { getAllWalletRequests } from "@/actions/wallet.actions";
-import { AdminWalletDashboard } from "@/components/admin/wallet/AdminWalletDashboard";
+import { 
+    getAllWalletRequests,
+    getAllWalletTransactionsHistory,
+    getAllEmployeeWalletBalances
+} from "@/actions/wallet.actions";
+import WalletManagementClient from "@/components/admin/WalletManagementClient";
 import { prisma } from "@/lib/prisma";
 
 export default async function AdminWalletPage() {
     const requests = await getAllWalletRequests();
     const pendingRequests = requests.filter(r => r.status === "PENDING");
+    const allTransactionsData = await getAllWalletTransactionsHistory();
+    const employeeWallets = await getAllEmployeeWalletBalances();
 
     // Fetch users for dropdown
     const users = await prisma.user.findMany({
+        where: {
+            role: "EMPLOYEE",
+            isArchived: false
+        },
+        select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true
+        },
         orderBy: { email: 'asc' }
     });
 
     return (
-        <div className="flex-1 space-y-4 p-8 pt-6">
-            <div className="flex items-center justify-between space-y-2">
-                <h2 className="text-3xl font-bold tracking-tight">Wallet Management</h2>
-            </div>
-            <AdminWalletDashboard
-                pendingRequests={pendingRequests}
-                users={users}
-            />
-        </div>
+        <WalletManagementClient
+            initialPendingRequests={pendingRequests}
+            allTransactionsData={allTransactionsData}
+            employeeWallets={employeeWallets}
+            users={users}
+        />
     );
 }

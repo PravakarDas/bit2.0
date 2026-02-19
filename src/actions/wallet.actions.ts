@@ -149,3 +149,90 @@ export async function getWalletRequestsForUser(userId: string) {
         orderBy: { createdAt: 'desc' }
     });
 }
+
+export async function getAllWalletTransactionsHistory() {
+    const admin = await getDbUser();
+    if (!admin || !["SUPERADMIN", "HR"].includes(admin.role)) {
+        throw new Error("Unauthorized");
+    }
+
+    const transactions = await prisma.walletTransaction.findMany({
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    department: {
+                        select: {
+                            name: true
+                        }
+                    },
+                    designation: {
+                        select: {
+                            name: true
+                        }
+                    }
+                }
+            }
+        },
+        orderBy: { createdAt: "desc" }
+    });
+
+    // Calculate statistics
+    const stats = {
+        total: transactions.length,
+        totalReimbursement: transactions.filter(t => t.type === "REIMBURSEMENT").reduce((sum, t) => sum + Number(t.amount), 0),
+        totalDeduction: transactions.filter(t => t.type === "DEDUCTION").reduce((sum, t) => sum + Number(t.amount), 0),
+        totalAdjustment: transactions.filter(t => t.type === "ADJUSTMENT").reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0),
+        reimbursementCount: transactions.filter(t => t.type === "REIMBURSEMENT").length,
+        deductionCount: transactions.filter(t => t.type === "DEDUCTION").length,
+        adjustmentCount: transactions.filter(t => t.type === "ADJUSTMENT").length,
+    };
+
+    return { transactions, stats };
+}
+
+export async function getAllEmployeeWalletBalances() {
+    const admin = await getDbUser();
+    if (!admin || !["SUPERADMIN", "HR"].includes(admin.role)) {
+        throw new Error("Unauthorized");
+    }
+
+    const users = await prisma.user.findMany({
+        where: {
+            role: "EMPLOYEE",
+            isArchived: false
+        },
+        select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            walletBalance: true,
+            department: {
+                select: {
+                    name: true
+                }
+            },
+            designation: {
+                select: {
+                    name: true
+                }
+            },
+            walletTransactions: {
+                orderBy: {
+                    createdAt: "desc"
+                },
+                take: 5
+            }
+        },
+        orderBy: {
+            walletBalance: "desc"
+        }
+    });
+
+    return users;
+}
+
