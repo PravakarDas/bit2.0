@@ -167,3 +167,105 @@ export async function getMyMedicalClaims() {
         orderBy: { createdAt: "desc" },
     });
 }
+
+export async function getAllMedicalClaimsHistory() {
+    const year = new Date().getFullYear();
+    
+    const claims = await prisma.medicalClaim.findMany({
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    department: {
+                        select: {
+                            name: true
+                        }
+                    },
+                    designation: {
+                        select: {
+                            name: true
+                        }
+                    },
+                    medicalEntitlements: {
+                        where: { year: year }
+                    }
+                }
+            }
+        },
+        orderBy: { createdAt: "desc" },
+    });
+
+    // Calculate statistics
+    const stats = {
+        total: claims.length,
+        pending: claims.filter(c => c.status === "PENDING").length,
+        approved: claims.filter(c => c.status === "APPROVED").length,
+        rejected: claims.filter(c => c.status === "REJECTED").length,
+        totalAmount: claims.reduce((sum, c) => sum + Number(c.amount), 0),
+        approvedAmount: claims.filter(c => c.status === "APPROVED").reduce((sum, c) => sum + Number(c.amount), 0),
+    };
+
+    return { claims, stats };
+}
+
+export async function getAllEmployeeMedicalEntitlements() {
+    const currentYear = new Date().getFullYear();
+    
+    const entitlements = await prisma.medicalEntitlement.findMany({
+        where: {
+            year: currentYear
+        },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    department: {
+                        select: {
+                            name: true
+                        }
+                    },
+                    designation: {
+                        select: {
+                            name: true
+                        }
+                    }
+                }
+            },
+            claims: {
+                where: {
+                    status: "APPROVED"
+                },
+                orderBy: {
+                    createdAt: "desc"
+                }
+            }
+        },
+        orderBy: {
+            createdAt: "desc"
+        }
+    });
+
+    // Calculate totals used from approved claims
+    const entitlementsWithStats = entitlements.map(entitlement => {
+        const totalClaimed = entitlement.claims.reduce((sum, claim) => sum + Number(claim.amount), 0);
+        const claimsCount = entitlement.claims.length;
+        
+        return {
+            ...entitlement,
+            totalClaimed,
+            claimsCount,
+            utilizationPercentage: entitlement.totalLimit > 0 
+                ? ((totalClaimed / entitlement.totalLimit) * 100).toFixed(1)
+                : "0.0"
+        };
+    });
+
+    return entitlementsWithStats;
+}
+
