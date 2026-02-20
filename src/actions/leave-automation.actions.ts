@@ -245,6 +245,8 @@ async function handleWeeklyOffDay(employee: any, processDate: Date, existingReco
         actualBreakTime: "00:00",
         requiredActiveTime: "00:00",
         actualActiveTime: "00:00",
+        officialOvertimeundertime: "00:00",
+        requestedOvertime: "00:00",
         overtimeUndertime: "00:00",
         isProcessed: true
     };
@@ -395,6 +397,8 @@ async function handleAutoLeaveDeduction(employee: any, processDate: Date, existi
         actualBreakTime: "00:00",
         requiredActiveTime: "00:00",
         actualActiveTime: "00:00",
+        officialOvertimeundertime: "00:00",
+        requestedOvertime: "00:00",
         overtimeUndertime: "00:00",
         autoDeductedLeaveType: leaveEntitlement.leaveType.name,
         isProcessed: true
@@ -457,6 +461,8 @@ async function handleAbsentWithoutLeave(employee: any, processDate: Date, existi
         actualBreakTime: "00:00",
         requiredActiveTime: "00:00",
         actualActiveTime: "00:00",
+        officialOvertimeundertime: "00:00",
+        requestedOvertime: "00:00",
         overtimeUndertime: "00:00",
         isProcessed: true
     };

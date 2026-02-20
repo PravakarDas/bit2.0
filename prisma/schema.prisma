@@ -84,6 +84,12 @@ enum DailyRecordStatus {
   WEEKLY_OFF
 }
 
+enum OvertimeRequestStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
 model Department {
   id          String   @id @default(cuid())
   name        String   @unique
@@ -214,6 +220,9 @@ model User {
   
   // Overtime Payout Relations
   overtimePayouts     OvertimePayout[]
+  
+  // Overtime Request Relations
+  overtimeRequests    OvertimeRequest[]
   
   // Profile Update Requests
   profileUpdateRequests ProfileUpdateRequest[]
@@ -566,7 +575,9 @@ model DailyTimeRecord {
   // Calculated fields (computed from above times)
   requiredActiveTime String?  // (requiredCheckOut - requiredCheckIn - requiredBreakTime) in HH:MM
   actualActiveTime   String?  // (actualCheckOut - actualCheckIn - actualBreakTime) in HH:MM
-  overtimeUndertime  String?  // (actualActiveTime - requiredActiveTime) in +/-HH:MM format
+  officialOvertimeundertime  String?  // (actualActiveTime - requiredActiveTime) in +/-HH:MM format - Auto calculated
+  requestedOvertime  String?  // Overtime approved by admin from employee request in HH:MM format
+  overtimeUndertime  String?  // Total overtime (officialOvertimeundertime + requestedOvertime) in +/-HH:MM format
 
   // Late check-in penalty tracking
   lateCheckInMinutes Int?     @default(0)
@@ -599,6 +610,7 @@ enum NotificationType {
   PAYROLL_NOTIFICATION
   SYSTEM_ALERT
   DEADLINE_REMINDER
+  OVERTIME_REQUEST_PENDING
 }
 
 enum NotificationStatus {
@@ -713,5 +725,35 @@ model LeaveAuditLog {
   metadata              Json?      // Additional data related to the action
   
   createdAt            DateTime   @default(now())
+}
+
+// Overtime Request Model for employee-initiated overtime requests
+model OvertimeRequest {
+  id                  String                  @id @default(cuid())
+  
+  // Employee who is requesting
+  userId              String
+  user                User                    @relation(fields: [userId], references: [id])
+  
+  // Request details
+  overtimeDate        DateTime                // The date for which overtime is being requested
+  totalOvertime       String                  // Requested overtime duration in HH:MM format
+  reason              String                  // Reason for overtime
+  taskNo              String?                 // Optional task/project reference
+  
+  // Status tracking
+  status              OvertimeRequestStatus   @default(PENDING)
+  
+  // Review details
+  reviewedBy          String?                 // Clerk ID of admin who reviewed
+  reviewedAt          DateTime?
+  declineReason       String?                 // Reason for declining (if declined)
+  
+  // Timestamps
+  requestedAt         DateTime                @default(now())
+  statusUpdatedAt     DateTime                @updatedAt
+  
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
 }
 

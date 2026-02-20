@@ -9,8 +9,11 @@ import { createAdminNotification } from "./notification.actions";
  */
 function timeStringToMinutes(timeStr: string): number {
   if (!timeStr) return 0;
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  return (hours * 60) + minutes;
+  const isNegative = timeStr.startsWith('-');
+  const cleanStr = timeStr.replace('-', '');
+  const [hours, minutes] = cleanStr.split(':').map(Number);
+  const totalMinutes = (hours * 60) + minutes;
+  return isNegative ? -totalMinutes : totalMinutes;
 }
 
 /**
@@ -52,6 +55,19 @@ function calculateOvertimeUndertime(actualActiveTime: string, requiredActiveTime
   const diffMinutes = actualMinutes - requiredMinutes;
   
   return minutesToTimeString(diffMinutes);
+}
+
+/**
+ * Add two time strings together (handles positive and negative times)
+ */
+function addTimeStrings(time1?: string | null, time2?: string | null): string {
+  if (!time1 && !time2) return '00:00';
+  if (!time1) return time2 || '00:00';
+  if (!time2) return time1 || '00:00';
+  
+  const minutes1 = timeStringToMinutes(time1);
+  const minutes2 = timeStringToMinutes(time2);
+  return minutesToTimeString(minutes1 + minutes2);
 }
 
 interface TimelineGenerationResult {
@@ -521,12 +537,19 @@ export async function updateTimelineRecord(
         finalActualBreakTime || '00:00'
       );
 
-      // Calculate overtime/undertime if we have both required and actual active times
+      // Calculate official overtime/undertime (auto-calculated) if we have both required and actual active times
       const requiredActiveTime = updateData.requiredActiveTime || currentRecord.requiredActiveTime;
       if (requiredActiveTime && updateData.actualActiveTime) {
-        updateData.overtimeUndertime = calculateOvertimeUndertime(
+        updateData.officialOvertimeundertime = calculateOvertimeUndertime(
           updateData.actualActiveTime,
           requiredActiveTime
+        );
+        
+        // Calculate total overtimeUndertime (official + requested)
+        const requestedOvertime = currentRecord.requestedOvertime || '00:00';
+        updateData.overtimeUndertime = addTimeStrings(
+          updateData.officialOvertimeundertime,
+          requestedOvertime
         );
       }
     }
@@ -596,7 +619,7 @@ export async function backfillTimelineCalculations() {
         OR: [
           { requiredActiveTime: null },
           { actualActiveTime: null },
-          { overtimeUndertime: null }
+          { officialOvertimeundertime: null }
         ]
       }
     });
@@ -630,10 +653,17 @@ export async function backfillTimelineCalculations() {
       const finalRequiredActiveTime = updateData.requiredActiveTime || record.requiredActiveTime;
       const finalActualActiveTime = updateData.actualActiveTime || record.actualActiveTime;
       
-      if (finalRequiredActiveTime && finalActualActiveTime && !record.overtimeUndertime) {
-        updateData.overtimeUndertime = calculateOvertimeUndertime(
+      if (finalRequiredActiveTime && finalActualActiveTime && !record.officialOvertimeundertime) {
+        updateData.officialOvertimeundertime = calculateOvertimeUndertime(
           finalActualActiveTime,
           finalRequiredActiveTime
+        );
+        
+        // Calculate total overtimeUndertime (official + requested)
+        const requestedOvertime = record.requestedOvertime || '00:00';
+        updateData.overtimeUndertime = addTimeStrings(
+          updateData.officialOvertimeundertime,
+          requestedOvertime
         );
       }
       

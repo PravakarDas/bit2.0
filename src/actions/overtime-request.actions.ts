@@ -1,0 +1,504 @@
+"use server";
+
+import { auth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+import { OvertimeRequestStatus } from "@prisma/client";
+
+// Helper to convert HH:MM to minutes
+function timeStringToMinutes(timeStr: string): number {
+  const isNegative = timeStr.startsWith("-");
+  const cleanStr = timeStr.replace("-", "");
+  const [hours, minutes] = cleanStr.split(":").map(Number);
+  const totalMinutes = hours * 60 + minutes;
+  return isNegative ? -totalMinutes : totalMinutes;
+}
+
+// Helper to convert minutes to HH:MM
+function minutesToTimeString(minutes: number): string {
+  const isNegative = minutes < 0;
+  const absMinutes = Math.abs(minutes);
+  const hours = Math.floor(absMinutes / 60);
+  const mins = absMinutes % 60;
+  const timeStr = `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+  return isNegative ? `-${timeStr}` : timeStr;
+}
+
+// Helper to add time strings
+function addTimeStrings(time1?: string | null, time2?: string | null): string {
+  if (!time1 && !time2) return "00:00";
+  if (!time1) return time2 || "00:00";
+  if (!time2) return time1 || "00:00";
+  
+  const minutes1 = timeStringToMinutes(time1);
+  const minutes2 = timeStringToMinutes(time2);
+  return minutesToTimeString(minutes1 + minutes2);
+}
+
+/**
+ * Employee: Submit overtime request
+ */
+export async function submitOvertimeRequest(data: {
+  overtimeDate: Date;
+  totalOvertime: string;
+  reason: string;
+  taskNo?: string;
+}) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    // Get user from database
+    const user = await prisma.user.findUnique({
+      where: { clerkId: userId },
+      select: { id: true, firstName: true, lastName: true, role: true },
+    });
+
+    if (!user) {
+      return { success: false, error: "User not found" };
+    }
+
+    // Ensure employee role
+    if (user.role !== "EMPLOYEE") {
+      return { success: false, error: "Only employees can submit overtime requests" };
+    }
+
+    // Validate overtime format (HH:MM)
+    const timeRegex = /^([0-9]{1,2}):([0-5][0-9])$/;
+    if (!timeRegex.test(data.totalOvertime)) {
+      return { success: false, error: "Invalid time format. Use HH:MM" };
+    }
+
+    // Check if there's already a pending request for this date
+    const existingRequest = await prisma.overtimeRequest.findFirst({
+      where: {
+        userId: user.id,
+        overtimeDate: data.overtimeDate,
+        status: "PENDING",
+      },
+    });
+
+    if (existingRequest) {
+      return { success: false, error: "You already have a pending request for this date" };
+    }
+
+    // Create overtime request
+    const overtimeRequest = await prisma.overtimeRequest.create({
+      data: {
+        userId: user.id,
+        overtimeDate: data.overtimeDate,
+        totalOvertime: data.totalOvertime,
+        reason: data.reason,
+        taskNo: data.taskNo,
+      },
+    });
+
+    // Create admin notification
+    await prisma.adminNotification.create({
+      data: {
+        type: "OVERTIME_REQUEST_PENDING",
+        title: "New Overtime Request",
+        message: `${user.firstName} ${user.lastName} has requested ${data.totalOvertime} hours of overtime for ${new Date(data.overtimeDate).toLocaleDateString()}`,
+        metadata: {
+          overtimeRequestId: overtimeRequest.id,
+          userId: user.id,
+          userName: `${user.firstName} ${user.lastName}`,
+          overtimeDate: data.overtimeDate,
+          totalOvertime: data.totalOvertime,
+        },
+      },
+    });
+
+    revalidatePath("/employee/overtime-requests");
+    revalidatePath("/admin/notifications");
+    
+    return { success: true, data: overtimeRequest };
+  } catch (error) {
+    console.error("Error submitting overtime request:", error);
+    return { success: false, error: "Failed to submit overtime request" };
+  }
+}
+
+/**
+ * Admin: Get all overtime requests (with optional filters)
+ */
+export async function getOvertimeRequests(filters?: {
+  status?: OvertimeRequestStatus;
+  userId?: string;
+  startDate?: Date;
+  endDate?: Date;
+}) {
+  try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { clerkId },
+      select: { role: true },
+    });
+
+    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR" && user.role !== "MANAGER")) {
+      return { success: false, error: "Unauthorized: Admin access required" };
+    }
+
+    // Build where clause
+    interface WhereClause {
+      status?: OvertimeRequestStatus;
+      userId?: string;
+      overtimeDate?: {
+        gte?: Date;
+        lte?: Date;
+      };
+    }
+
+    const where: WhereClause = {};
+
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    if (filters?.userId) {
+      where.userId = filters.userId;
+    }
+
+    if (filters?.startDate || filters?.endDate) {
+      where.overtimeDate = {};
+      if (filters.startDate) {
+        where.overtimeDate.gte = filters.startDate;
+      }
+      if (filters.endDate) {
+        where.overtimeDate.lte = filters.endDate;
+      }
+    }
+
+    const requests = await prisma.overtimeRequest.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            attendanceId: true,
+            branch: {
+              select: {
+                name: true,
+              },
+            },
+            department: {
+              select: {
+                name: true,
+              },
+            },
+            designation: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        requestedAt: "desc",
+      },
+    });
+
+    return { success: true, data: requests };
+  } catch (error) {
+    console.error("Error fetching overtime requests:", error);
+    return { success: false, error: "Failed to fetch overtime requests" };
+  }
+}
+
+/**
+ * Employee: Get own overtime requests
+ */
+export async function getMyOvertimeRequests() {
+  try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { clerkId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      return { success: false, error: "User not found" };
+    }
+
+    const requests = await prisma.overtimeRequest.findMany({
+      where: {
+        userId: user.id,
+      },
+      orderBy: {
+        requestedAt: "desc",
+      },
+    });
+
+    return { success: true, data: requests };
+  } catch (error) {
+    console.error("Error fetching my overtime requests:", error);
+    return { success: false, error: "Failed to fetch overtime requests" };
+  }
+}
+
+/**
+ * Admin: Approve overtime request
+ */
+export async function approveOvertimeRequest(requestId: string) {
+  try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const admin = await prisma.user.findUnique({
+      where: { clerkId },
+      select: { role: true, firstName: true, lastName: true },
+    });
+
+    if (!admin || (admin.role !== "SUPERADMIN" && admin.role !== "HR" && admin.role !== "MANAGER")) {
+      return { success: false, error: "Unauthorized: Admin access required" };
+    }
+
+    // Get the overtime request
+    const request = await prisma.overtimeRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      return { success: false, error: "Request not found" };
+    }
+
+    if (request.status !== "PENDING") {
+      return { success: false, error: "Request has already been processed" };
+    }
+
+    // Start a transaction to update both the request and the timeline
+    const result = await prisma.$transaction(async (tx) => {
+      // Update the overtime request
+      const updatedRequest = await tx.overtimeRequest.update({
+        where: { id: requestId },
+        data: {
+          status: "APPROVED",
+          reviewedBy: clerkId,
+          reviewedAt: new Date(),
+        },
+      });
+
+      // Get or create the daily time record for this date
+      const startOfDay = new Date(request.overtimeDate);
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const timeRecord = await tx.dailyTimeRecord.findUnique({
+        where: {
+          userId_date: {
+            userId: request.userId,
+            date: startOfDay,
+          },
+        },
+      });
+
+      if (timeRecord) {
+        // Update existing record
+        const newRequestedOvertime = addTimeStrings(
+          timeRecord.requestedOvertime,
+          request.totalOvertime
+        );
+        
+        // Recalculate total overtimeUndertime
+        const newOvertimeUndertime = addTimeStrings(
+          timeRecord.officialOvertimeundertime,
+          newRequestedOvertime
+        );
+
+        await tx.dailyTimeRecord.update({
+          where: { id: timeRecord.id },
+          data: {
+            requestedOvertime: newRequestedOvertime,
+            overtimeUndertime: newOvertimeUndertime,
+          },
+        });
+      } else {
+        // Create new record if it doesn't exist
+        await tx.dailyTimeRecord.create({
+          data: {
+            userId: request.userId,
+            date: startOfDay,
+            status: "PRESENT",
+            requestedOvertime: request.totalOvertime,
+            overtimeUndertime: request.totalOvertime,
+            officialOvertimeundertime: "00:00",
+          },
+        });
+      }
+
+      // Create employee notification
+      await tx.employeeNotification.create({
+        data: {
+          userId: request.userId,
+          type: "OVERTIME_REQUEST_APPROVED",
+          title: "Overtime Request Approved",
+          message: `Your overtime request for ${request.totalOvertime} hours on ${new Date(request.overtimeDate).toLocaleDateString()} has been approved by ${admin.firstName} ${admin.lastName}`,
+          relatedDate: request.overtimeDate,
+          relatedEntityId: request.id,
+        },
+      });
+
+      return updatedRequest;
+    });
+
+    revalidatePath("/admin/overtime-requests");
+    revalidatePath("/admin/notifications");
+    revalidatePath("/employee/overtime-requests");
+    revalidatePath("/employee/attendance");
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error("Error approving overtime request:", error);
+    return { success: false, error: "Failed to approve overtime request" };
+  }
+}
+
+/**
+ * Admin: Decline overtime request
+ */
+export async function declineOvertimeRequest(requestId: string, declineReason: string) {
+  try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const admin = await prisma.user.findUnique({
+      where: { clerkId },
+      select: { role: true, firstName: true, lastName: true },
+    });
+
+    if (!admin || (admin.role !== "SUPERADMIN" && admin.role !== "HR" && admin.role !== "MANAGER")) {
+      return { success: false, error: "Unauthorized: Admin access required" };
+    }
+
+    // Get the overtime request
+    const request = await prisma.overtimeRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      return { success: false, error: "Request not found" };
+    }
+
+    if (request.status !== "PENDING") {
+      return { success: false, error: "Request has already been processed" };
+    }
+
+    // Update the overtime request
+    const updatedRequest = await prisma.overtimeRequest.update({
+      where: { id: requestId },
+      data: {
+        status: "DECLINED",
+        reviewedBy: clerkId,
+        reviewedAt: new Date(),
+        declineReason,
+      },
+    });
+
+    // Create employee notification
+    await prisma.employeeNotification.create({
+      data: {
+        userId: request.userId,
+        type: "OVERTIME_REQUEST_DECLINED",
+        title: "Overtime Request Declined",
+        message: `Your overtime request for ${request.totalOvertime} hours on ${new Date(request.overtimeDate).toLocaleDateString()} has been declined. Reason: ${declineReason}`,
+        relatedDate: request.overtimeDate,
+        relatedEntityId: request.id,
+      },
+    });
+
+    revalidatePath("/admin/overtime-requests");
+    revalidatePath("/admin/notifications");
+    revalidatePath("/employee/overtime-requests");
+
+    return { success: true, data: updatedRequest };
+  } catch (error) {
+    console.error("Error declining overtime request:", error);
+    return { success: false, error: "Failed to decline overtime request" };
+  }
+}
+
+/**
+ * Employee: Cancel own pending overtime request
+ */
+export async function cancelOvertimeRequest(requestId: string) {
+  try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { clerkId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      return { success: false, error: "User not found" };
+    }
+
+    // Get the overtime request
+    const request = await prisma.overtimeRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!request) {
+      return { success: false, error: "Request not found" };
+    }
+
+    // Ensure the request belongs to the user
+    if (request.userId !== user.id) {
+      return { success: false, error: "Unauthorized: You can only cancel your own requests" };
+    }
+
+    if (request.status !== "PENDING") {
+      return { success: false, error: "Only pending requests can be cancelled" };
+    }
+
+    // Delete the request
+    await prisma.overtimeRequest.delete({
+      where: { id: requestId },
+    });
+
+    revalidatePath("/employee/overtime-requests");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error cancelling overtime request:", error);
+    return { success: false, error: "Failed to cancel overtime request" };
+  }
+}
