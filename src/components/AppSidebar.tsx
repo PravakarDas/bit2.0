@@ -23,6 +23,7 @@ import {
     DollarSign,
     Zap,
     Bell,
+    ClipboardList,
 } from "lucide-react";
 
 import {
@@ -45,7 +46,7 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import logo from "@/assets/logo.gif";
 import { NotificationWithBadge } from "@/components/NotificationWithBadge";
@@ -57,6 +58,7 @@ const adminItems = [
     { title: "Loan", url: "/admin/loans", icon: Banknote },
     { title: "Medical", url: "/admin/medical", icon: Stethoscope },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
+    { title: "Overtime Requests", url: "/admin/overtime-requests", icon: ClipboardList },
     { title: "Timeline", url: "/admin/timeline", icon: Clock },
     { title: "Wallet", url: "/admin/wallet", icon: Wallet },
 ];
@@ -82,6 +84,7 @@ const employeeItems = [
     { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
     { title: "My Leaves", url: "/leaves", icon: ScrollText },
+    { title: "Overtime Requests", url: "/overtime-requests", icon: ClipboardList },
     { title: "My Loans", url: "/loans", icon: Banknote },
     { title: "My Medical", url: "/medical", icon: Stethoscope },
     { title: "My Wallet", url: "/wallet", icon: Wallet },
@@ -98,6 +101,7 @@ const organizationSubItems = [
 
 export function AppSidebar({ role }: { role: string }) {
     const pathname = usePathname();
+    const router = useRouter();
     const items = role === "SUPERADMIN" ? adminItems : employeeItems;
     const [isOrganizationOpen, setIsOrganizationOpen] = React.useState(false);
     const [isEmployeeOpen, setIsEmployeeOpen] = React.useState(false);
@@ -121,10 +125,16 @@ export function AppSidebar({ role }: { role: string }) {
     }, [pathname]);
 
     const handleSubItemClick = (hash: string) => {
-        const element = document.querySelector(hash);
-        if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
+        // Update URL with the hash
+        router.push(`/admin/organization${hash}`, { scroll: false });
+        
+        // Scroll to the element
+        setTimeout(() => {
+            const element = document.querySelector(hash);
+            if (element) {
+                element.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        }, 0);
     };
 
     return (
