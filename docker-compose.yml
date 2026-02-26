@@ -1,6 +1,6 @@
 services:
   traefik:
-    image: traefik:v3.3-alpine
+    image: traefik:latest
     container_name: traefik
     restart: unless-stopped
     command:
@@ -19,7 +19,7 @@ services:
       - "443:443"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "letsencrypt:/letsencrypt"
+      - "./data/letsencrypt:/letsencrypt"
     networks:
       - proxy
 
