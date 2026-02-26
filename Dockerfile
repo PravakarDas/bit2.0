@@ -24,13 +24,13 @@ ARG UID=1001
 ARG GID=1001
 
 RUN addgroup --system --gid ${GID} nodejs && \
-    adduser --system --uid ${UID} nextjs
+  adduser --system --uid ${UID} nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules ./node_modules
 
 USER nextjs
 
