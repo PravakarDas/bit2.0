@@ -140,25 +140,37 @@ export default function TimelineTableView({
   const handleSync = async (userId: string) => {
     setSyncingUsers(prev => new Set(prev).add(userId));
     try {
+      console.log(`Starting manual sync for user: ${userId}`);
       const result = await manualSyncEmployee(userId);
+      
+      console.log(`Manual sync completed:`, result);
       
       if (result.success) {
         // Show success message
         if (result.syncedRecords > 0) {
-          alert(`Successfully synced ${result.syncedRecords} record(s)!`);
+          alert(`✅ Successfully synced ${result.syncedRecords} record(s)!\n\nThe timeline should now show updated check-in/out times.`);
         } else {
-          alert(result.message);
+          alert(`ℹ️ ${result.message}\n\nNote: Records may already be complete or no new data available.`);
         }
-        onRecordUpdate(); // Refresh the table
+        
+        // Force refresh the table data
+        console.log('Refreshing table data after sync...');
+        onRecordUpdate();
+        
+        // Force a small delay and refresh again to ensure UI updates
+        setTimeout(() => {
+          console.log('Secondary refresh after sync...');
+          onRecordUpdate();
+        }, 500);
       } else {
-        alert(`Sync failed: ${result.message}`);
+        alert(`❌ Sync failed: ${result.message}${result.errors.length > 0 ? '\n\nErrors:\n' + result.errors.join('\n') : ''}`);
         if (result.errors.length > 0) {
           console.error('Sync errors:', result.errors);
         }
       }
     } catch (error) {
       console.error('Error syncing employee data:', error);
-      alert('Error syncing employee data');
+      alert(`❌ Error syncing employee data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSyncingUsers(prev => {
         const newSet = new Set(prev);

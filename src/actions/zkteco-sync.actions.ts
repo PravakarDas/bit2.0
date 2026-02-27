@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { zkTecoService } from "@/lib/services/zkteco.service";
-import { subDays, format } from "date-fns";
+import { subDays, format, startOfDay } from "date-fns";
 import { revalidatePath } from "next/cache";
 
 export interface SyncResult {
@@ -26,10 +26,13 @@ export async function syncEmployeeTimeData(userId: string, date: Date): Promise<
   };
 
   try {
+    console.log(`Syncing employee ${userId} for date ${date.toISOString().split('T')[0]}`);
+    
     // Check if ZKTeco service is configured
     if (!zkTecoService.isConfigured()) {
       result.message = "ZKTeco service is not properly configured";
       result.errors.push("Missing environment variables: ZKTECO_BASE_URL, ZKTECO_USERNAME, or ZKTECO_PASSWORD");
+      console.log(`Sync failed for ${userId}: ZKTeco not configured`);
       return result;
     }
 
@@ -47,14 +50,18 @@ export async function syncEmployeeTimeData(userId: string, date: Date): Promise<
     if (!user) {
       result.message = "User not found";
       result.errors.push(`User with ID ${userId} not found`);
+      console.log(`Sync failed: User ${userId} not found`);
       return result;
     }
 
     if (!user.attendanceId) {
       result.message = `Employee ${user.firstName} ${user.lastName} has no attendance ID`;
       result.errors.push("AttendanceId is required for ZKTeco sync");
+      console.log(`Sync failed: ${user.firstName} ${user.lastName} has no attendanceId`);
       return result;
     }
+
+    console.log(`Found employee: ${user.firstName} ${user.lastName} with attendanceId: ${user.attendanceId}`);
 
     // Get or create daily time record for the date
     let timeRecord = await prisma.dailyTimeRecord.findUnique({
@@ -70,19 +77,40 @@ export async function syncEmployeeTimeData(userId: string, date: Date): Promise<
     if (!timeRecord) {
       result.message = `No time record found for ${user.firstName} ${user.lastName} on ${format(date, "yyyy-MM-dd")}`;
       result.skippedRecords = 1;
+      console.log(`Sync skipped: No time record for ${user.firstName} ${user.lastName} on ${format(date, "yyyy-MM-dd")}`);
       return result;
     }
+
+    console.log(`Found time record for ${format(date, "yyyy-MM-dd")}:`, {
+      status: timeRecord.status,
+      hasCheckIn: !!timeRecord.actualCheckIn,
+      hasCheckOut: !!timeRecord.actualCheckOut,
+      hasBreakTime: !!timeRecord.actualBreakTime
+    });
 
     // Check if the record already has all the data (skip if all fields are filled)
     const hasAllData = timeRecord.actualCheckIn && timeRecord.actualCheckOut && timeRecord.actualBreakTime;
     if (hasAllData) {
       result.message = `Time record for ${user.firstName} ${user.lastName} on ${format(date, "yyyy-MM-dd")} already has complete data`;
       result.skippedRecords = 1;
+      console.log(`Sync skipped: Record already complete for ${user.firstName} ${user.lastName} on ${format(date, "yyyy-MM-dd")}`);
       return result;
     }
 
+    console.log(`Fetching ZKTeco data for employee code: ${user.attendanceId} on ${format(date, "yyyy-MM-dd")}`);
+    console.log(`Database date being passed to ZKTeco service: ${date.toISOString()}`);
+
     // Fetch data from ZKTeco API
     const timeData = await zkTecoService.getEmployeeTimeData(user.attendanceId, date);
+    
+    console.log(`ZKTeco response for ${user.attendanceId}:`, {
+      hasCheckIn: !!timeData.actualCheckIn,
+      hasCheckOut: !!timeData.actualCheckOut,  
+      hasBreakTime: !!timeData.actualBreakTime,
+      checkIn: timeData.actualCheckIn?.toISOString(),
+      checkOut: timeData.actualCheckOut?.toISOString(),
+      breakTime: timeData.actualBreakTime
+    });
 
     // Prepare update data (only update empty fields)
     const updateData: any = {};
@@ -91,23 +119,29 @@ export async function syncEmployeeTimeData(userId: string, date: Date): Promise<
     if (!timeRecord.actualCheckIn && timeData.actualCheckIn) {
       updateData.actualCheckIn = timeData.actualCheckIn;
       hasUpdates = true;
+      console.log(`Will update checkIn: ${timeData.actualCheckIn.toISOString()}`);
     }
 
     if (!timeRecord.actualCheckOut && timeData.actualCheckOut) {
       updateData.actualCheckOut = timeData.actualCheckOut;
       hasUpdates = true;
+      console.log(`Will update checkOut: ${timeData.actualCheckOut.toISOString()}`);
     }
 
     if (!timeRecord.actualBreakTime && timeData.actualBreakTime) {
       updateData.actualBreakTime = timeData.actualBreakTime;
       hasUpdates = true;
+      console.log(`Will update breakTime: ${timeData.actualBreakTime}`);
     }
 
     if (!hasUpdates) {
       result.message = `No new data available for ${user.firstName} ${user.lastName} on ${format(date, "yyyy-MM-dd")}`;
       result.skippedRecords = 1;
+      console.log(`Sync skipped: No new data available for ${user.firstName} ${user.lastName} on ${format(date, "yyyy-MM-dd")}`);
       return result;
     }
+
+    console.log(`Updating database for ${user.firstName} ${user.lastName} with:`, updateData);
 
     // Update the time record
     await prisma.dailyTimeRecord.update({
@@ -123,6 +157,7 @@ export async function syncEmployeeTimeData(userId: string, date: Date): Promise<
     result.success = true;
     result.syncedRecords = 1;
     result.message = `Successfully synced time data for ${user.firstName} ${user.lastName} on ${format(date, "yyyy-MM-dd")}`;
+    console.log(`Sync successful: Updated ${user.firstName} ${user.lastName} for ${format(date, "yyyy-MM-dd")}`);
   } catch (error) {
     console.error("Error syncing employee time data:", error);
     result.message = "An error occurred while syncing time data";
@@ -145,10 +180,21 @@ export async function syncEmployeeTimeDataRange(userId: string, days: number = 4
   };
 
   try {
+    console.log(`Starting sync range for user ${userId}, ${days} days`);
+    
     const today = new Date();
-    const dates = Array.from({ length: days }, (_, i) => subDays(today, i));
+    // Generate dates array using startOfDay to handle Bangladesh timezone correctly
+    const dates = Array.from({ length: days }, (_, i) => {
+      const date = subDays(today, i);  
+      const startOfDayDate = startOfDay(date); // This handles timezone correctly
+      console.log(`Date ${i}: ${date.toISOString()} -> startOfDay: ${startOfDayDate.toISOString()}`);
+      return startOfDayDate;
+    });
+
+    console.log(`Processing ${dates.length} dates for user ${userId}`);
 
     for (const date of dates) {
+      console.log(`\n=== Processing date: ${date.toISOString()} ===`);
       const dayResult = await syncEmployeeTimeData(userId, date);
       
       result.syncedRecords += dayResult.syncedRecords;
@@ -158,6 +204,13 @@ export async function syncEmployeeTimeDataRange(userId: string, days: number = 4
       if (!dayResult.success && dayResult.errors.length > 0) {
         result.success = false;
       }
+      
+      console.log(`Date ${date.toISOString().split('T')[0]} result:`, {
+        success: dayResult.success,
+        synced: dayResult.syncedRecords,
+        skipped: dayResult.skippedRecords,
+        message: dayResult.message
+      });
     }
 
     if (result.syncedRecords === 0 && result.skippedRecords === 0) {
@@ -167,6 +220,14 @@ export async function syncEmployeeTimeDataRange(userId: string, days: number = 4
     } else {
       result.message = `Skipped ${result.skippedRecords} record(s) (already complete or no data available)`;
     }
+    
+    console.log(`\nSync Range Summary:`, {
+      totalSynced: result.syncedRecords,
+      totalSkipped: result.skippedRecords,
+      success: result.success,
+      message: result.message
+    });
+    
   } catch (error) {
     console.error("Error syncing employee time data range:", error);
     result.success = false;
@@ -262,10 +323,31 @@ export async function syncAllEmployeesTimeData(days: number = 4): Promise<SyncRe
  * Manual sync function for UI - syncs specific user for today and past 3 days
  */
 export async function manualSyncEmployee(userId: string): Promise<SyncResult> {
-  const result = await syncEmployeeTimeDataRange(userId, 4); // Today + 3 days back
+  console.log(`Starting manual sync for user: ${userId}`);
   
-  // Revalidate the timeline page to show updated data
-  revalidatePath("/admin/timeline");
-  
-  return result;
+  try {
+    const result = await syncEmployeeTimeDataRange(userId, 4); // Today + 3 days back
+    
+    console.log(`Manual sync completed for user: ${userId}`, {
+      success: result.success,
+      syncedRecords: result.syncedRecords,
+      skippedRecords: result.skippedRecords,
+      message: result.message,
+      errors: result.errors
+    });
+    
+    // Revalidate the timeline page to show updated data
+    revalidatePath("/admin/timeline");
+    
+    return result;
+  } catch (error) {
+    console.error(`Manual sync failed for user: ${userId}`, error);
+    return {
+      success: false,
+      message: `Manual sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      syncedRecords: 0,
+      skippedRecords: 0,
+      errors: [error instanceof Error ? error.message : 'Unknown error']
+    };
+  }
 }
