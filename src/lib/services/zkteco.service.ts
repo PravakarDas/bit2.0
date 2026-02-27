@@ -98,10 +98,20 @@ class ZKTecoService {
       }
     }
 
-    const startTime = format(startOfDay(date), 'yyyy-MM-dd HH:mm:ss');
-    const endTime = format(endOfDay(date), 'yyyy-MM-dd HH:mm:ss');
+    // Convert database UTC date to Bangladesh date for ZKTeco query
+    // Database stores dates like 2026-02-26T18:00:00.000Z which represents Feb 27 in Bangladesh
+    // We need to query ZKTeco for Feb 27, not Feb 26
+    const bangladeshDate = new Date(date.getTime() + (6 * 60 * 60 * 1000)); // Add 6 hours for Bangladesh timezone
+    const queryDate = format(bangladeshDate, 'yyyy-MM-dd');
+    
+    console.log(`ZKTeco query: DB date ${date.toISOString()} -> Bangladesh date ${bangladeshDate.toISOString()} -> Query date ${queryDate}`);
+
+    const startTime = `${queryDate} 00:00:00`;
+    const endTime = `${queryDate} 23:59:59`;
 
     const url = `${this.baseUrl}/iclock/api/transactions/?emp_code=${empCode}&start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}`;
+
+    console.log(`ZKTeco API URL: ${url}`);
 
     try {
       const response = await fetch(url, {
