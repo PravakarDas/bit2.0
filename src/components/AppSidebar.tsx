@@ -24,6 +24,7 @@ import {
     Zap,
     Bell,
     ClipboardList,
+    UserCog,
 } from "lucide-react";
 
 import {
@@ -54,6 +55,7 @@ import { NotificationWithBadge } from "@/components/NotificationWithBadge";
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
     { title: "Notifications", url: "/admin/notifications", icon: Bell },
+    { title: "Role Management", url: "/admin/role-management", icon: UserCog },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
     { title: "Loan", url: "/admin/loans", icon: Banknote },
     { title: "Medical", url: "/admin/medical", icon: Stethoscope },
@@ -76,6 +78,16 @@ const payrollSubItems = [
 const requestSubItems = [
     { title: "Profile Requests", url: "/admin/profile-requests", icon: FileCheck },
     { title: "Leave Applications", url: "/admin/leave-applications", icon: History },
+];
+
+const managerItems = [
+    { title: "Dashboard", url: "/manager", icon: LayoutDashboard },
+    { title: "Team Management", url: "/manager/employees", icon: Users },
+    { title: "Leave Requests", url: "/manager/leave-requests", icon: ScrollText },
+    { title: "Profile Requests", url: "/manager/profile-requests", icon: FileCheck },
+    { title: "Team Timeline", url: "/manager/timeline", icon: Clock },
+    { title: "Calendar", url: "/calendar", icon: CalendarDays },
+    { title: "Reports", url: "/manager/reports", icon: FileCheck },
 ];
 
 const employeeItems = [
@@ -102,7 +114,14 @@ const organizationSubItems = [
 export function AppSidebar({ role }: { role: string }) {
     const pathname = usePathname();
     const router = useRouter();
-    const items = role === "SUPERADMIN" ? adminItems : employeeItems;
+    
+    // Determine navigation items based on role
+    const items = role === "SUPERADMIN" 
+        ? adminItems 
+        : role === "MANAGER" 
+        ? managerItems 
+        : employeeItems;
+    
     const [isOrganizationOpen, setIsOrganizationOpen] = React.useState(false);
     const [isEmployeeOpen, setIsEmployeeOpen] = React.useState(false);
     const [isPayrollOpen, setIsPayrollOpen] = React.useState(false);
