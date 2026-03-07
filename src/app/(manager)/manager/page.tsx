@@ -6,6 +6,36 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Users, FileCheck, Calendar, ClipboardList, TrendingUp, AlertCircle, Banknote, DollarSign } from "lucide-react";
 
+interface TeamMember {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    imageUrl: string | null;
+    role: string;
+    designation?: {
+        id: string;
+        name: string;
+    } | null;
+    department?: {
+        id: string;
+        name: string;
+    } | null;
+}
+
+interface ManagerDashboardStats {
+    totalEmployees: number;
+    pendingLeaves: number;
+    pendingRequests: number;
+    monthlyAttendance: number;
+    todayAbsent: number;
+    upcomingLeaves: number;
+    activeLoans: number;
+    totalSalaryBudget: number;
+    averageSalary?: number;
+    teamMembers?: TeamMember[];
+}
+
 export default async function ManagerDashboard() {
     const user = await getDbUser();
 
@@ -17,7 +47,7 @@ export default async function ManagerDashboard() {
         redirect("/unauthorized");
     }
 
-    const stats = await getManagerDashboardData();
+    const stats: any = await getManagerDashboardData();
 
     const dashboardCards = [
         {
@@ -126,7 +156,7 @@ export default async function ManagerDashboard() {
                     <CardContent>
                         <div className="space-y-4">
                             {stats.teamMembers && stats.teamMembers.length > 0 ? (
-                                stats.teamMembers.map((member) => (
+                                stats.teamMembers.map((member: TeamMember) => (
                                     <div key={member.id} className="flex items-center space-x-3">
                                         <Avatar className="h-8 w-8">
                                             <AvatarImage src={member.imageUrl || undefined} />

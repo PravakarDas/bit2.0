@@ -174,10 +174,10 @@ export async function getManagerDashboardData() {
             where: {
                 userId: { in: teamMemberIds },
                 status: "APPROVED",
-                startDate: {
-                    gte: new Date(),
-                    lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-                }
+                // startDate: {
+                //     gte: new Date(),
+                //     lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                // }
             }
         }) || Promise.resolve(4), // Mock value
 

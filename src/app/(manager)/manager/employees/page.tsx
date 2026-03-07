@@ -6,7 +6,29 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, UserCog, Mail, Phone, Building, Calendar, Users } from "lucide-react";
+import { Search, UserCog, Mail, Building, Calendar, Users } from "lucide-react";
+
+interface TeamMember {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    imageUrl: string | null;
+    role: string;
+    dateOfJoining: Date | null;
+    department?: {
+        id: string;
+        name: string;
+    } | null;
+    designation?: {
+        id: string;
+        name: string;
+    } | null;
+    branch?: {
+        id: string;
+        name: string;
+    } | null;
+}
 
 export default async function ManagerEmployees() {
     const user = await getDbUser();
@@ -19,7 +41,7 @@ export default async function ManagerEmployees() {
         redirect("/unauthorized");
     }
 
-    const teamMembers = await getManagerTeamMembers();
+    const teamMembers: TeamMember[] = await getManagerTeamMembers();
 
     return (
         <div className="space-y-6">
@@ -69,7 +91,7 @@ export default async function ManagerEmployees() {
             {/* Team Members Grid */}
             {teamMembers.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {teamMembers.map((member) => (
+                    {teamMembers.map((member: TeamMember) => (
                         <Card key={member.id} className="hover:shadow-md transition-shadow">
                             <CardHeader className="pb-3">
                                 <div className="flex items-center justify-between">
@@ -169,19 +191,19 @@ export default async function ManagerEmployees() {
                             </div>
                             <div className="text-center">
                                 <div className="text-2xl font-bold">
-                                    {teamMembers.filter(m => m.department).length}
+                                    {teamMembers.filter((m: TeamMember) => m.department).length}
                                 </div>
                                 <div className="text-sm text-muted-foreground">In Departments</div>
                             </div>
                             <div className="text-center">
                                 <div className="text-2xl font-bold">
-                                    {teamMembers.filter(m => m.branch).length}
+                                    {teamMembers.filter((m: TeamMember) => m.branch).length}
                                 </div>
                                 <div className="text-sm text-muted-foreground">Assigned Branches</div>
                             </div>
                             <div className="text-center">
                                 <div className="text-2xl font-bold">
-                                    {teamMembers.filter(m => m.designation).length}
+                                    {teamMembers.filter((m: TeamMember) => m.designation).length}
                                 </div>
                                 <div className="text-sm text-muted-foreground">With Designations</div>
                             </div>

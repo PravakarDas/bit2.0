@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getDbUser } from "./user.actions";
 
 export async function getBranches() {
     return await prisma.branch.findMany({
@@ -24,6 +25,11 @@ export async function createBranch(data: {
     breakDuration?: string;
     weeklyOffDays?: string[];
 }) {
+    const user = await getDbUser();
+    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) {
+        throw new Error("Unauthorized");
+    }
+
     try {
         const branch = await prisma.branch.create({
             data: {
@@ -44,6 +50,11 @@ export async function createBranch(data: {
 }
 
 export async function toggleBranchStatus(id: string, isActive: boolean) {
+    const user = await getDbUser();
+    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) {
+        throw new Error("Unauthorized");
+    }
+
     try {
         const branch = await prisma.branch.update({
             where: { id },
@@ -90,6 +101,11 @@ export async function updateBranchTimelineSettings(branchId: string, data: {
     breakDuration: string;
     weeklyOffDays: string[];
 }) {
+    const user = await getDbUser();
+    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) {
+        throw new Error("Unauthorized");
+    }
+
     try {
         const branch = await prisma.branch.update({
             where: { id: branchId },
@@ -116,6 +132,11 @@ export async function updateBranch(id: string, data: {
     breakDuration?: string;
     weeklyOffDays?: string[];
 }) {
+    const user = await getDbUser();
+    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) {
+        throw new Error("Unauthorized");
+    }
+
     try {
         const branch = await prisma.branch.update({
             where: { id },

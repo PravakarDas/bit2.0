@@ -6,7 +6,7 @@ import { getDbUser } from "./user.actions";
 
 export async function getAllDepartments(includeInactive = false) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
+  if (!admin || !["SUPERADMIN", "MANAGER"].includes(admin.role)) {
     throw new Error("Unauthorized");
   }
 
@@ -38,7 +38,7 @@ export async function getActiveDepartments() {
 
 export async function getDepartmentById(id: string) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
+  if (!admin || !["SUPERADMIN", "MANAGER"].includes(admin.role)) {
     throw new Error("Unauthorized");
   }
 
@@ -66,7 +66,7 @@ export async function createDepartment(data: {
 }) {
   const admin = await getDbUser();
   if (!admin || admin.role !== "SUPERADMIN") {
-    throw new Error("Unauthorized");
+    throw new Error("Unauthorized - Only Super Admins can create departments");
   }
 
   try {
@@ -95,7 +95,7 @@ export async function updateDepartment(id: string, data: {
 }) {
   const admin = await getDbUser();
   if (!admin || admin.role !== "SUPERADMIN") {
-    throw new Error("Unauthorized");
+    throw new Error("Unauthorized - Only Super Admins can update departments");
   }
 
   try {
@@ -129,7 +129,7 @@ export async function updateDepartment(id: string, data: {
 export async function toggleDepartmentStatus(id: string) {
   const admin = await getDbUser();
   if (!admin || admin.role !== "SUPERADMIN") {
-    throw new Error("Unauthorized");
+    throw new Error("Unauthorized - Only Super Admins can toggle department status");
   }
 
   try {
@@ -157,7 +157,7 @@ export async function toggleDepartmentStatus(id: string) {
 export async function deleteDepartment(id: string) {
   const admin = await getDbUser();
   if (!admin || admin.role !== "SUPERADMIN") {
-    throw new Error("Unauthorized");
+    throw new Error("Unauthorized - Only Super Admins can delete departments");
   }
 
   try {

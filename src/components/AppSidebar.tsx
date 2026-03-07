@@ -70,6 +70,11 @@ const employeeSubItems = [
     { title: "Archived Employees", url: "/admin/archived-employees", icon: Archive },
 ];
 
+const managerEmployeeSubItems = [
+    { title: "Employee Management", url: "/manager/employees", icon: Users },
+    { title: "Archived Employees", url: "/manager/archived-employees", icon: Archive },
+];
+
 const payrollSubItems = [
     { title: "Process Payroll", url: "/admin/payroll", icon: Zap },
     { title: "Processed Payroll", url: "/admin/payroll/processed", icon: FileCheck },
@@ -80,14 +85,20 @@ const requestSubItems = [
     { title: "Leave Applications", url: "/admin/leave-applications", icon: History },
 ];
 
+const managerRequestSubItems = [
+    { title: "Profile Requests", url: "/manager/profile-requests", icon: FileCheck },
+    { title: "Leave Applications", url: "/manager/leave-requests", icon: History },
+];
+
 const managerItems = [
     { title: "Dashboard", url: "/manager", icon: LayoutDashboard },
-    { title: "Team Management", url: "/manager/employees", icon: Users },
-    { title: "Leave Requests", url: "/manager/leave-requests", icon: ScrollText },
-    { title: "Profile Requests", url: "/manager/profile-requests", icon: FileCheck },
-    { title: "Team Timeline", url: "/manager/timeline", icon: Clock },
+    { title: "Notifications", url: "/manager/notifications", icon: Bell },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
-    { title: "Reports", url: "/manager/reports", icon: FileCheck },
+    { title: "Medical", url: "/manager/medical", icon: Stethoscope },
+    { title: "OT/UT Payouts", url: "/manager/overtime-payouts", icon: CircleDollarSign },
+    { title: "Overtime Requests", url: "/manager/overtime-requests", icon: ClipboardList },
+    { title: "Timeline", url: "/manager/timeline", icon: Clock },
+    { title: "Wallet", url: "/manager/wallet", icon: Wallet },
 ];
 
 const employeeItems = [
@@ -104,6 +115,14 @@ const employeeItems = [
 ];
 
 const organizationSubItems = [
+    { title: "Branches", icon: Building2, hash: "#branches" },
+    { title: "Departments & Designations", icon: Briefcase, hash: "#departments" },
+    { title: "Bonuses", icon: Gift, hash: "#bonuses" },
+    { title: "Allowances", icon: DollarSign, hash: "#allowances" },
+    { title: "Leave Types", icon: CalendarDays, hash: "#leave-types" },
+];
+
+const managerOrganizationSubItems = [
     { title: "Branches", icon: Building2, hash: "#branches" },
     { title: "Departments & Designations", icon: Briefcase, hash: "#departments" },
     { title: "Bonuses", icon: Gift, hash: "#bonuses" },
@@ -129,23 +148,29 @@ export function AppSidebar({ role }: { role: string }) {
 
     // Auto-open menus based on current page
     React.useEffect(() => {
-        if (pathname === "/admin/organization") {
+        const orgPaths = ["/admin/organization", "/manager/organization"];
+        const employeePaths = ["/admin/employees", "/admin/archived-employees", "/manager/employees", "/manager/archived-employees"];
+        const payrollPaths = ["/admin/payroll", "/admin/payroll/processed"];
+        const requestPaths = ["/admin/profile-requests", "/admin/leave-applications", "/manager/profile-requests", "/manager/leave-requests"];
+        
+        if (orgPaths.some(path => pathname === path)) {
             setIsOrganizationOpen(true);
         }
-        if (pathname === "/admin/employees" || pathname === "/admin/archived-employees") {
+        if (employeePaths.some(path => pathname === path)) {
             setIsEmployeeOpen(true);
         }
-        if (pathname === "/admin/payroll" || pathname === "/admin/payroll/processed") {
+        if (payrollPaths.some(path => pathname === path)) {
             setIsPayrollOpen(true);
         }
-        if (pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications") {
+        if (requestPaths.some(path => pathname === path)) {
             setIsRequestOpen(true);
         }
     }, [pathname]);
 
     const handleSubItemClick = (hash: string) => {
+        const baseUrl = role === "MANAGER" ? "/manager/organization" : "/admin/organization";
         // Update URL with the hash
-        router.push(`/admin/organization${hash}`, { scroll: false });
+        router.push(`${baseUrl}${hash}`, { scroll: false });
         
         // Scroll to the element
         setTimeout(() => {
@@ -179,7 +204,7 @@ export function AppSidebar({ role }: { role: string }) {
                                 <SidebarMenuItem key={item.title}>
                                     <SidebarMenuButton asChild isActive={pathname === item.url} tooltip={item.title}>
                                         <Link href={item.url}>
-                                            {item.title === "Notifications" && role === "SUPERADMIN" ? (
+                                            {item.title === "Notifications" && (role === "SUPERADMIN" || role === "MANAGER") ? (
                                                 <NotificationWithBadge>
                                                     <item.icon className="h-4 w-4" />
                                                 </NotificationWithBadge>
@@ -228,13 +253,19 @@ export function AppSidebar({ role }: { role: string }) {
                                 </Collapsible>
                             )}
                             
-                            {/* Employee Collapsible Menu (Admin Only) */}
-                            {role === "SUPERADMIN" && (
+                            {/* Employee Collapsible Menu (Admin & Manager) */}
+                            {(role === "SUPERADMIN" || role === "MANAGER") && (
                                 <Collapsible open={isEmployeeOpen} onOpenChange={setIsEmployeeOpen}>
                                     <SidebarMenuItem>
                                         <CollapsibleTrigger asChild>
                                             <SidebarMenuButton 
-                                                isActive={pathname === "/admin/employees" || pathname === "/admin/archived-employees"}
+                                                isActive={(
+                                                    role === "SUPERADMIN" && 
+                                                    (pathname === "/admin/employees" || pathname === "/admin/archived-employees")
+                                                ) || (
+                                                    role === "MANAGER" && 
+                                                    (pathname === "/manager/employees" || pathname === "/manager/archived-employees")
+                                                )}
                                                 tooltip="Employee"
                                             >
                                                 <Users className="h-4 w-4" />
@@ -248,7 +279,7 @@ export function AppSidebar({ role }: { role: string }) {
                                         </CollapsibleTrigger>
                                         <CollapsibleContent>
                                             <SidebarMenuSub>
-                                                {employeeSubItems.map((subItem) => (
+                                                {(role === "SUPERADMIN" ? employeeSubItems : managerEmployeeSubItems).map((subItem) => (
                                                     <SidebarMenuSubItem key={subItem.title}>
                                                         <SidebarMenuSubButton asChild isActive={pathname === subItem.url}>
                                                             <Link href={subItem.url}>
@@ -264,13 +295,17 @@ export function AppSidebar({ role }: { role: string }) {
                                 </Collapsible>
                             )}
 
-                            {/* Organizational Settings Collapsible Menu (Admin Only) */}
-                            {role === "SUPERADMIN" && (
+                            {/* Organizational Settings Collapsible Menu (Admin & Manager) */}
+                            {(role === "SUPERADMIN" || role === "MANAGER") && (
                                 <Collapsible open={isOrganizationOpen} onOpenChange={setIsOrganizationOpen}>
                                     <SidebarMenuItem>
                                         <CollapsibleTrigger asChild>
                                             <SidebarMenuButton 
-                                                isActive={pathname === "/admin/organization"}
+                                                isActive={(
+                                                    role === "SUPERADMIN" && pathname === "/admin/organization"
+                                                ) || (
+                                                    role === "MANAGER" && pathname === "/manager/organization"
+                                                )}
                                                 tooltip="Organizational Settings"
                                             >
                                                 <Building2 className="h-4 w-4" />
@@ -284,13 +319,14 @@ export function AppSidebar({ role }: { role: string }) {
                                         </CollapsibleTrigger>
                                         <CollapsibleContent>
                                             <SidebarMenuSub>
-                                                {organizationSubItems.map((subItem) => (
+                                                {(role === "SUPERADMIN" ? organizationSubItems : managerOrganizationSubItems).map((subItem) => (
                                                     <SidebarMenuSubItem key={subItem.title}>
                                                         <SidebarMenuSubButton asChild>
                                                             <Link 
-                                                                href={`/admin/organization${subItem.hash}`}
+                                                                href={`${role === "MANAGER" ? "/manager" : "/admin"}/organization${subItem.hash}`}
                                                                 onClick={(e) => {
-                                                                    if (pathname === "/admin/organization") {
+                                                                    const currentOrgPath = role === "MANAGER" ? "/manager/organization" : "/admin/organization";
+                                                                    if (pathname === currentOrgPath) {
                                                                         e.preventDefault();
                                                                         handleSubItemClick(subItem.hash);
                                                                     }
@@ -308,13 +344,19 @@ export function AppSidebar({ role }: { role: string }) {
                                 </Collapsible>
                             )}
 
-                            {/* Request Collapsible Menu (Admin Only) */}
-                            {role === "SUPERADMIN" && (
+                            {/* Request Collapsible Menu (Admin & Manager) */}
+                            {(role === "SUPERADMIN" || role === "MANAGER") && (
                                 <Collapsible open={isRequestOpen} onOpenChange={setIsRequestOpen}>
                                     <SidebarMenuItem>
                                         <CollapsibleTrigger asChild>
                                             <SidebarMenuButton 
-                                                isActive={pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications"}
+                                                isActive={(
+                                                    role === "SUPERADMIN" && 
+                                                    (pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications")
+                                                ) || (
+                                                    role === "MANAGER" && 
+                                                    (pathname === "/manager/profile-requests" || pathname === "/manager/leave-requests")
+                                                )}
                                                 tooltip="Request"
                                             >
                                                 <FileCheck className="h-4 w-4" />
@@ -328,7 +370,7 @@ export function AppSidebar({ role }: { role: string }) {
                                         </CollapsibleTrigger>
                                         <CollapsibleContent>
                                             <SidebarMenuSub>
-                                                {requestSubItems.map((subItem) => (
+                                                {(role === "SUPERADMIN" ? requestSubItems : managerRequestSubItems).map((subItem) => (
                                                     <SidebarMenuSubItem key={subItem.title}>
                                                         <SidebarMenuSubButton asChild isActive={pathname === subItem.url}>
                                                             <Link href={subItem.url}>

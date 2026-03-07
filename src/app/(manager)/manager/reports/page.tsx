@@ -21,7 +21,7 @@ export default async function ManagerReports() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Team Reports</h1>
                     <p className="text-muted-foreground">
-                        Generate insights and reports for your team's performance
+                        Generate insights and reports for your team&apos;s performance
                     </p>
                 </div>
                 <Badge variant="outline">

@@ -36,7 +36,7 @@ export async function getMyWalletRequests() {
 
 export async function getAllWalletRequests() {
     const user = await getDbUser();
-    if (!user || !["SUPERADMIN", "HR"].includes(user.role)) {
+    if (!user || !["SUPERADMIN", "HR", "MANAGER"].includes(user.role)) {
         throw new Error("Unauthorized");
     }
 
@@ -48,7 +48,7 @@ export async function getAllWalletRequests() {
 
 export async function updateWalletRequestStatus(requestId: string, status: WalletRequestStatus) {
     const admin = await getDbUser();
-    if (!admin || !["SUPERADMIN", "HR"].includes(admin.role)) {
+    if (!admin || !["SUPERADMIN", "HR", "MANAGER"].includes(admin.role)) {
         throw new Error("Unauthorized");
     }
 
@@ -93,7 +93,7 @@ export async function updateWalletRequestStatus(requestId: string, status: Walle
 
 export async function adjustWalletBalance(userId: string, amount: number, description: string) {
     const admin = await getDbUser();
-    if (!admin || !["SUPERADMIN", "HR"].includes(admin.role)) {
+    if (!admin || !["SUPERADMIN", "HR", "MANAGER"].includes(admin.role)) {
         throw new Error("Unauthorized");
     }
 
@@ -128,7 +128,7 @@ export async function getMyWalletTransactions() {
 
 export async function getWalletTransactionsForUser(userId: string) {
     const admin = await getDbUser();
-    if (!admin || !["SUPERADMIN", "HR"].includes(admin.role)) {
+    if (!admin || !["SUPERADMIN", "HR", "MANAGER"].includes(admin.role)) {
         throw new Error("Unauthorized");
     }
 
@@ -140,7 +140,7 @@ export async function getWalletTransactionsForUser(userId: string) {
 
 export async function getWalletRequestsForUser(userId: string) {
     const admin = await getDbUser();
-    if (!admin || !["SUPERADMIN", "HR"].includes(admin.role)) {
+    if (!admin || !["SUPERADMIN", "HR", "MANAGER"].includes(admin.role)) {
         throw new Error("Unauthorized");
     }
 
@@ -152,7 +152,7 @@ export async function getWalletRequestsForUser(userId: string) {
 
 export async function getAllWalletTransactionsHistory() {
     const admin = await getDbUser();
-    if (!admin || !["SUPERADMIN", "HR"].includes(admin.role)) {
+    if (!admin || !["SUPERADMIN", "HR", "MANAGER"].includes(admin.role)) {
         throw new Error("Unauthorized");
     }
 
@@ -196,7 +196,7 @@ export async function getAllWalletTransactionsHistory() {
 
 export async function getAllEmployeeWalletBalances() {
     const admin = await getDbUser();
-    if (!admin || !["SUPERADMIN", "HR"].includes(admin.role)) {
+    if (!admin || !["SUPERADMIN", "HR", "MANAGER"].includes(admin.role)) {
         throw new Error("Unauthorized");
     }
 

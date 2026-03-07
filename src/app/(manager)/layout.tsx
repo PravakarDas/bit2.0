@@ -21,6 +21,7 @@ export default async function ManagerLayout({
     }
 
     // Security: Check for MANAGER or SUPERADMIN role
+    // Managers now have access to most admin features except payroll, loans, and role management
     if (!["MANAGER", "SUPERADMIN"].includes(user.role)) {
         redirect("/unauthorized");
     }

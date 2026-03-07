@@ -20,8 +20,9 @@ export default async function AdminLayout({
         redirect("/pending");
     }
 
-    // Security: Check for SUPERADMIN role
-    if (user.role !== "SUPERADMIN") {
+    // Security: Check for SUPERADMIN or MANAGER role
+    // Managers now have access to most admin features except specific restrictions in individual pages
+    if (!["SUPERADMIN", "MANAGER"].includes(user.role)) {
         redirect("/unauthorized");
     }
 

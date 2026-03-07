@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { EmployeeStatus } from "@prisma/client";
 import type { AdminNotification } from "@prisma/client";
+import { getDbUser } from "./user.actions";
 
 // Create admin notification
 export async function createAdminNotification(data: {
@@ -32,6 +33,11 @@ export async function createAdminNotification(data: {
 
 // Get unread notifications for admin
 export async function getUnreadNotifications() {
+  const user = await getDbUser();
+  if (!user || !['SUPERADMIN', 'MANAGER', 'HR'].includes(user.role)) {
+    throw new Error("Unauthorized");
+  }
+
   try {
     const notifications = await prisma.adminNotification.findMany({
       where: {
