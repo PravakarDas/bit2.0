@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { applyForLeave } from "@/actions/leave.actions";
+import { useState, useEffect } from "react";
+import { applyForLeave, checkAllHolidays } from "@/actions/leave.actions";
 import { toast } from "sonner";
 import {
     Dialog,
@@ -46,6 +46,16 @@ interface ApplyLeaveDialogProps {
 export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [holidayCheck, setHolidayCheck] = useState<{
+        hasAnyHoliday: boolean;
+        isPublicHoliday: boolean;
+        publicHolidayName?: string;
+        publicHolidayDescription?: string;
+        isWeeklyHoliday: boolean;
+        weeklyHolidayDay?: string;
+        branchName?: string;
+    }>({ hasAnyHoliday: false, isPublicHoliday: false, isWeeklyHoliday: false });
+    const [checkingHoliday, setCheckingHoliday] = useState(false);
     const [formData, setFormData] = useState({
         leaveTypeId: "",
         leaveDate: "",
@@ -54,6 +64,25 @@ export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps
 
     // Filter to only show leave types with remaining days
     const availableEntitlements = entitlements.filter(e => e.allocatedDays - e.usedDays > 0);
+
+    // Check for holiday when date changes
+    useEffect(() => {
+        if (formData.leaveDate) {
+            setCheckingHoliday(true);
+            checkAllHolidays(userId, formData.leaveDate)
+                .then((result) => {
+                    setHolidayCheck(result);
+                })
+                .catch(() => {
+                    setHolidayCheck({ hasAnyHoliday: false, isPublicHoliday: false, isWeeklyHoliday: false });
+                })
+                .finally(() => {
+                    setCheckingHoliday(false);
+                });
+        } else {
+            setHolidayCheck({ hasAnyHoliday: false, isPublicHoliday: false, isWeeklyHoliday: false });
+        }
+    }, [formData.leaveDate, userId]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -75,6 +104,18 @@ export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps
         
         if (selectedDate < today) {
             toast.error("Cannot apply for leave in the past");
+            return;
+        }
+
+        // Check if the selected date is a holiday
+        if (holidayCheck.hasAnyHoliday) {
+            if (holidayCheck.isPublicHoliday && holidayCheck.isWeeklyHoliday) {
+                toast.error(`Cannot apply for leave on ${holidayCheck.publicHolidayName}. This date is both a public holiday and a weekly holiday (${holidayCheck.weeklyHolidayDay?.toLowerCase()}).`);
+            } else if (holidayCheck.isPublicHoliday) {
+                toast.error(`Cannot apply for leave on ${holidayCheck.publicHolidayName}. This is a public holiday.`);
+            } else if (holidayCheck.isWeeklyHoliday) {
+                toast.error(`Cannot apply for leave on ${holidayCheck.weeklyHolidayDay?.toLowerCase()}. This is a weekly holiday for your branch.`);
+            }
             return;
         }
 
@@ -186,6 +227,36 @@ export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps
                             min={new Date().toISOString().split('T')[0]} // Prevent past dates
                             required
                         />
+                        {checkingHoliday && (
+                            <p className="text-xs text-muted-foreground">
+                                Checking for holidays...
+                            </p>
+                        )}
+                        {holidayCheck.isPublicHoliday && (
+                            <div className="p-2 bg-red-50 border border-red-200 rounded-md">
+                                <p className="text-sm text-red-600 font-medium">
+                                    ⚠️ Public Holiday: {holidayCheck.publicHolidayName}
+                                </p>
+                                {holidayCheck.publicHolidayDescription && (
+                                    <p className="text-xs text-red-500 mt-1">
+                                        {holidayCheck.publicHolidayDescription}
+                                    </p>
+                                )}
+                                <p className="text-xs text-red-500 mt-1">
+                                    Leave applications are not allowed on public holidays.
+                                </p>
+                            </div>
+                        )}
+                        {holidayCheck.isWeeklyHoliday && (
+                            <div className="p-2 bg-orange-50 border border-orange-200 rounded-md">
+                                <p className="text-sm text-orange-600 font-medium">
+                                    📅 Weekly Holiday: {holidayCheck.weeklyHolidayDay}
+                                </p>
+                                <p className="text-xs text-orange-500 mt-1">
+                                    This is a weekly holiday for your branch ({holidayCheck.branchName}). Leave applications are not allowed.
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     <div className="grid gap-2">
@@ -208,7 +279,10 @@ export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps
                         >
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={loading}>
+                        <Button 
+                            type="submit" 
+                            disabled={loading || holidayCheck.hasAnyHoliday || checkingHoliday}
+                        >
                             {loading ? "Applying..." : "Apply for Leave"}
                         </Button>
                     </div>

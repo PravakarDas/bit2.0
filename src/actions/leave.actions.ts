@@ -202,6 +202,32 @@ export async function applyForLeave(data: {
         const leaveDate = new Date(data.leaveDate);
         const currentYear = leaveDate.getFullYear();
         
+        // Get user with branch information
+        const user = await prisma.user.findUnique({
+            where: { id: data.userId },
+            include: { branch: true }
+        });
+        
+        if (!user) {
+            return { success: false, error: "User not found" };
+        }
+        
+        // Check if the selected date is a weekly holiday for this employee's branch
+        if (user.branch) {
+            const dayOfWeek = leaveDate.getDay(); // 0=Sunday, 6=Saturday
+            const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+            const currentDayName = dayNames[dayOfWeek];
+            
+            if (user.branch.weeklyOffDays?.includes(currentDayName)) {
+                return {
+                    success: false,
+                    error: `Cannot apply for leave on ${currentDayName.toLowerCase()}. This is a weekly holiday for your branch.`,
+                    isWeeklyHoliday: true,
+                    weeklyHolidayDay: currentDayName
+                };
+            }
+        }
+        
         // Check if user has entitlement for this leave type
         const entitlement = await prisma.userLeaveEntitlement.findUnique({
             where: {
@@ -223,6 +249,26 @@ export async function applyForLeave(data: {
         const remainingDays = entitlement.allocatedDays - entitlement.usedDays;
         if (remainingDays <= 0) {
             return { success: false, error: "No remaining leave days for this type" };
+        }
+        
+        // Check if the selected date is a public holiday
+        const isHoliday = await prisma.publicHoliday.findFirst({
+            where: {
+                date: {
+                    gte: new Date(leaveDate.getFullYear(), leaveDate.getMonth(), leaveDate.getDate()),
+                    lt: new Date(leaveDate.getFullYear(), leaveDate.getMonth(), leaveDate.getDate() + 1)
+                },
+                isActive: true
+            }
+        });
+        
+        if (isHoliday) {
+            return { 
+                success: false, 
+                error: `Cannot apply for leave on ${isHoliday.name} (${leaveDate.toLocaleDateString()}). This is a public holiday.`,
+                isHoliday: true,
+                holidayName: isHoliday.name
+            };
         }
         
         // Check if leave already applied for this date and type
@@ -466,5 +512,186 @@ export async function resetLeaveBalancesForNewYear() {
     } catch (error) {
         console.error("Error resetting leave balances:", error);
         return { success: false, error: "Failed to reset leave balances" };
+    }
+}
+
+// Holiday Management Functions
+export async function createPublicHoliday(data: {
+    name: string;
+    date: string; // YYYY-MM-DD format
+    description?: string;
+    isRecurring?: boolean;
+}) {
+    try {
+        const holidayDate = new Date(data.date);
+        
+        // Check if holiday already exists on this date
+        const existingHoliday = await prisma.publicHoliday.findFirst({
+            where: {
+                date: {
+                    gte: new Date(holidayDate.getFullYear(), holidayDate.getMonth(), holidayDate.getDate()),
+                    lt: new Date(holidayDate.getFullYear(), holidayDate.getMonth(), holidayDate.getDate() + 1)
+                }
+            }
+        });
+        
+        if (existingHoliday) {
+            return { success: false, error: "A holiday already exists on this date" };
+        }
+        
+        const holiday = await prisma.publicHoliday.create({
+            data: {
+                name: data.name,
+                date: holidayDate,
+                description: data.description,
+                isRecurring: data.isRecurring || false
+            }
+        });
+        
+        revalidatePath("/admin/holidays");
+        return { success: true, holiday };
+    } catch (error) {
+        console.error("Error creating holiday:", error);
+        return { success: false, error: "Failed to create holiday" };
+    }
+}
+
+export async function getPublicHolidays(year?: number) {
+    try {
+        const currentYear = year || new Date().getFullYear();
+        const startDate = new Date(currentYear, 0, 1);
+        const endDate = new Date(currentYear + 1, 0, 1);
+        
+        return await prisma.publicHoliday.findMany({
+            where: {
+                date: {
+                    gte: startDate,
+                    lt: endDate
+                },
+                isActive: true
+            },
+            orderBy: { date: "asc" }
+        });
+    } catch (error) {
+        console.error("Error fetching holidays:", error);
+        return [];
+    }
+}
+
+export async function updatePublicHoliday(id: string, data: {
+    name?: string;
+    date?: string;
+    description?: string;
+    isRecurring?: boolean;
+    isActive?: boolean;
+}) {
+    try {
+        const updateData: any = {};
+        
+        if (data.name) updateData.name = data.name;
+        if (data.date) updateData.date = new Date(data.date);
+        if (data.description !== undefined) updateData.description = data.description;
+        if (data.isRecurring !== undefined) updateData.isRecurring = data.isRecurring;
+        if (data.isActive !== undefined) updateData.isActive = data.isActive;
+        
+        const holiday = await prisma.publicHoliday.update({
+            where: { id },
+            data: updateData
+        });
+        
+        revalidatePath("/admin/holidays");
+        return { success: true, holiday };
+    } catch (error) {
+        console.error("Error updating holiday:", error);
+        return { success: false, error: "Failed to update holiday" };
+    }
+}
+
+export async function deletePublicHoliday(id: string) {
+    try {
+        await prisma.publicHoliday.delete({
+            where: { id }
+        });
+        
+        revalidatePath("/admin/holidays");
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting holiday:", error);
+        return { success: false, error: "Failed to delete holiday" };
+    }
+}
+
+export async function checkIfHoliday(date: string) {
+    try {
+        const targetDate = new Date(date);
+        const holiday = await prisma.publicHoliday.findFirst({
+            where: {
+                date: {
+                    gte: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()),
+                    lt: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1)
+                },
+                isActive: true
+            }
+        });
+        
+        return {
+            isHoliday: !!holiday,
+            holidayName: holiday?.name,
+            holidayDescription: holiday?.description
+        };
+    } catch (error) {
+        console.error("Error checking holiday:", error);
+        return { isHoliday: false };
+    }
+}
+
+export async function checkIfWeeklyHoliday(userId: string, date: string) {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: { branch: true }
+        });
+        
+        if (!user || !user.branch) {
+            return { isWeeklyHoliday: false };
+        }
+        
+        const targetDate = new Date(date);
+        const dayOfWeek = targetDate.getDay(); // 0=Sunday, 6=Saturday
+        const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+        const currentDayName = dayNames[dayOfWeek];
+        
+        const isWeeklyHoliday = user.branch.weeklyOffDays?.includes(currentDayName) || false;
+        
+        return {
+            isWeeklyHoliday,
+            weeklyHolidayDay: isWeeklyHoliday ? currentDayName : undefined,
+            branchName: user.branch.name
+        };
+    } catch (error) {
+        console.error("Error checking weekly holiday:", error);
+        return { isWeeklyHoliday: false };
+    }
+}
+
+export async function checkAllHolidays(userId: string, date: string) {
+    try {
+        const [publicHolidayResult, weeklyHolidayResult] = await Promise.all([
+            checkIfHoliday(date),
+            checkIfWeeklyHoliday(userId, date)
+        ]);
+        
+        return {
+            isPublicHoliday: publicHolidayResult.isHoliday,
+            publicHolidayName: publicHolidayResult.holidayName,
+            publicHolidayDescription: publicHolidayResult.holidayDescription,
+            isWeeklyHoliday: weeklyHolidayResult.isWeeklyHoliday,
+            weeklyHolidayDay: weeklyHolidayResult.weeklyHolidayDay,
+            branchName: weeklyHolidayResult.branchName,
+            hasAnyHoliday: publicHolidayResult.isHoliday || weeklyHolidayResult.isWeeklyHoliday
+        };
+    } catch (error) {
+        console.error("Error checking all holidays:", error);
+        return { hasAnyHoliday: false, isPublicHoliday: false, isWeeklyHoliday: false };
     }
 }

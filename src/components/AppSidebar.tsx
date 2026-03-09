@@ -57,6 +57,7 @@ const adminItems = [
     { title: "Notifications", url: "/admin/notifications", icon: Bell },
     { title: "Role Management", url: "/admin/role-management", icon: UserCog },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
+    { title: "Holiday Management", url: "/admin/holidays", icon: CalendarDays },
     { title: "Loan", url: "/admin/loans", icon: Banknote },
     { title: "Medical", url: "/admin/medical", icon: Stethoscope },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
