@@ -24,6 +24,8 @@ export async function getAvailabilityData(year: number, month: number) {
                 firstName: true,
                 lastName: true,
                 email: true,
+                personalEmail: true,
+                phoneNumber: true,
                 branch: {
                     select: {
                         name: true,
