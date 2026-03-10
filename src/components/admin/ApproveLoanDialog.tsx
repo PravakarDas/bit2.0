@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { approveLoan, getLoanDetailsForApproval } from "@/actions/loan.actions";
+import { approveLoan, getLoanDetailsForApproval, declineLoan } from "@/actions/loan.actions";
 import { toast } from "sonner";
 import {
     Dialog,
@@ -10,9 +10,21 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -28,7 +40,8 @@ import {
     AlertTriangle,
     CheckCircle,
     Clock,
-    CreditCard
+    CreditCard,
+    XCircle
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -43,10 +56,10 @@ interface LoanDetailsData {
         createdAt: Date;
         user: {
             id: string;
-            firstName: string;
-            lastName: string;
+            firstName: string | null;
+            lastName: string | null;
             email: string;
-            phoneNumber: string;
+            phoneNumber: string | null;
             baseSalary: number;
             walletBalance: number;
             dateOfJoining: Date;
@@ -87,6 +100,8 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
     const [loading, setLoading] = useState(false);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [loanDetails, setLoanDetails] = useState<LoanDetailsData | null>(null);
+    const [isDeclineDialogOpen, setIsDeclineDialogOpen] = useState(false);
+    const [declineReason, setDeclineReason] = useState('');
     const [formData, setFormData] = useState({
         issuedAmount: loan.issuedAmount,
         gracePeriodMonths: 6,
@@ -135,6 +150,29 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
         } catch (error) {
             console.error("Failed to approve loan:", error);
             const errorMessage = error instanceof Error ? error.message : "Failed to approve loan. Please try again.";
+            toast.error(errorMessage);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDecline = async () => {
+        if (!declineReason.trim()) {
+            toast.error("Please provide a reason for declining the loan");
+            return;
+        }
+        
+        setLoading(true);
+        try {
+            await declineLoan(loan.id, declineReason);
+            toast.success("Loan declined successfully");
+            setIsOpen(false);
+            setIsDeclineDialogOpen(false);
+            setDeclineReason('');
+            onApprovalSuccess?.();
+        } catch (error) {
+            console.error("Failed to decline loan:", error);
+            const errorMessage = error instanceof Error ? error.message : "Failed to decline loan. Please try again.";
             toast.error(errorMessage);
         } finally {
             setLoading(false);
@@ -448,6 +486,44 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
                                         <Button variant="outline" onClick={() => setIsOpen(false)}>
                                             Cancel
                                         </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="destructive">
+                                                    <XCircle className="mr-2 h-4 w-4" />
+                                                    Decline Loan
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Decline Loan Application</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        Please provide a reason for declining this loan application. This will be communicated to the employee.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <div className="grid gap-2 py-4">
+                                                    <Label htmlFor="decline-reason">Decline Reason</Label>
+                                                    <Textarea
+                                                        id="decline-reason"
+                                                        placeholder="Enter reason for declining the loan..."
+                                                        value={declineReason}
+                                                        onChange={(e) => setDeclineReason(e.target.value)}
+                                                        rows={4}
+                                                    />
+                                                </div>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel onClick={() => setDeclineReason('')}>
+                                                        Cancel
+                                                    </AlertDialogCancel>
+                                                    <AlertDialogAction 
+                                                        onClick={handleDecline}
+                                                        disabled={loading || !declineReason.trim()}
+                                                        className="bg-destructive hover:bg-destructive/90"
+                                                    >
+                                                        {loading ? "Declining..." : "Decline Loan"}
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
                                         <Button 
                                             onClick={handleApprove} 
                                             disabled={loading || !isValidApproval()}

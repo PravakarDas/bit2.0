@@ -25,6 +25,8 @@ interface Loan {
     status: string;
     createdAt: Date;
     userId: string;
+    declineReason?: string | null;
+    adminComments?: string | null; // Temporary field for decline reason
     user: {
         id: string;
         firstName: string;
@@ -74,9 +76,19 @@ export default function AdminLoansPage() {
         return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
     };
 
+    // Helper function to extract decline reason from adminComments (temporary)
+    const getDeclineReason = (loan: Loan) => {
+        if (loan.declineReason) return loan.declineReason;
+        if (loan.adminComments && loan.adminComments.startsWith('DECLINED:')) {
+            return loan.adminComments.replace(/^DECLINED:\s*/, '').replace(/\s*\(Declined by:.*\)$/, '');
+        }
+        return null;
+    };
+
     // Filter loans for tabs
     const pendingLoans = allLoans.filter(l => l.status === "PENDING");
     const activeLoans = allLoans.filter(l => l.status === "ACTIVE" || l.status === "CLOSED");
+    const declinedLoans = allLoans.filter(l => l.status === "DECLINED");
 
     if (loading) {
         return (
@@ -118,6 +130,7 @@ export default function AdminLoansPage() {
                 <TabsList>
                     <TabsTrigger value="pending">Pending Reviews ({pendingLoans.length})</TabsTrigger>
                     <TabsTrigger value="active">Active Portfolio ({activeLoans.length})</TabsTrigger>
+                    <TabsTrigger value="declined">Declined ({declinedLoans.length})</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="pending">
@@ -171,10 +184,25 @@ export default function AdminLoansPage() {
                                                 })}
                                             </TableCell>
                                             <TableCell className="text-right pr-6">
-                                                <ApproveLoanDialog 
-                                                    loan={loan as any} 
-                                                    onApprovalSuccess={handleApprovalSuccess}
-                                                />
+                                                {loan.status === "PENDING" ? (
+                                                    <ApproveLoanDialog 
+                                                        loan={loan as any} 
+                                                        onApprovalSuccess={handleApprovalSuccess}
+                                                    />
+                                                ) : loan.status === "DECLINED" ? (
+                                                    <div className="text-sm text-red-600">
+                                                        <div className="font-medium">Declined</div>
+                                                        {getDeclineReason(loan) && (
+                                                            <div className="text-xs text-muted-foreground mt-1">
+                                                                {getDeclineReason(loan)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <Badge variant="secondary" className="text-xs">
+                                                        {loan.status}
+                                                    </Badge>
+                                                )}
                                             </TableCell>
                                         </TableRow>
                                     ))
@@ -233,14 +261,87 @@ export default function AdminLoansPage() {
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 <Badge 
-                                                    variant={loan.status === "ACTIVE" ? "default" : "secondary"}
-                                                    className={loan.status === "ACTIVE" ? "bg-green-100 text-green-800" : ""}
+                                                    variant={
+                                                        loan.status === "ACTIVE" ? "default" : 
+                                                        loan.status === "DECLINED" ? "destructive" : 
+                                                        "secondary"
+                                                    }
+                                                    className={
+                                                        loan.status === "ACTIVE" ? "bg-green-100 text-green-800" : 
+                                                        loan.status === "DECLINED" ? "bg-red-100 text-red-800" : 
+                                                        ""
+                                                    }
                                                 >
                                                     {loan.status}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <EmiManageDialog loan={loan} />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="declined">
+                    <div className="border rounded-lg bg-card shadow-sm overflow-hidden">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-muted/50">
+                                    <TableHead className="font-semibold">Employee</TableHead>
+                                    <TableHead className="font-semibold">Department</TableHead>
+                                    <TableHead className="font-semibold text-right">Requested Amount</TableHead>
+                                    <TableHead className="font-semibold text-right">Status</TableHead>
+                                    <TableHead className="font-semibold text-center">Declined Date</TableHead>
+                                    <TableHead className="font-semibold">Decline Reason</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {declinedLoans.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                            No declined loan applications found.
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    declinedLoans.map((loan) => (
+                                        <TableRow key={loan.id} className="hover:bg-muted/30">
+                                            <TableCell>
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium">{getEmployeeName(loan.user)}</span>
+                                                    <span className="text-sm text-muted-foreground">{loan.user.email}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="text-sm">
+                                                    <div>{loan.user.department?.name || 'N/A'}</div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {loan.user.designation?.name || 'N/A'}
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums font-medium">
+                                                ৳{loan.issuedAmount.toLocaleString("en-BD")}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="destructive" className="bg-red-100 text-red-800">
+                                                    DECLINED
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-center text-muted-foreground text-sm">
+                                                {new Date(loan.createdAt).toLocaleDateString('en-US', {
+                                                    year: 'numeric',
+                                                    month: 'short',
+                                                    day: 'numeric'
+                                                })}
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="text-sm max-w-xs">
+                                                    {getDeclineReason(loan) || 'No reason provided'}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))

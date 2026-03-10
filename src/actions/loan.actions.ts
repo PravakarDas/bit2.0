@@ -573,3 +573,44 @@ export async function processMonthlyEMIs(monthStr: string) {
     revalidatePath("/admin/wallet");
     return results;
 }
+
+/**
+ * Decline a loan request.
+ * Updates loan status to DECLINED and adds decline reason.
+ */
+export async function declineLoan(
+    loanId: string,
+    declineReason: string
+) {
+    const user = await getDbUser();
+
+    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR")) {
+        throw new Error("Unauthorized");
+    }
+
+    if (!declineReason || declineReason.trim() === "") {
+        throw new Error("Decline reason is required");
+    }
+
+    // 1. Validation Logic
+    const loan = await prisma.loan.findUnique({ where: { id: loanId } });
+    if (!loan) throw new Error("Loan not found");
+    
+    if (loan.status !== "PENDING") {
+        throw new Error("Only pending loans can be declined");
+    }
+
+    return await prisma.$transaction(async (tx) => {
+        // Update the Loan record (temporary solution until migration is applied)
+        const updatedLoan = await tx.loan.update({
+            where: { id: loanId },
+            data: {
+                status: "DECLINED" as any, // Temporary fix until migration is applied
+                adminComments: `DECLINED: ${declineReason.trim()} (Declined by: ${user.id})`
+            }
+        });
+
+        revalidatePath("/admin/loans");
+        return updatedLoan;
+    });
+}
