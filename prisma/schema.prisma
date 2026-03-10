@@ -31,6 +31,7 @@ enum LoanStatus {
   APPROVED
   ACTIVE
   CLOSED
+  DECLINED
 }
 
 enum PaymentType {
@@ -434,6 +435,9 @@ model Loan {
   emiStartMonth      Int?
   emiStartYear       Int?
   approvedBy         String?
+  adminComments      String?    // Admin comments during approval
+  declineReason      String?    // Reason for declining the loan
+  declinedBy         String?    // Admin who declined the loan
 
   auditLogs AuditLog[]
 

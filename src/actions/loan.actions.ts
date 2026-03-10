@@ -3,12 +3,12 @@
 import { prisma } from "@/lib/prisma";
 import { LoanStatus, Role, TransactionType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { calculateEMI, checkLoanEligibility } from "@/lib/services/loan.service";
+import { calculateEMI, checkLoanEligibility, processLoanPayment } from "@/lib/services/loan.service";
 import { getDbUser } from "./user.actions";
 
 /**
  * Fetch all loans for admin review (Pending & Active).
- * Renamed to getAllLoans to reflect capability, though initially used for pending.
+ * Enhanced to include comprehensive employee financial context.
  */
 export async function getAllLoans() {
     const user = await getDbUser();
@@ -23,10 +23,147 @@ export async function getAllLoans() {
             createdAt: 'desc'
         },
         include: {
-            user: true,
+            user: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    phoneNumber: true,
+                    baseSalary: true,
+                    walletBalance: true,
+                    dateOfJoining: true,
+                    department: {
+                        select: {
+                            name: true
+                        }
+                    },
+                    designation: {
+                        select: {
+                            name: true
+                        }
+                    },
+                    branch: {
+                        select: {
+                            name: true
+                        }
+                    }
+                }
+            },
             emiState: true
         }
     });
+}
+
+/**
+ * Get detailed loan information for admin approval with financial context
+ */
+export async function getLoanDetailsForApproval(loanId: string) {
+    const user = await getDbUser();
+    
+    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR")) {
+        throw new Error("Unauthorized");
+    }
+    
+    const loan = await prisma.loan.findUnique({
+        where: { id: loanId },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    phoneNumber: true,
+                    baseSalary: true,
+                    walletBalance: true,
+                    dateOfJoining: true,
+                    department: {
+                        select: {
+                            name: true
+                        }
+                    },
+                    designation: {
+                        select: {
+                            name: true
+                        }
+                    },
+                    branch: {
+                        select: {
+                            name: true
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    if (!loan) {
+        throw new Error("Loan not found");
+    }
+    
+    // Get existing loans for debt calculation
+    const existingLoans = await prisma.loan.findMany({
+        where: {
+            userId: loan.userId,
+            id: { not: loanId }, // Exclude current loan
+            status: { in: ["ACTIVE", "APPROVED"] }
+        },
+        include: {
+            emiState: true
+        }
+    });
+    
+    // Get recent payment history
+    const recentPayments = await prisma.payment.findMany({
+        where: {
+            loan: {
+                userId: loan.userId
+            }
+        },
+        orderBy: {
+            createdAt: 'desc'
+        },
+        take: 5,
+        include: {
+            loan: {
+                select: {
+                    id: true,
+                    issuedAmount: true
+                }
+            }
+        }
+    });
+    
+    // Calculate financial metrics
+    const totalExistingDebt = existingLoans.reduce((sum, loan) => sum + loan.remainingPrincipal, 0);
+    const totalIssuedAmount = existingLoans.reduce((sum, loan) => sum + loan.issuedAmount, 0);
+    const totalRepaidAmount = totalIssuedAmount - totalExistingDebt;
+    const repaymentRatio = totalIssuedAmount > 0 ? (totalRepaidAmount / totalIssuedAmount) : 1;
+    
+    // Calculate exact loan limits using same employee-side logic
+    const financialMetrics = {
+        totalExistingDebt,
+        totalIssuedAmount,
+        totalRepaidAmount,
+        repaymentRatio,
+        salaryCap: loan.user.baseSalary * 0.5,  // 50% of salary (employee-side logic)
+        globalCap: 300000,                      // Hard limit (employee-side logic)
+        remainingSalaryCap: Math.max(0, (loan.user.baseSalary * 0.5) - totalExistingDebt),
+        remainingGlobalCap: Math.max(0, 300000 - totalExistingDebt),
+        maxAllowedLoan: Math.min(
+            Math.max(0, (loan.user.baseSalary * 0.5) - totalExistingDebt),
+            Math.max(0, 300000 - totalExistingDebt)
+        ),
+        meetsRepaymentRequirement: repaymentRatio >= 0.75
+    };
+    
+    return {
+        loan,
+        financialMetrics,
+        existingLoans,
+        recentPayments
+    };
 }
 
 /**
@@ -39,6 +176,7 @@ export async function approveLoan(
         issuedAmount: number;
         gracePeriodMonths: number;
         totalMonths: number;
+        adminComments?: string;
     }
 ) {
     const user = await getDbUser();
@@ -72,7 +210,8 @@ export async function approveLoan(
                 status: LoanStatus.ACTIVE,
                 emiStartMonth: startMonthDate.getMonth() + 1,
                 emiStartYear: startMonthDate.getFullYear(),
-                approvedBy: user.id
+                approvedBy: user.id,
+                adminComments: data.adminComments
             }
         });
 
@@ -117,6 +256,187 @@ export async function approveLoan(
         revalidatePath("/admin/loans");
         return updatedLoan;
     });
+}
+
+/**
+ * EMI Management Functions for Admin
+ */
+
+// Toggle EMI collection for a specific loan
+export async function toggleEmiCollection(loanId: string, enabled: boolean, reason?: string) {
+    const user = await getDbUser();
+    
+    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR")) {
+        throw new Error("Unauthorized");
+    }
+    
+    return await prisma.$transaction(async (tx) => {
+        const loan = await tx.loan.findUnique({
+            where: { id: loanId },
+            include: { emiState: true }
+        });
+        
+        if (!loan || !loan.emiState) {
+            throw new Error("Loan or EMI state not found");
+        }
+        
+        // Create audit log
+        await tx.auditLog.create({
+            data: {
+                loanId,
+                oldEmi: loan.emiState.currentEmi,
+                newEmi: enabled ? loan.emiState.currentEmi : 0,
+                changeReason: `EMI collection ${enabled ? 'enabled' : 'disabled'} by admin ${user.id}${reason ? '. Reason: ' + reason : ''}`
+            }
+        });
+        
+        // Update EMI state if disabling
+        if (!enabled) {
+            await tx.emiState.update({
+                where: { loanId },
+                data: {
+                    // Store current EMI in carryForward for later restoration
+                    carryForward: loan.emiState.carryForward + loan.emiState.currentEmi,
+                    currentEmi: 0
+                }
+            });
+        }
+        
+        revalidatePath("/admin/loans");
+        return { success: true };
+    });
+}
+
+// Skip EMI for specific month
+export async function skipEmiForMonth(loanId: string, month: string, reason: string) {
+    const user = await getDbUser();
+    
+    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR")) {
+        throw new Error("Unauthorized");
+    }
+    
+    return await prisma.$transaction(async (tx) => {
+        const loan = await tx.loan.findUnique({
+            where: { id: loanId },
+            include: { emiState: true }
+        });
+        
+        if (!loan || !loan.emiState) {
+            throw new Error("Loan not found");
+        }
+        
+        // Check if EMI already processed for this month
+        const existingPayment = await tx.payment.findFirst({
+            where: {
+                loanId,
+                payrollMonth: month,
+                type: 'EMI'
+            }
+        });
+        
+        if (existingPayment) {
+            throw new Error("EMI already processed for this month");
+        }
+        
+        // Create a skip record (payment with 0 amount)
+        await tx.payment.create({
+            data: {
+                loanId,
+                amount: 0,
+                type: 'EMI',
+                payrollMonth: month,
+            }
+        });
+        
+        // Add carry forward for skipped EMI
+        await tx.emiState.update({
+            where: { loanId },
+            data: {
+                carryForward: loan.emiState.carryForward + loan.emiState.currentEmi
+            }
+        });
+        
+        // Create audit log
+        await tx.auditLog.create({
+            data: {
+                loanId,
+                oldEmi: loan.emiState.currentEmi,
+                newEmi: loan.emiState.currentEmi, // No change to current EMI
+                changeReason: `EMI skipped for ${month} by admin ${user.id}. Reason: ${reason}`
+            }
+        });
+        
+        revalidatePath("/admin/loans");
+        return { success: true };
+    });
+}
+
+// Manual payment recording
+export async function recordManualPayment(loanId: string, amount: number, reason: string) {
+    const user = await getDbUser();
+    
+    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR")) {
+        throw new Error("Unauthorized");
+    }
+    
+    if (amount <= 0) {
+        throw new Error("Payment amount must be positive");
+    }
+    
+    // Use existing loan service for payment processing
+    const result = await processLoanPayment(loanId, amount, 'MANUAL');
+    
+    // Create audit log for manual payment
+    await prisma.auditLog.create({
+        data: {
+            loanId,
+            oldEmi: 0, // Not EMI related
+            newEmi: 0,
+            changeReason: `Manual payment of ৳${amount} recorded by admin ${user.id}. Reason: ${reason}`
+        }
+    });
+    
+    revalidatePath("/admin/loans");
+    return result;
+}
+
+// Get loan activity history for admin review
+export async function getLoanActivityHistory(loanId: string) {
+    const user = await getDbUser();
+    
+    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR")) {
+        throw new Error("Unauthorized");
+    }
+    
+    const [loan, payments, auditLogs] = await Promise.all([
+        prisma.loan.findUnique({
+            where: { id: loanId },
+            include: {
+                user: {
+                    select: {
+                        firstName: true,
+                        lastName: true,
+                        email: true
+                    }
+                },
+                emiState: true
+            }
+        }),
+        prisma.payment.findMany({
+            where: { loanId },
+            orderBy: { createdAt: 'desc' }
+        }),
+        prisma.auditLog.findMany({
+            where: { loanId },
+            orderBy: { createdAt: 'desc' }
+        })
+    ]);
+    
+    return {
+        loan,
+        payments,
+        auditLogs
+    };
 }
 
 /**
