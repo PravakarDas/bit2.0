@@ -216,7 +216,8 @@ export async function approveLoan(
         });
 
         // 3. Create the initial EmiState record
-        const initialEmi = data.gracePeriodMonths > 0 ? 0 : calculateEMI(data.issuedAmount, data.totalMonths);
+        const emiMonths = data.totalMonths - data.gracePeriodMonths;
+        const initialEmi = data.gracePeriodMonths > 0 ? 0 : calculateEMI(data.issuedAmount, emiMonths);
 
         await tx.emiState.create({
             data: {
@@ -290,14 +291,27 @@ export async function toggleEmiCollection(loanId: string, enabled: boolean, reas
             }
         });
         
-        // Update EMI state if disabling
+        // Update EMI state
         if (!enabled) {
+            // When disabling EMI, set currentEmi to 0 and add to carryForward
             await tx.emiState.update({
                 where: { loanId },
                 data: {
-                    // Store current EMI in carryForward for later restoration
                     carryForward: loan.emiState.carryForward + loan.emiState.currentEmi,
                     currentEmi: 0
+                }
+            });
+        } else {
+            // When enabling EMI, recalculate and redistribute across remaining months
+            const newEmi = await recalculateEMI(loanId, tx);
+            
+            // Log the EMI change
+            await tx.auditLog.create({
+                data: {
+                    loanId,
+                    oldEmi: 0,
+                    newEmi: newEmi,
+                    changeReason: `EMI enabled with redistribution by admin ${user.id}${reason ? '. Reason: ' + reason : ''}`
                 }
             });
         }
@@ -348,7 +362,7 @@ export async function skipEmiForMonth(loanId: string, month: string, reason: str
             }
         });
         
-        // Add carry forward for skipped EMI
+        // Add carry forward for skipped EMI and recalculate
         await tx.emiState.update({
             where: { loanId },
             data: {
@@ -356,13 +370,16 @@ export async function skipEmiForMonth(loanId: string, month: string, reason: str
             }
         });
         
+        // Recalculate and redistribute EMI across remaining months
+        const newEmi = await recalculateEMI(loanId, tx);
+        
         // Create audit log
         await tx.auditLog.create({
             data: {
                 loanId,
                 oldEmi: loan.emiState.currentEmi,
-                newEmi: loan.emiState.currentEmi, // No change to current EMI
-                changeReason: `EMI skipped for ${month} by admin ${user.id}. Reason: ${reason}`
+                newEmi: newEmi,
+                changeReason: `EMI skipped for ${month} and redistributed by admin ${user.id}. Reason: ${reason}`
             }
         });
         
@@ -512,6 +529,7 @@ export async function processMonthlyEMIs(monthStr: string) {
 
     for (const loan of activeLoans) {
         try {
+            // Check if EMI already processed for this month
             const existingPayment = await prisma.payment.findFirst({
                 where: {
                     loanId: loan.id,
@@ -525,10 +543,57 @@ export async function processMonthlyEMIs(monthStr: string) {
                 continue;
             }
 
+            // Parse the month string to check grace period
+            const [year, month] = monthStr.split('-').map(Number);
+            const currentProcessingDate = new Date(year, month - 1, 1);
+            
+            // Check if we're still in grace period
+            if (loan.emiStartMonth && loan.emiStartYear) {
+                const emiStartYear = loan.emiStartYear;
+                const emiStartMonth = loan.emiStartMonth;
+                
+                // Check if current processing month is before EMI start
+                if (year < emiStartYear || (year === emiStartYear && month < emiStartMonth)) {
+                    results.skipped++;
+                    continue; // Still in grace period
+                }
+                
+                // If grace period just ended and EMI is still 0, activate it
+                if (year === emiStartYear && month === emiStartMonth && (loan.emiState?.currentEmi || 0) === 0) {
+                    await prisma.$transaction(async (tx) => {
+                        const emiMonths = loan.totalMonths - loan.gracePeriodMonths;
+                        const newEmi = calculateEMI(loan.remainingPrincipal, emiMonths);
+                        
+                        await tx.emiState.update({
+                            where: { loanId: loan.id },
+                            data: { currentEmi: newEmi }
+                        });
+                        
+                        await tx.auditLog.create({
+                            data: {
+                                loanId: loan.id,
+                                oldEmi: 0,
+                                newEmi: newEmi,
+                                changeReason: `Grace period ended. EMI activated for ${emiMonths} months.`
+                            }
+                        });
+                    });
+                    
+                    // Refresh loan data after EMI activation
+                    const updatedLoan = await prisma.loan.findUnique({
+                        where: { id: loan.id },
+                        include: { user: true, emiState: true }
+                    });
+                    if (updatedLoan) {
+                        loan.emiState = updatedLoan.emiState;
+                    }
+                }
+            }
+
             const emiAmount = loan.emiState?.currentEmi || 0;
             if (emiAmount <= 0) {
                 results.skipped++;
-                continue;
+                continue; // EMI is turned off or zero
             }
 
             await prisma.$transaction(async (tx) => {
@@ -572,6 +637,48 @@ export async function processMonthlyEMIs(monthStr: string) {
     revalidatePath("/admin/loans");
     revalidatePath("/admin/wallet");
     return results;
+}
+
+/**
+ * Helper function to recalculate and redistribute EMI across remaining months
+ */
+async function recalculateEMI(loanId: string, tx: any) {
+    const loan = await tx.loan.findUnique({
+        where: { id: loanId },
+        include: { emiState: true }
+    });
+
+    if (!loan || !loan.emiState) {
+        throw new Error("Loan or EMI state not found");
+    }
+
+    // Calculate how many months have passed since EMI start
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    
+    const emiStartYear = loan.emiStartYear || currentYear;
+    const emiStartMonth = loan.emiStartMonth || currentMonth;
+    
+    // Calculate remaining months using proper month arithmetic
+    const totalEmiMonths = loan.totalMonths - loan.gracePeriodMonths;
+    const monthsSinceEmiStart = Math.max(0, (currentYear - emiStartYear) * 12 + (currentMonth - emiStartMonth));
+    const remainingMonths = Math.max(1, totalEmiMonths - monthsSinceEmiStart);
+    
+    // Calculate new EMI including any carry forward
+    const totalRemainingAmount = loan.remainingPrincipal + loan.emiState.carryForward;
+    const newEmiAmount = Math.round(totalRemainingAmount / remainingMonths);
+    
+    // Update EMI state
+    await tx.emiState.update({
+        where: { loanId },
+        data: {
+            currentEmi: newEmiAmount,
+            carryForward: 0 // Reset carry forward as it's now distributed
+        }
+    });
+    
+    return newEmiAmount;
 }
 
 /**

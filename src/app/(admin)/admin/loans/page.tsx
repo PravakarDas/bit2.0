@@ -22,6 +22,11 @@ interface Loan {
     id: string;
     issuedAmount: number;
     remainingPrincipal: number;
+    totalMonths: number;
+    gracePeriodMonths: number;
+    emiStartMonth: number | null;
+    emiStartYear: number | null;
+    reason: string;
     status: string;
     createdAt: Date;
     userId: string;

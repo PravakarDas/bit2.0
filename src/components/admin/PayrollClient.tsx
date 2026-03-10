@@ -63,15 +63,19 @@ export function PayrollClient({
 }) {
     const data = initialData;
     const [selectedBonuses, setSelectedBonuses] = useState<Record<string, string[]>>({});
+    const [emiDisabledUsers, setEmiDisabledUsers] = useState<Set<string>>(new Set());
     const [processing, setProcessing] = useState(false);
 
-    const handleToggleCarryForward = async (loanId: string, checked: boolean) => {
-        try {
-            await toggleEmiCarryForward(loanId, !checked);
-            toast.success(checked ? "EMI will be deducted" : "EMI carried forward");
-        } catch {
-            toast.error("Failed to update EMI status");
-        }
+    const handleToggleEmployeeEmi = (userId: string, enabled: boolean) => {
+        setEmiDisabledUsers(prev => {
+            const newSet = new Set(prev);
+            if (enabled) {
+                newSet.delete(userId); // EMI enabled, remove from disabled set
+            } else {
+                newSet.add(userId); // EMI disabled, add to disabled set
+            }
+            return newSet;
+        });
     };
 
     const toggleBonus = (userId: string, bonusId: string) => {
@@ -90,7 +94,12 @@ export function PayrollClient({
             const b = emp.eligibleBonuses.find(eb => eb.id === bid);
             return sum + (b?.amount || 0);
         }, 0);
-        return emp.netPay + bonusAmount + emp.walletBalance;
+        
+        // If EMI is disabled for this user, don't deduct EMI from net pay display
+        const emiDeduction = emiDisabledUsers.has(emp.userId) ? 0 : emp.totalLoanDeduction;
+        const adjustedNetPay = emp.baseSalary + emp.totalAllowances + emp.totalMedical - emiDeduction;
+        
+        return adjustedNetPay + bonusAmount + emp.walletBalance;
     };
 
     const generateAndDownloadCSV = (csvData: any[], filename: string) => {
@@ -120,10 +129,10 @@ export function PayrollClient({
         setProcessing(true);
         try {
             // 1. Generate CSV data BEFORE processing (when all employee data is available)
-            const initialCsvData = await generatePayrollCSVData(data, selectedBonuses);
+            const initialCsvData = await generatePayrollCSVData(data, selectedBonuses, Array.from(emiDisabledUsers));
             
-            // 2. Process payroll
-            await processPayroll(payrollMonth, selectedBonuses);
+            // 2. Process payroll with EMI disabled users info
+            await processPayroll(payrollMonth, selectedBonuses, Array.from(emiDisabledUsers));
             
             // 3. Check for failed employees (employees still left after processing)
             const failedEmployeeIds = await getFailedEmployees(payrollMonth);
@@ -242,7 +251,7 @@ export function PayrollClient({
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums text-destructive">
                                         <div className="flex flex-col items-end">
-                                            <span>-৳{(emp.totalLoanDeduction).toLocaleString("en-BD")}</span>
+                                            <span>-৳{(emiDisabledUsers.has(emp.userId) ? 0 : emp.totalLoanDeduction).toLocaleString("en-BD")}</span>
                                             {emp.activeLoans.some(l => l.carryForward > 0) && (
                                                 <span className="text-[9px] text-orange-600 font-bold uppercase">CF Active</span>
                                             )}
@@ -254,16 +263,24 @@ export function PayrollClient({
                                         </span>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex flex-col gap-1">
-                                            {emp.activeLoans.map(loan => (
-                                                <div key={loan.id} className="flex items-center gap-2">
+                                        <div className="flex items-center justify-center">
+                                            {emp.activeLoans.length > 0 ? (
+                                                <div className="flex items-center gap-2">
                                                     <Switch
-                                                        defaultChecked={loan.currentEmi > 0}
-                                                        onCheckedChange={(checked) => handleToggleCarryForward(loan.id, checked)}
+                                                        checked={!emiDisabledUsers.has(emp.userId)}
+                                                        onCheckedChange={(checked) => handleToggleEmployeeEmi(emp.userId, checked)}
                                                     />
+                                                    <span className={`text-[10px] font-medium ${
+                                                        emiDisabledUsers.has(emp.userId) 
+                                                            ? 'text-orange-600' 
+                                                            : 'text-green-600'
+                                                    }`}>
+                                                        {emiDisabledUsers.has(emp.userId) ? 'OFF' : 'ON'}
+                                                    </span>
                                                 </div>
-                                            ))}
-                                            {emp.activeLoans.length === 0 && <span className="text-[10px] text-muted-foreground italic">None</span>}
+                                            ) : (
+                                                <span className="text-[10px] text-muted-foreground italic">No Loans</span>
+                                            )}
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums font-bold text-green-700 text-base">

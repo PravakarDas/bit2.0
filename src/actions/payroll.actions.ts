@@ -88,7 +88,21 @@ export async function getPayrollAggregation(month: number, year: number) {
         include: {
             loans: {
                 where: { status: LoanStatus.ACTIVE },
-                include: { emiState: true },
+                select: {
+                    id: true,
+                    remainingPrincipal: true,
+                    totalMonths: true,
+                    gracePeriodMonths: true,
+                    emiStartMonth: true,
+                    emiStartYear: true,
+                    createdAt: true,
+                    emiState: {
+                        select: {
+                            currentEmi: true,
+                            carryForward: true
+                        }
+                    }
+                }
             },
             medicalClaims: {
                 where: { status: ClaimStatus.APPROVED },
@@ -170,14 +184,39 @@ export async function getPayrollAggregation(month: number, year: number) {
             }
         });
 
-        const activeLoans = user.loans.map((loan) => ({
-            id: loan.id,
-            currentEmi: loan.emiState?.currentEmi || 0,
-            carryForward: loan.emiState?.carryForward || 0,
-            remainingPrincipal: loan.remainingPrincipal,
-            totalMonths: loan.totalMonths,
-            createdAt: loan.createdAt,
-        }));
+        const activeLoans = user.loans.map((loan) => {
+            let currentEmiForPayroll = 0;
+            let carryForwardForPayroll = 0;
+            
+            // Check if the current payroll month is within the grace period
+            if (loan.emiStartMonth && loan.emiStartYear) {
+                const emiStartYear = loan.emiStartYear;
+                const emiStartMonth = loan.emiStartMonth;
+                
+                // If current processing month is before EMI start, no deduction
+                if (year < emiStartYear || (year === emiStartYear && month < emiStartMonth)) {
+                    currentEmiForPayroll = 0;
+                    carryForwardForPayroll = 0;
+                } else {
+                    // Grace period has ended, use actual EMI amounts
+                    currentEmiForPayroll = loan.emiState?.currentEmi || 0;
+                    carryForwardForPayroll = loan.emiState?.carryForward || 0;
+                }
+            } else {
+                // No grace period info, use current EMI (fallback)
+                currentEmiForPayroll = loan.emiState?.currentEmi || 0;
+                carryForwardForPayroll = loan.emiState?.carryForward || 0;
+            }
+            
+            return {
+                id: loan.id,
+                currentEmi: currentEmiForPayroll,
+                carryForward: carryForwardForPayroll,
+                remainingPrincipal: loan.remainingPrincipal,
+                totalMonths: loan.totalMonths,
+                createdAt: loan.createdAt,
+            };
+        });
 
         const totalLoanDeduction = activeLoans.reduce(
             (sum, l) => sum + l.currentEmi + l.carryForward,
@@ -266,7 +305,7 @@ export async function toggleEmiCarryForward(
     revalidatePath("/admin/payroll");
 }
 
-export async function processPayroll(payrollMonth: string, selectedBonuses: Record<string, string[]>) {
+export async function processPayroll(payrollMonth: string, selectedBonuses: Record<string, string[]>, emiDisabledUsers: string[] = []) {
     // 1. Immutability Check: Prevent duplicate runs for the same month
     const existingPayment = await prisma.salaryPayment.findFirst({
         where: { month: payrollMonth },
@@ -286,7 +325,10 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                 const appliedBonuses = emp.eligibleBonuses.filter(b => userBonusIds.includes(b.id));
                 const totalBonuses = appliedBonuses.reduce((sum, b) => sum + b.amount, 0);
 
-                const finalNetPay = emp.netPay + totalBonuses + emp.walletBalance;
+                // Check if EMI is disabled for this user
+                const emiDisabled = emiDisabledUsers.includes(emp.userId);
+                const adjustedLoanDeduction = emiDisabled ? 0 : emp.totalLoanDeduction;
+                const finalNetPay = emp.netPay + totalBonuses + emp.walletBalance + (emiDisabled ? emp.totalLoanDeduction : 0);
 
                 // 2. Create SalaryPayment Record
                 await tx.salaryPayment.create({
@@ -297,7 +339,7 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                         totalBonuses: totalBonuses,
                         totalAllowances: emp.totalAllowances,
                         medicalReimbursement: emp.totalMedical,
-                        loanDeduction: emp.totalLoanDeduction,
+                        loanDeduction: adjustedLoanDeduction,
                         walletAdjustment: emp.walletBalance,
                         netAmount: finalNetPay,
                     },
@@ -349,57 +391,100 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
 
                 // 4. Loan & Payment Updates
                 for (const loan of emp.activeLoans) {
-                    const totalDeducted = loan.currentEmi + loan.carryForward;
-                    if (totalDeducted > 0) {
-                        // Update Remaining Principal
-                        await tx.loan.update({
-                            where: { id: loan.id },
-                            data: {
-                                remainingPrincipal: { decrement: totalDeducted },
-                            },
-                        });
-
-                        // Record Loan Payment
-                        await tx.payment.create({
-                            data: {
-                                loanId: loan.id,
-                                amount: totalDeducted,
-                                type: "EMI",
-                                payrollMonth,
-                            },
-                        });
-
-                        // Recalculate next month's EMI and Reset Carry Forward
-                        const updatedLoan = await tx.loan.findUnique({
+                    if (emiDisabled) {
+                        // If EMI is disabled, carry forward the EMI and redistribute across remaining months
+                        const currentEmiAmount = loan.currentEmi; // Current scheduled EMI
+                        const newCarryForward = loan.carryForward + currentEmiAmount;
+                        
+                        // Calculate remaining months for this loan
+                        const loanDetails = await tx.loan.findUnique({
                             where: { id: loan.id },
                         });
-                        if (updatedLoan) {
-                            const monthsPassed =
-                                Math.floor(
-                                    (Date.now() - updatedLoan.createdAt.getTime()) /
-                                    (30 * 24 * 60 * 60 * 1000)
-                                ) + 1;
-                            const remainingMonths = updatedLoan.totalMonths - monthsPassed;
-                            const nextEmi =
-                                updatedLoan.remainingPrincipal > 0
-                                    ? calculateEMI(updatedLoan.remainingPrincipal, remainingMonths)
-                                    : 0;
-
-                            // Check if loan should be CLOSED
-                            if (updatedLoan.remainingPrincipal <= 0) {
-                                await tx.loan.update({
-                                    where: { id: loan.id },
-                                    data: { status: "CLOSED" }
-                                });
-                            }
-
+                        
+                        if (loanDetails) {
+                            const monthsPassed = Math.floor(
+                                (Date.now() - loanDetails.createdAt.getTime()) / (30 * 24 * 60 * 60 * 1000)
+                            ) + 1;
+                            const remainingMonths = loanDetails.totalMonths - monthsPassed;
+                            
+                            // Redistribute total amount (remaining principal + carry forward) across remaining months
+                            const totalAmountToDistribute = loanDetails.remainingPrincipal + newCarryForward;
+                            const newEmiAmount = remainingMonths > 0 
+                                ? (remainingMonths === 1 ? totalAmountToDistribute : Math.round(totalAmountToDistribute / remainingMonths))
+                                : 0;
+                            
                             await tx.emiState.update({
                                 where: { loanId: loan.id },
                                 data: {
-                                    currentEmi: nextEmi,
-                                    carryForward: 0,
+                                    carryForward: newCarryForward,
+                                    currentEmi: newEmiAmount, // Update EMI to include redistribution
                                 },
                             });
+                            
+                            // Log the redistribution
+                            await tx.auditLog.create({
+                                data: {
+                                    changeReason: `EMI Redistributed: ${currentEmiAmount} carried forward, new EMI: ${newEmiAmount} for loan ${loan.id} of user ${emp.userId} in Payroll ${payrollMonth}`,
+                                    oldEmi: currentEmiAmount,
+                                    newEmi: newEmiAmount,
+                                }
+                            });
+                        }
+                        
+                    } else {
+                        // Normal EMI processing when not disabled
+                        const totalDeducted = loan.currentEmi + loan.carryForward;
+                        if (totalDeducted > 0) {
+                            // Update Remaining Principal
+                            await tx.loan.update({
+                                where: { id: loan.id },
+                                data: {
+                                    remainingPrincipal: { decrement: totalDeducted },
+                                },
+                            });
+
+                            // Record Loan Payment
+                            await tx.payment.create({
+                                data: {
+                                    loanId: loan.id,
+                                    amount: totalDeducted,
+                                    type: "EMI",
+                                    payrollMonth,
+                                },
+                            });
+
+                            // Recalculate next month's EMI and Reset Carry Forward
+                            const updatedLoan = await tx.loan.findUnique({
+                                where: { id: loan.id },
+                            });
+                            if (updatedLoan) {
+                                const monthsPassed =
+                                    Math.floor(
+                                        (Date.now() - updatedLoan.createdAt.getTime()) /
+                                        (30 * 24 * 60 * 60 * 1000)
+                                    ) + 1;
+                                const remainingMonths = updatedLoan.totalMonths - monthsPassed;
+                                const nextEmi =
+                                    updatedLoan.remainingPrincipal > 0
+                                        ? calculateEMI(updatedLoan.remainingPrincipal, remainingMonths)
+                                        : 0;
+
+                                // Check if loan should be CLOSED
+                                if (updatedLoan.remainingPrincipal <= 0) {
+                                    await tx.loan.update({
+                                        where: { id: loan.id },
+                                        data: { status: "CLOSED" }
+                                    });
+                                }
+
+                                await tx.emiState.update({
+                                    where: { loanId: loan.id },
+                                    data: {
+                                        currentEmi: nextEmi,
+                                        carryForward: 0,
+                                    },
+                                });
+                            }
                         }
                     }
                 }
@@ -436,13 +521,17 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
     }
 }
 
-export async function generatePayrollCSVData(data: PayrollAggregation[], selectedBonuses: Record<string, string[]>) {
+export async function generatePayrollCSVData(data: PayrollAggregation[], selectedBonuses: Record<string, string[]>, emiDisabledUsers: string[] = []) {
     // Generate CSV data with employee name, account number, and net pay
     const csvData = data.map(emp => {
         const userBonusIds = selectedBonuses[emp.userId] || [];
         const appliedBonuses = emp.eligibleBonuses.filter(b => userBonusIds.includes(b.id));
         const totalBonuses = appliedBonuses.reduce((sum, b) => sum + b.amount, 0);
-        const finalNetPay = emp.netPay + totalBonuses + emp.walletBalance;
+        
+        // Check if EMI is disabled for this user
+        const emiDisabled = emiDisabledUsers.includes(emp.userId);
+        const adjustedLoanDeduction = emiDisabled ? 0 : emp.totalLoanDeduction;
+        const finalNetPay = emp.netPay + totalBonuses + emp.walletBalance + (emiDisabled ? emp.totalLoanDeduction : 0);
         
         const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.email;
         

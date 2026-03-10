@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, Settings, AlertCircle, CheckCircle2, XCircle, FileText } from "lucide-react";
+import { Calendar, Clock, Settings, AlertCircle, CheckCircle2, XCircle, FileText, Info } from "lucide-react";
 import { toggleEmiCollection, skipEmiForMonth, recordManualPayment, getLoanActivityHistory } from "@/actions/loan.actions";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
@@ -17,7 +17,14 @@ interface EmiManageDialogProps {
     id: string;
     issuedAmount: number;
     remainingPrincipal: number;
+    totalMonths: number;
+    gracePeriodMonths: number;
+    emiStartMonth: number | null;
+    emiStartYear: number | null;
+    reason: string;
+    adminComments?: string | null | undefined;
     status: string;
+    createdAt: Date;
     emiState: {
       currentEmi: number;
       carryForward: number;
@@ -39,6 +46,32 @@ export function EmiManageDialog({ loan }: EmiManageDialogProps) {
   const [disableReason, setDisableReason] = useState("");
   const [activityHistory, setActivityHistory] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+
+  // Calculate loan timeline information
+  const loanStartDate = new Date(loan.createdAt);
+  const loanEndDate = new Date(loanStartDate);
+  loanEndDate.setMonth(loanEndDate.getMonth() + loan.totalMonths);
+  
+  const graceEndDate = new Date(loanStartDate);
+  graceEndDate.setMonth(graceEndDate.getMonth() + loan.gracePeriodMonths);
+  
+  const emiStartDate = loan.emiStartMonth && loan.emiStartYear 
+    ? new Date(loan.emiStartYear, loan.emiStartMonth - 1, 1)
+    : graceEndDate;
+  
+  const currentDate = new Date();
+  const isInGracePeriod = currentDate <= graceEndDate;
+  
+  // Calculate progress and remaining time
+  const monthsPassed = Math.max(0, Math.floor(
+    (currentDate.getTime() - loanStartDate.getTime()) / (30.44 * 24 * 60 * 60 * 1000)
+  ));
+  const remainingMonths = Math.max(0, loan.totalMonths - monthsPassed);
+  const progressPercentage = Math.min(100, (monthsPassed / loan.totalMonths) * 100);
+  
+  // Calculate total paid amount
+  const totalPaidAmount = loan.issuedAmount - loan.remainingPrincipal;
+  const repaymentPercentage = loan.issuedAmount > 0 ? (totalPaidAmount / loan.issuedAmount) * 100 : 0;
 
   const handleToggleEmi = async () => {
     if (loading) return;
@@ -129,36 +162,150 @@ export function EmiManageDialog({ loan }: EmiManageDialogProps) {
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Loan Timeline & Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Info className="w-5 h-5 text-blue-600" />
+                Loan Timeline & Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Basic Loan Info */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Loan Reason</Label>
+                  <p className="font-medium">{loan.reason || "Personal"}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Total Duration</Label>
+                  <p className="font-medium">{loan.totalMonths} months</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Grace Period</Label>
+                  <p className="font-medium">{loan.gracePeriodMonths} months</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Remaining Months</Label>
+                  <p className="font-medium text-blue-600">{remainingMonths} months</p>
+                </div>
+              </div>
+              
+              {/* Progress Indicators */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Loan Timeline Progress</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-muted rounded-full h-3">
+                      <div 
+                        className="bg-blue-600 h-3 rounded-full transition-all" 
+                        style={{ width: `${progressPercentage}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-medium">{Math.round(progressPercentage)}%</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{monthsPassed} of {loan.totalMonths} months elapsed</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Repayment Progress</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-muted rounded-full h-3">
+                      <div 
+                        className="bg-green-600 h-3 rounded-full transition-all" 
+                        style={{ width: `${repaymentPercentage}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-medium">{Math.round(repaymentPercentage)}%</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{formatCurrency(totalPaidAmount)} of {formatCurrency(loan.issuedAmount)} repaid</p>
+                </div>
+              </div>
+              
+              {/* Timeline Dates */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Loan Start Date</Label>
+                  <p className="font-medium">{loanStartDate.toLocaleDateString()}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">EMI Start Date</Label>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{emiStartDate.toLocaleDateString()}</p>
+                    {isInGracePeriod && (
+                      <Badge variant="outline" className="text-xs">Grace Period</Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Expected End Date</Label>
+                  <p className="font-medium">{loanEndDate.toLocaleDateString()}</p>
+                </div>
+              </div>
+              
+              {/* Financial Summary */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Total Loan</Label>
+                  <p className="font-semibold text-lg">{formatCurrency(loan.issuedAmount)}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Total Paid</Label>
+                  <p className="font-semibold text-lg text-green-600">{formatCurrency(totalPaidAmount)}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Remaining</Label>
+                  <p className="font-semibold text-lg text-blue-600">{formatCurrency(loan.remainingPrincipal)}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Current EMI</Label>
+                  <p className="font-semibold text-lg">{formatCurrency(loan.emiState?.currentEmi || 0)}</p>
+                </div>
+              </div>
+              
+              {/* Admin Comments */}
+              {loan.adminComments && (
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Admin Comments</Label>
+                  <p className="text-sm p-3 bg-muted rounded-lg">{loan.adminComments}</p>
+                </div>
+              )}
+              
+              {/* Grace Period Status */}
+              {isInGracePeriod && (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm text-blue-800">
+                    This loan is currently in grace period. EMI deductions will start on {emiStartDate.toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Current EMI Status */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
-                Current EMI Status
+                EMI Status & Controls
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label className="text-sm text-muted-foreground">Loan Amount</Label>
-                  <p className="font-medium">{formatCurrency(loan.issuedAmount)}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-sm text-muted-foreground">Remaining</Label>
-                  <p className="font-medium">{formatCurrency(loan.remainingPrincipal)}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-sm text-muted-foreground">Current EMI</Label>
-                  <p className="font-medium">{formatCurrency(loan.emiState?.currentEmi || 0)}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-sm text-muted-foreground">Carry Forward</Label>
+                  <Label className="text-sm text-muted-foreground">Carry Forward Amount</Label>
                   <p className="font-medium text-red-600">{formatCurrency(loan.emiState?.carryForward || 0)}</p>
+                  {(loan.emiState?.carryForward || 0) > 0 && (
+                    <p className="text-xs text-red-500">Will be added to next EMI deduction</p>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm text-muted-foreground">Loan Status</Label>
+                  <Badge variant={loan.status === "ACTIVE" ? "default" : "secondary"} className="w-fit">
+                    {loan.status}
+                  </Badge>
                 </div>
               </div>
-              <Badge variant={loan.status === "ACTIVE" ? "default" : "secondary"}>
-                {loan.status}
-              </Badge>
             </CardContent>
           </Card>
 
