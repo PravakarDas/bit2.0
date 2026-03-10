@@ -62,7 +62,7 @@ interface LoanDetailsData {
             phoneNumber: string | null;
             baseSalary: number;
             walletBalance: number;
-            dateOfJoining: Date;
+            dateOfJoining: Date | null;
             department: { name: string } | null;
             designation: { name: string } | null;
             branch: { name: string } | null;
@@ -251,7 +251,12 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                                                <span className="text-sm">Joined: {format(new Date(loanDetails.loan.user.dateOfJoining), 'MMM dd, yyyy')}</span>
+                                                <span className="text-sm">
+                                                    Joined: {loanDetails.loan.user.dateOfJoining 
+                                                        ? format(new Date(loanDetails.loan.user.dateOfJoining), 'MMM dd, yyyy') 
+                                                        : 'Not set'
+                                                    }
+                                                </span>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <DollarSign className="h-4 w-4 text-muted-foreground" />

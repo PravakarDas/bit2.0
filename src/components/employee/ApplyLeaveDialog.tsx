@@ -49,8 +49,8 @@ export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps
     const [holidayCheck, setHolidayCheck] = useState<{
         hasAnyHoliday: boolean;
         isPublicHoliday: boolean;
-        publicHolidayName?: string;
-        publicHolidayDescription?: string;
+        publicHolidayName?: string | null;
+        publicHolidayDescription?: string | null;
         isWeeklyHoliday: boolean;
         weeklyHolidayDay?: string;
         branchName?: string;
@@ -110,9 +110,9 @@ export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps
         // Check if the selected date is a holiday
         if (holidayCheck.hasAnyHoliday) {
             if (holidayCheck.isPublicHoliday && holidayCheck.isWeeklyHoliday) {
-                toast.error(`Cannot apply for leave on ${holidayCheck.publicHolidayName}. This date is both a public holiday and a weekly holiday (${holidayCheck.weeklyHolidayDay?.toLowerCase()}).`);
+                toast.error(`Cannot apply for leave on ${holidayCheck.publicHolidayName || 'this date'}. This date is both a public holiday and a weekly holiday (${holidayCheck.weeklyHolidayDay?.toLowerCase()}).`);
             } else if (holidayCheck.isPublicHoliday) {
-                toast.error(`Cannot apply for leave on ${holidayCheck.publicHolidayName}. This is a public holiday.`);
+                toast.error(`Cannot apply for leave on ${holidayCheck.publicHolidayName || 'this date'}. This is a public holiday.`);
             } else if (holidayCheck.isWeeklyHoliday) {
                 toast.error(`Cannot apply for leave on ${holidayCheck.weeklyHolidayDay?.toLowerCase()}. This is a weekly holiday for your branch.`);
             }
@@ -235,7 +235,7 @@ export function ApplyLeaveDialog({ entitlements, userId }: ApplyLeaveDialogProps
                         {holidayCheck.isPublicHoliday && (
                             <div className="p-2 bg-red-50 border border-red-200 rounded-md">
                                 <p className="text-sm text-red-600 font-medium">
-                                    ⚠️ Public Holiday: {holidayCheck.publicHolidayName}
+                                    ⚠️ Public Holiday: {holidayCheck.publicHolidayName || 'Holiday'}
                                 </p>
                                 {holidayCheck.publicHolidayDescription && (
                                     <p className="text-xs text-red-500 mt-1">
