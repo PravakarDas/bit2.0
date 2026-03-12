@@ -272,10 +272,10 @@ export async function getPendingProfileUpdateRequests() {
 
     const currentUserData = await prisma.user.findUnique({
       where: { clerkId },
-      select: { role: true },
+      select: { role: true, isManager: true },
     });
 
-    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
+    if (!currentUserData || (!["SUPERADMIN", "HR"].includes(currentUserData.role) && !(currentUserData.role === "EMPLOYEE" && currentUserData.isManager))) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -334,7 +334,7 @@ export async function getMyProfileUpdateRequests() {
 }
 
 /**
- * Approve profile update request (Admin only)
+ * Approve profile update request (Admin and Manager)
  */
 export async function approveProfileUpdateRequest(requestId: string, reviewNotes?: string) {
   try {
@@ -345,10 +345,10 @@ export async function approveProfileUpdateRequest(requestId: string, reviewNotes
 
     const currentUserData = await prisma.user.findUnique({
       where: { clerkId },
-      select: { role: true },
+      select: { role: true, isManager: true },
     });
 
-    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
+    if (!currentUserData || (!["SUPERADMIN", "HR"].includes(currentUserData.role) && !(currentUserData.role === "EMPLOYEE" && currentUserData.isManager))) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -409,7 +409,7 @@ export async function approveProfileUpdateRequest(requestId: string, reviewNotes
 }
 
 /**
- * Reject profile update request (Admin only)
+ * Reject profile update request (Admin and Manager)
  */
 export async function rejectProfileUpdateRequest(requestId: string, reviewNotes: string) {
   try {
@@ -420,10 +420,10 @@ export async function rejectProfileUpdateRequest(requestId: string, reviewNotes:
 
     const currentUserData = await prisma.user.findUnique({
       where: { clerkId },
-      select: { role: true },
+      select: { role: true, isManager: true },
     });
 
-    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
+    if (!currentUserData || (!["SUPERADMIN", "HR"].includes(currentUserData.role) && !(currentUserData.role === "EMPLOYEE" && currentUserData.isManager))) {
       return { success: false, error: "Unauthorized access" };
     }
 

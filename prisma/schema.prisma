@@ -149,6 +149,7 @@ model User {
   lastName      String?
   imageUrl      String?
   role          Role       @default(EMPLOYEE)
+  isManager     Boolean    @default(false)
   status        UserStatus @default(PENDING)
   employeeStatus EmployeeStatus? @default(ACTIVE)
   isArchived    Boolean    @default(false)

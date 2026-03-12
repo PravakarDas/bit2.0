@@ -2,11 +2,6 @@ import { getDbUser } from "@/actions/user.actions";
 import { redirect } from "next/navigation";
 import { RoleManagementClient } from "@/components/admin/RoleManagementClient";
 import { getAllUsersWithDetails } from "@/actions/role-management.actions";
-import { 
-    updateUserRoleAction, 
-    bulkUpdateUserRolesAction, 
-    toggleUserArchiveStatusAction 
-} from "@/actions/role-management-client.actions";
 
 export default async function RoleManagementPage() {
     const user = await getDbUser();
@@ -34,9 +29,6 @@ export default async function RoleManagementPage() {
 
             <RoleManagementClient 
                 users={users} 
-                updateUserRoleAction={updateUserRoleAction}
-                bulkUpdateUserRolesAction={bulkUpdateUserRolesAction}
-                toggleUserArchiveStatusAction={toggleUserArchiveStatusAction}
             />
         </div>
     );

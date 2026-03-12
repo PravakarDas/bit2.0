@@ -4,10 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, User, Mail, Building, Calendar, Banknote, Phone, AlertCircle } from "lucide-react";
+import { ArrowLeft, User, Mail, Building, Calendar, Banknote, Phone, AlertCircle, Settings } from "lucide-react";
 import Link from "next/link";
 import { AssignBranchSelect } from "@/components/admin/AssignBranchSelect";
 import { EmployeeStatusSelect } from "@/components/admin/EmployeeStatusSelect";
+import { ManagerToggle } from "@/components/admin/ManagerToggle";
 import { getActiveBranches } from "@/actions/branch.actions";
 import { WorkingDaysInput } from "@/components/admin/WorkingDaysInput";
 
@@ -89,6 +90,15 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
                                 <EmployeeStatusSelect 
                                     employeeId={user.id} 
                                     currentStatus={user.employeeStatus} 
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium text-muted-foreground">Manager Status</label>
+                                <ManagerToggle
+                                    userId={user.id}
+                                    isManager={user.isManager || false}
+                                    userRole={user.role}
+                                    userName={employeeName}
                                 />
                             </div>
                         </div>

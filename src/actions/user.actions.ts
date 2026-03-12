@@ -134,3 +134,150 @@ export async function getUsers() {
         ]
     });
 }
+
+/**
+ * Toggle user manager status (for EMPLOYEE role only)
+ */
+export async function toggleManagerStatus(userId: string) {
+    const admin = await getDbUser();
+    if (!admin || admin.role !== "SUPERADMIN") {
+        throw new Error("Unauthorized");
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { 
+                id: true, 
+                isManager: true, 
+                role: true, 
+                firstName: true, 
+                lastName: true 
+            }
+        });
+
+        if (!user) {
+            return { success: false, error: "User not found" };
+        }
+
+        // Only allow manager toggle for EMPLOYEE role
+        if (user.role !== "EMPLOYEE") {
+            return { 
+                success: false, 
+                error: "Manager status can only be set for employees" 
+            };
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: { 
+                isManager: !user.isManager, 
+                updatedAt: new Date() 
+            },
+        });
+
+        revalidatePath("/admin/role-management");
+        revalidatePath("/admin/employees");
+
+        return {
+            success: true,
+            message: `Successfully ${user.isManager ? 'removed manager status from' : 'made'} ${user.firstName} ${user.lastName} ${user.isManager ? '' : 'a manager'}`,
+            isManager: updatedUser.isManager
+        };
+    } catch (error) {
+        console.error("Error toggling manager status:", error);
+        return { success: false, error: "Failed to update manager status" };
+    }
+}
+
+/**
+ * Change user role
+ */
+export async function changeUserRole(userId: string, newRole: Role) {
+    const admin = await getDbUser();
+    if (!admin || admin.role !== "SUPERADMIN") {
+        throw new Error("Unauthorized");
+    }
+
+    try {
+        // Get current user data
+        const currentUser = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, role: true, firstName: true, lastName: true }
+        });
+
+        if (!currentUser) {
+            return { success: false, error: "User not found" };
+        }
+
+        if (currentUser.role === newRole) {
+            return { success: false, error: "User already has this role" };
+        }
+
+        // If changing from EMPLOYEE role, reset manager status
+        const updateData: { role: Role; updatedAt: Date; isManager?: boolean } = {
+            role: newRole,
+            updatedAt: new Date()
+        };
+
+        if (currentUser.role === "EMPLOYEE" && newRole !== "EMPLOYEE") {
+            updateData.isManager = false;
+        }
+
+        // Update user role
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: updateData,
+        });
+
+        revalidatePath("/admin/role-management");
+        revalidatePath("/admin/employees");
+
+        return { 
+            success: true, 
+            user: updatedUser,
+            message: `Successfully changed ${currentUser.firstName} ${currentUser.lastName}'s role from ${currentUser.role} to ${newRole}`
+        };
+    } catch (error) {
+        console.error("Error updating user role:", error);
+        return { success: false, error: "Failed to update user role" };
+    }
+}
+
+/**
+ * Toggle user archive status
+ */
+export async function toggleUserArchiveStatus(userId: string) {
+    const admin = await getDbUser();
+    if (!admin || admin.role !== "SUPERADMIN") {
+        throw new Error("Unauthorized");
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, isArchived: true, firstName: true, lastName: true }
+        });
+
+        if (!user) {
+            return { success: false, error: "User not found" };
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: { isArchived: !user.isArchived, updatedAt: new Date() },
+        });
+
+        revalidatePath("/admin/role-management");
+        revalidatePath("/admin/employees");
+
+        return {
+            success: true,
+            message: `Successfully ${user.isArchived ? 'unarchived' : 'archived'} ${user.firstName} ${user.lastName}`,
+            isArchived: updatedUser.isArchived
+        };
+    } catch (error) {
+        console.error("Error toggling archive status:", error);
+        return { success: false, error: "Failed to update archive status" };
+    }
+}

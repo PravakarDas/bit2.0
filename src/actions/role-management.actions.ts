@@ -45,8 +45,12 @@ export async function getAllUsersWithDetails() {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
+            name: user.firstName && user.lastName 
+                ? `${user.firstName} ${user.lastName}` 
+                : user.email,
             imageUrl: user.imageUrl,
             role: user.role,
+            isManager: user.isManager,
             status: user.status,
             employeeStatus: user.employeeStatus,
             isArchived: user.isArchived,
@@ -181,6 +185,61 @@ export async function toggleUserArchiveStatus(userId: string) {
     } catch (error) {
         console.error("Error toggling archive status:", error);
         return { success: false, error: "Failed to update archive status" };
+    }
+}
+
+/**
+ * Toggle user manager status (for EMPLOYEE role only)
+ */
+export async function toggleUserManagerStatus(userId: string) {
+    const admin = await getDbUser();
+    if (!admin || admin.role !== "SUPERADMIN") {
+        throw new Error("Unauthorized");
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { 
+                id: true, 
+                isManager: true, 
+                role: true, 
+                firstName: true, 
+                lastName: true 
+            }
+        });
+
+        if (!user) {
+            return { success: false, error: "User not found" };
+        }
+
+        // Only allow manager toggle for EMPLOYEE role
+        if (user.role !== "EMPLOYEE") {
+            return { 
+                success: false, 
+                error: "Manager status can only be set for employees" 
+            };
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: { 
+                isManager: !user.isManager, 
+                updatedAt: new Date() 
+            },
+        });
+
+        revalidatePath("/admin/role-management");
+        revalidatePath("/admin/employees");
+
+        return {
+            success: true,
+            message: `Successfully ${user.isManager ? 'removed manager status from' : 'made'} ${user.firstName} ${user.lastName} ${user.isManager ? '' : 'a manager'}`,
+            isManager: updatedUser.isManager
+        };
+    } catch (error) {
+        console.error("Error toggling manager status:", error);
+        return { success: false, error: "Failed to update manager status" };
     }
 }
 

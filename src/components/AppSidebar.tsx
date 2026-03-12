@@ -25,6 +25,7 @@ import {
     Bell,
     ClipboardList,
     UserCog,
+    Crown,
 } from "lucide-react";
 
 import {
@@ -40,6 +41,7 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
     SidebarHeader,
+    SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
     Collapsible,
@@ -51,6 +53,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import logo from "@/assets/logo.gif";
 import { NotificationWithBadge } from "@/components/NotificationWithBadge";
+import { Button } from "@/components/ui/button";
 
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
@@ -102,7 +105,7 @@ const organizationSubItems = [
     { title: "Leave Types", icon: CalendarDays, hash: "#leave-types" },
 ];
 
-export function AppSidebar({ role }: { role: string }) {
+export function AppSidebar({ role, isManager = false }: { role: string; isManager?: boolean }) {
     const pathname = usePathname();
     const router = useRouter();
     
@@ -342,6 +345,17 @@ export function AppSidebar({ role }: { role: string }) {
                     </SidebarGroupContent>
                 </SidebarGroup>
             </SidebarContent>
+            {/* Manager Switch Button */}
+            {role === "EMPLOYEE" && isManager && (
+                <SidebarFooter className="p-4">
+                    <Button asChild variant="outline" size="sm" className="w-full">
+                        <Link href="/manager">
+                            <Crown className="h-4 w-4 mr-2" />
+                            Switch to Manager View
+                        </Link>
+                    </Button>
+                </SidebarFooter>
+            )}
         </Sidebar>
     );
 }

@@ -29,10 +29,27 @@ import {
     ArchiveRestore,
     CheckCircle,
     XCircle,
+    Settings,
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { changeUserRole, toggleUserArchiveStatus } from "@/actions/user.actions";
-import { User, Role } from "@/types/database";
+import { toast } from "sonner";
+import { changeUserRole, toggleUserArchiveStatus, toggleManagerStatus } from "@/actions/user.actions";
+import { User as PrismaUser, Role } from "@prisma/client";
+
+interface User extends PrismaUser {
+    name: string;
+    branch?: {
+        id: string;
+        name: string;
+    } | null;
+    department?: {
+        id: string;
+        name: string;
+    } | null;
+    designation?: {
+        id: string;
+        name: string;
+    } | null;
+}
 
 interface RoleManagementClientProps {
     users: User[];
@@ -46,7 +63,6 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
     const [bulkRole, setBulkRole] = useState<Role | "">("");
     const [showArchived, setShowArchived] = useState(false);
     const [isPending, startTransition] = useTransition();
-    const { toast } = useToast();
 
     // Filter users
     const filteredUsers = useMemo(() => {
@@ -58,7 +74,7 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
             const matchesStatus = 
                 selectedStatus === "all" || 
                 (selectedStatus === "PENDING" && user.status === "PENDING") ||
-                (selectedStatus === "ACTIVE" && user.status === "VERIFIED");
+                (selectedStatus === "ACTIVE" && user.status === "APPROVED");
             const matchesArchive = showArchived || !user.isArchived;
             return matchesSearch && matchesRole && matchesStatus && matchesArchive;
         });
@@ -70,6 +86,7 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
             SUPERADMIN: 0,
             HR: 0,
             EMPLOYEE: 0,
+            MANAGERS: 0,
             total: users.filter(u => !u.isArchived).length,
             archived: users.filter(u => u.isArchived).length,
             pending: users.filter(u => u.status === "PENDING" && !u.isArchived).length,
@@ -78,6 +95,9 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
         users.filter(u => !u.isArchived).forEach(user => {
             if (['SUPERADMIN', 'HR', 'EMPLOYEE'].includes(user.role)) {
                 stats[user.role]++;
+            }
+            if (user.role === "EMPLOYEE" && user.isManager) {
+                stats.MANAGERS++;
             }
         });
 
@@ -90,23 +110,12 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
             try {
                 const result = await changeUserRole(userId, newRole);
                 if (result.success) {
-                    toast({
-                        title: "Success",
-                        description: `User role changed successfully`,
-                    });
+                    toast.success(result.message || "User role changed successfully");
                 } else {
-                    toast({
-                        title: "Error",
-                        description: result.error || "Failed to change role",
-                        variant: "destructive",
-                    });
+                    toast.error(result.error || "Failed to change role");
                 }
             } catch (error) {
-                toast({
-                    title: "Error",
-                    description: "An unexpected error occurred",
-                    variant: "destructive",
-                });
+                toast.error("An unexpected error occurred");
             }
         });
     };
@@ -122,18 +131,11 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
                 );
                 await Promise.all(promises);
                 
-                toast({
-                    title: "Success",
-                    description: `${selectedUsers.length} users updated successfully`,
-                });
+                toast.success(`${selectedUsers.length} users updated successfully`);
                 setSelectedUsers([]);
                 setBulkRole("");
             } catch (error) {
-                toast({
-                    title: "Error",
-                    description: "Failed to update users",
-                    variant: "destructive",
-                });
+                toast.error("Failed to update users");
             }
         });
     };
@@ -144,23 +146,28 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
             try {
                 const result = await toggleUserArchiveStatus(userId);
                 if (result.success) {
-                    toast({
-                        title: "Success",
-                        description: result.message,
-                    });
+                    toast.success(result.message);
                 } else {
-                    toast({
-                        title: "Error",
-                        description: result.error || "Failed to update user",
-                        variant: "destructive",
-                    });
+                    toast.error(result.error || "Failed to update user");
                 }
             } catch (error) {
-                toast({
-                    title: "Error",
-                    description: "An unexpected error occurred",
-                    variant: "destructive",
-                });
+                toast.error("An unexpected error occurred");
+            }
+        });
+    };
+
+    // Handle manager toggle
+    const handleManagerToggle = async (userId: string) => {
+        startTransition(async () => {
+            try {
+                const result = await toggleManagerStatus(userId);
+                if (result.success) {
+                    toast.success(result.message);
+                } else {
+                    toast.error(result.error || "Failed to update manager status");
+                }
+            } catch (error) {
+                toast.error("An unexpected error occurred");
             }
         });
     };
@@ -239,6 +246,19 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
                         <div className="text-2xl font-bold">{roleStats.EMPLOYEE}</div>
                         <p className="text-xs text-muted-foreground">
                             Regular access
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Managers</CardTitle>
+                        <Settings className="h-4 w-4 text-purple-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{roleStats.MANAGERS}</div>
+                        <p className="text-xs text-muted-foreground">
+                            Team management access
                         </p>
                     </CardContent>
                 </Card>
@@ -387,14 +407,22 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
                                                 </div>
                                             </td>
                                             <td className="p-2">
-                                                <Badge variant={roleDisplay.color as any} className="gap-1">
-                                                    <RoleIcon className="h-3 w-3" />
-                                                    {roleDisplay.label}
-                                                </Badge>
+                                                <div className="flex items-center space-x-2">
+                                                    <Badge variant={roleDisplay.color as any} className="gap-1">
+                                                        <RoleIcon className="h-3 w-3" />
+                                                        {roleDisplay.label}
+                                                    </Badge>
+                                                    {user.role === "EMPLOYEE" && user.isManager && (
+                                                        <Badge variant="outline" className="gap-1 text-xs">
+                                                            <Settings className="h-3 w-3" />
+                                                            Manager
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="p-2">
-                                                <Badge variant={user.status === "VERIFIED" ? "default" : "secondary"}>
-                                                    {user.status === "VERIFIED" ? (
+                                                <Badge variant={user.status === "APPROVED" ? "default" : "secondary"}>
+                                                    {user.status === "APPROVED" ? (
                                                         <>
                                                             <CheckCircle className="mr-1 h-3 w-3" />
                                                             Active
@@ -436,6 +464,15 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
                                                             <Crown className="mr-2 h-4 w-4" />
                                                             Make Super Admin
                                                         </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        {user.role === "EMPLOYEE" && (
+                                                            <DropdownMenuItem
+                                                                onClick={() => handleManagerToggle(user.id)}
+                                                            >
+                                                                <Settings className="mr-2 h-4 w-4" />
+                                                                {user.isManager ? "Remove Manager Status" : "Make Manager"}
+                                                            </DropdownMenuItem>
+                                                        )}
                                                         <DropdownMenuSeparator />
                                                         <DropdownMenuItem
                                                             onClick={() => handleArchiveToggle(user.id)}
