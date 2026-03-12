@@ -141,7 +141,7 @@ export async function getOvertimeRequests(filters?: {
       select: { role: true },
     });
 
-    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR" && user.role !== "MANAGER")) {
+    if (!user || (user.role !== "SUPERADMIN" && user.role !== "HR")) {
       return { success: false, error: "Unauthorized: Admin access required" };
     }
 
@@ -265,7 +265,7 @@ export async function approveOvertimeRequest(requestId: string) {
       select: { role: true, firstName: true, lastName: true },
     });
 
-    if (!admin || (admin.role !== "SUPERADMIN" && admin.role !== "HR" && admin.role !== "MANAGER")) {
+    if (!admin || (admin.role !== "SUPERADMIN" && admin.role !== "HR")) {
       return { success: false, error: "Unauthorized: Admin access required" };
     }
 
@@ -392,7 +392,7 @@ export async function declineOvertimeRequest(requestId: string, declineReason: s
       select: { role: true, firstName: true, lastName: true },
     });
 
-    if (!admin || (admin.role !== "SUPERADMIN" && admin.role !== "HR" && admin.role !== "MANAGER")) {
+    if (!admin || (admin.role !== "SUPERADMIN" && admin.role !== "HR")) {
       return { success: false, error: "Unauthorized: Admin access required" };
     }
 

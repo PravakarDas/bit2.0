@@ -72,7 +72,7 @@ const profileFormSchema = z.object({
   linkedinLink: z.string().url().optional().or(z.literal("")),
 
   // Employment Details (Admin only)
-  role: z.enum(["SUPERADMIN", "HR", "MANAGER", "EMPLOYEE"]).optional(),
+  role: z.enum(["SUPERADMIN", "HR", "EMPLOYEE"]).optional(),
   branchId: z.string().optional(),
   departmentId: z.string().optional(),
   designationId: z.string().optional(),
@@ -803,7 +803,6 @@ export function ProfileEditForm({ user, branches = [], isAdmin = false, onSucces
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="EMPLOYEE">Employee</SelectItem>
-                            <SelectItem value="MANAGER">Manager</SelectItem>
                             <SelectItem value="HR">HR</SelectItem>
                             <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
                           </SelectContent>

@@ -131,7 +131,6 @@ export function EditEmployeeDialog({ user, branches, onUpdate }: { user: User, b
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="EMPLOYEE">Employee</SelectItem>
-                                <SelectItem value="MANAGER">Manager</SelectItem>
                                 <SelectItem value="HR">HR Specialist</SelectItem>
                                 <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
                             </SelectContent>

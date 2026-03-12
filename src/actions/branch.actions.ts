@@ -26,7 +26,7 @@ export async function createBranch(data: {
     weeklyOffDays?: string[];
 }) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) {
+    if (!user || user.role !== 'SUPERADMIN') {
         throw new Error("Unauthorized");
     }
 
@@ -51,7 +51,7 @@ export async function createBranch(data: {
 
 export async function toggleBranchStatus(id: string, isActive: boolean) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) {
+    if (!user || user.role !== 'SUPERADMIN') {
         throw new Error("Unauthorized");
     }
 
@@ -102,7 +102,7 @@ export async function updateBranchTimelineSettings(branchId: string, data: {
     weeklyOffDays: string[];
 }) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) {
+    if (!user || user.role !== 'SUPERADMIN') {
         throw new Error("Unauthorized");
     }
 
@@ -133,7 +133,7 @@ export async function updateBranch(id: string, data: {
     weeklyOffDays?: string[];
 }) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) {
+    if (!user || user.role !== 'SUPERADMIN') {
         throw new Error("Unauthorized");
     }
 

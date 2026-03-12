@@ -34,7 +34,7 @@ export async function createAdminNotification(data: {
 // Get unread notifications for admin
 export async function getUnreadNotifications() {
   const user = await getDbUser();
-  if (!user || !['SUPERADMIN', 'MANAGER', 'HR'].includes(user.role)) {
+  if (!user || !['SUPERADMIN', 'HR'].includes(user.role)) {
     throw new Error("Unauthorized");
   }
 

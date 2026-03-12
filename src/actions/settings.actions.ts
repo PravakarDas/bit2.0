@@ -29,7 +29,7 @@ export async function updateSystemSettings(data: {
     medicalClaimLimit: number;
 }) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) throw new Error("Unauthorized");
+    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
 
     const currentYear = new Date().getFullYear();
 
@@ -68,7 +68,7 @@ export async function updateSystemSettings(data: {
 
 export async function getAllowanceTypes() {
     const user = await getDbUser();
-    if (!user || !["SUPERADMIN", "MANAGER"].includes(user.role)) {
+    if (!user || user.role !== "SUPERADMIN") {
         throw new Error("Unauthorized");
     }
     
@@ -85,7 +85,7 @@ export async function createAllowanceType(data: {
     targetBranchIds: string[];
 }) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) throw new Error("Unauthorized");
+    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
 
     try {
         const allowance = await prisma.allowanceType.create({
@@ -113,7 +113,7 @@ export async function updateAllowanceType(id: string, data: {
     targetBranchIds: string[];
 }) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) throw new Error("Unauthorized");
+    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
 
     try {
         const allowance = await prisma.allowanceType.update({
@@ -136,7 +136,7 @@ export async function updateAllowanceType(id: string, data: {
 
 export async function toggleAllowanceStatus(id: string, isActive: boolean) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) throw new Error("Unauthorized");
+    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
 
     await prisma.allowanceType.update({
         where: { id },
@@ -148,7 +148,7 @@ export async function toggleAllowanceStatus(id: string, isActive: boolean) {
 
 export async function deleteAllowanceType(id: string) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) throw new Error("Unauthorized");
+    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
 
     await prisma.allowanceType.delete({ where: { id } });
     revalidatePath("/admin/settings");
@@ -157,7 +157,7 @@ export async function deleteAllowanceType(id: string) {
 
 export async function getEmployeeAllowances(userId: string) {
     const user = await getDbUser();
-    if (!user || !["SUPERADMIN", "MANAGER"].includes(user.role)) {
+    if (!user || user.role !== "SUPERADMIN") {
         throw new Error("Unauthorized");
     }
     
@@ -170,7 +170,7 @@ export async function getEmployeeAllowances(userId: string) {
 
 export async function assignEmployeeAllowance(userId: string, allowanceId: string) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) throw new Error("Unauthorized");
+    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
 
     try {
         const employeeAllowance = await prisma.employeeAllowance.upsert({
@@ -195,7 +195,7 @@ export async function assignEmployeeAllowance(userId: string, allowanceId: strin
 
 export async function removeEmployeeAllowance(userId: string, allowanceId: string) {
     const user = await getDbUser();
-    if (!user || !['SUPERADMIN', 'MANAGER'].includes(user.role)) throw new Error("Unauthorized");
+    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
 
     try {
         await prisma.employeeAllowance.update({

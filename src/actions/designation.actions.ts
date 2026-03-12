@@ -6,7 +6,7 @@ import { getDbUser } from "./user.actions";
 
 export async function getAllDesignations(includeInactive = false) {
   const admin = await getDbUser();
-  if (!admin || !["SUPERADMIN", "MANAGER"].includes(admin.role)) {
+  if (!admin || admin.role !== "SUPERADMIN") {
     throw new Error("Unauthorized");
   }
 
@@ -60,7 +60,7 @@ export async function getDesignationsByDepartment(departmentId: string, includeI
 
 export async function getDesignationById(id: string) {
   const admin = await getDbUser();
-  if (!admin || !["SUPERADMIN", "MANAGER"].includes(admin.role)) {
+  if (!admin || admin.role !== "SUPERADMIN") {
     throw new Error("Unauthorized");
   }
 
@@ -83,7 +83,7 @@ export async function createDesignation(data: {
   departmentId: string;
 }) {
   const admin = await getDbUser();
-  if (!admin || !['SUPERADMIN', 'MANAGER'].includes(admin.role)) {
+  if (!admin || admin.role !== 'SUPERADMIN') {
     throw new Error("Unauthorized");
   }
 
@@ -115,7 +115,7 @@ export async function updateDesignation(id: string, data: {
   departmentId?: string;
 }) {
   const admin = await getDbUser();
-  if (!admin || !['SUPERADMIN', 'MANAGER'].includes(admin.role)) {
+  if (!admin || admin.role !== 'SUPERADMIN') {
     throw new Error("Unauthorized");
   }
 
@@ -144,7 +144,7 @@ export async function updateDesignation(id: string, data: {
 
 export async function toggleDesignationStatus(id: string) {
   const admin = await getDbUser();
-  if (!admin || !['SUPERADMIN', 'MANAGER'].includes(admin.role)) {
+  if (!admin || admin.role !== 'SUPERADMIN') {
     throw new Error("Unauthorized");
   }
 
@@ -172,7 +172,7 @@ export async function toggleDesignationStatus(id: string) {
 
 export async function deleteDesignation(id: string) {
   const admin = await getDbUser();
-  if (!admin || !['SUPERADMIN', 'MANAGER'].includes(admin.role)) {
+  if (!admin || admin.role !== 'SUPERADMIN') {
     throw new Error("Unauthorized");
   }
 

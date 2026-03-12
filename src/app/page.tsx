@@ -16,9 +16,5 @@ export default async function Home() {
     redirect("/admin");
   }
 
-  if (user.role === "MANAGER") {
-    redirect("/manager");
-  }
-
   redirect("/dashboard");
 }

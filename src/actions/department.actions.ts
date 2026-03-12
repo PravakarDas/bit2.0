@@ -6,7 +6,7 @@ import { getDbUser } from "./user.actions";
 
 export async function getAllDepartments(includeInactive = false) {
   const admin = await getDbUser();
-  if (!admin || !["SUPERADMIN", "MANAGER"].includes(admin.role)) {
+  if (!admin || admin.role !== "SUPERADMIN") {
     throw new Error("Unauthorized");
   }
 
@@ -38,7 +38,7 @@ export async function getActiveDepartments() {
 
 export async function getDepartmentById(id: string) {
   const admin = await getDbUser();
-  if (!admin || !["SUPERADMIN", "MANAGER"].includes(admin.role)) {
+  if (!admin || admin.role !== "SUPERADMIN") {
     throw new Error("Unauthorized");
   }
 

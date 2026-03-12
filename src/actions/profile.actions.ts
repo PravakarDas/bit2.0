@@ -104,7 +104,7 @@ export async function getUserProfileById(userId: string) {
     });
 
     // Check if user is admin
-    if (!currentUserData || !["SUPERADMIN", "HR", "MANAGER"].includes(currentUserData.role)) {
+    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -229,7 +229,7 @@ export async function updateUserProfileByAdmin(userId: string, data: ProfileData
     });
 
     // Check if user is admin
-    if (!currentUserData || !["SUPERADMIN", "HR", "MANAGER"].includes(currentUserData.role)) {
+    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -275,7 +275,7 @@ export async function getPendingProfileUpdateRequests() {
       select: { role: true },
     });
 
-    if (!currentUserData || !["SUPERADMIN", "HR", "MANAGER"].includes(currentUserData.role)) {
+    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -348,7 +348,7 @@ export async function approveProfileUpdateRequest(requestId: string, reviewNotes
       select: { role: true },
     });
 
-    if (!currentUserData || !["SUPERADMIN", "HR", "MANAGER"].includes(currentUserData.role)) {
+    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -423,7 +423,7 @@ export async function rejectProfileUpdateRequest(requestId: string, reviewNotes:
       select: { role: true },
     });
 
-    if (!currentUserData || !["SUPERADMIN", "HR", "MANAGER"].includes(currentUserData.role)) {
+    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
       return { success: false, error: "Unauthorized access" };
     }
 

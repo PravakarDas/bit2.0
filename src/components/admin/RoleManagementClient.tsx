@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useMemo, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Select,
     SelectContent,
@@ -15,98 +13,53 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog";
-import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { 
-    Search, 
-    Filter, 
-    MoreHorizontal, 
-    UserCog, 
-    Archive, 
-    ArchiveRestore,
-    Users,
+import {
+    Search,
     Crown,
-    UserCheck,
     Shield,
-    Settings,
-    Download,
-    Upload,
-    RefreshCw
+    Users,
+    Archive,
+    MoreHorizontal,
+    ArchiveRestore,
+    CheckCircle,
+    XCircle,
 } from "lucide-react";
-import { Role, UserStatus } from "@prisma/client";
-import { toast } from "sonner";
-
-interface User {
-    id: string;
-    clerkId: string;
-    email: string;
-    firstName: string | null;
-    lastName: string | null;
-    imageUrl: string | null;
-    role: Role;
-    status: UserStatus;
-    employeeStatus: string | null;
-    isArchived: boolean;
-    dateOfJoining: Date | null;
-    createdAt: Date;
-    updatedAt: Date;
-    branch: { id: string; name: string } | null;
-    department: { id: string; name: string } | null;
-    designation: { id: string; name: string } | null;
-}
+import { useToast } from "@/hooks/use-toast";
+import { changeUserRole, toggleUserArchiveStatus } from "@/actions/user.actions";
+import { User, Role } from "@/types/database";
 
 interface RoleManagementClientProps {
     users: User[];
-    updateUserRoleAction: (userId: string, newRole: Role, reason?: string) => Promise<any>;
-    bulkUpdateUserRolesAction: (updates: Array<{ userId: string; newRole: Role }>) => Promise<any>;
-    toggleUserArchiveStatusAction: (userId: string) => Promise<any>;
 }
 
-export function RoleManagementClient({ 
-    users: initialUsers, 
-    updateUserRoleAction,
-    bulkUpdateUserRolesAction,
-    toggleUserArchiveStatusAction
-}: RoleManagementClientProps) {
-    const [users, setUsers] = useState<User[]>(initialUsers);
+export function RoleManagementClient({ users }: RoleManagementClientProps) {
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedRole, setSelectedRole] = useState<string>("all");
     const [selectedStatus, setSelectedStatus] = useState<string>("all");
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-    const [showArchived, setShowArchived] = useState(false);
     const [bulkRole, setBulkRole] = useState<Role | "">("");
+    const [showArchived, setShowArchived] = useState(false);
     const [isPending, startTransition] = useTransition();
+    const { toast } = useToast();
 
-    // Filter users based on search and filters
+    // Filter users
     const filteredUsers = useMemo(() => {
         return users.filter(user => {
-            const matchesSearch = searchTerm === "" || 
-                user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
-            
+            const matchesSearch = 
+                user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                user.email.toLowerCase().includes(searchTerm.toLowerCase());
             const matchesRole = selectedRole === "all" || user.role === selectedRole;
-            const matchesStatus = selectedStatus === "all" || user.status === selectedStatus;
-            const matchesArchive = showArchived ? true : !user.isArchived;
-
+            const matchesStatus = 
+                selectedStatus === "all" || 
+                (selectedStatus === "PENDING" && user.status === "PENDING") ||
+                (selectedStatus === "ACTIVE" && user.status === "VERIFIED");
+            const matchesArchive = showArchived || !user.isArchived;
             return matchesSearch && matchesRole && matchesStatus && matchesArchive;
         });
     }, [users, searchTerm, selectedRole, selectedStatus, showArchived]);
@@ -115,7 +68,6 @@ export function RoleManagementClient({
     const roleStats = useMemo(() => {
         const stats = {
             SUPERADMIN: 0,
-            MANAGER: 0,
             HR: 0,
             EMPLOYEE: 0,
             total: users.filter(u => !u.isArchived).length,
@@ -124,7 +76,9 @@ export function RoleManagementClient({
         };
         
         users.filter(u => !u.isArchived).forEach(user => {
-            stats[user.role]++;
+            if (['SUPERADMIN', 'HR', 'EMPLOYEE'].includes(user.role)) {
+                stats[user.role]++;
+            }
         });
 
         return stats;
@@ -134,49 +88,52 @@ export function RoleManagementClient({
     const handleRoleChange = async (userId: string, newRole: Role) => {
         startTransition(async () => {
             try {
-                const result = await updateUserRoleAction(userId, newRole);
+                const result = await changeUserRole(userId, newRole);
                 if (result.success) {
-                    setUsers(users.map(user => 
-                        user.id === userId 
-                            ? { ...user, role: newRole, updatedAt: new Date() }
-                            : user
-                    ));
-                    toast.success(result.message);
+                    toast({
+                        title: "Success",
+                        description: `User role changed successfully`,
+                    });
                 } else {
-                    toast.error(result.error);
+                    toast({
+                        title: "Error",
+                        description: result.error || "Failed to change role",
+                        variant: "destructive",
+                    });
                 }
             } catch (error) {
-                toast.error("Failed to update user role");
+                toast({
+                    title: "Error",
+                    description: "An unexpected error occurred",
+                    variant: "destructive",
+                });
             }
         });
     };
 
-    // Handle bulk role changes
+    // Handle bulk role change
     const handleBulkRoleChange = async () => {
-        if (!bulkRole || selectedUsers.length === 0) {
-            toast.error("Please select users and a role");
-            return;
-        }
+        if (!bulkRole || selectedUsers.length === 0) return;
 
         startTransition(async () => {
             try {
-                const updates = selectedUsers.map(userId => ({ userId, newRole: bulkRole }));
-                const result = await bulkUpdateUserRolesAction(updates);
+                const promises = selectedUsers.map(userId => 
+                    changeUserRole(userId, bulkRole as Role)
+                );
+                await Promise.all(promises);
                 
-                if (result.success) {
-                    setUsers(users.map(user =>
-                        selectedUsers.includes(user.id)
-                            ? { ...user, role: bulkRole, updatedAt: new Date() }
-                            : user
-                    ));
-                    setSelectedUsers([]);
-                    setBulkRole("");
-                    toast.success(result.message);
-                } else {
-                    toast.error(result.error);
-                }
+                toast({
+                    title: "Success",
+                    description: `${selectedUsers.length} users updated successfully`,
+                });
+                setSelectedUsers([]);
+                setBulkRole("");
             } catch (error) {
-                toast.error("Failed to perform bulk update");
+                toast({
+                    title: "Error",
+                    description: "Failed to update users",
+                    variant: "destructive",
+                });
             }
         });
     };
@@ -185,34 +142,31 @@ export function RoleManagementClient({
     const handleArchiveToggle = async (userId: string) => {
         startTransition(async () => {
             try {
-                const result = await toggleUserArchiveStatusAction(userId);
+                const result = await toggleUserArchiveStatus(userId);
                 if (result.success) {
-                    setUsers(users.map(user =>
-                        user.id === userId
-                            ? { ...user, isArchived: result.isArchived!, updatedAt: new Date() }
-                            : user
-                    ));
-                    toast.success(result.message);
+                    toast({
+                        title: "Success",
+                        description: result.message,
+                    });
                 } else {
-                    toast.error(result.error);
+                    toast({
+                        title: "Error",
+                        description: result.error || "Failed to update user",
+                        variant: "destructive",
+                    });
                 }
             } catch (error) {
-                toast.error("Failed to update archive status");
+                toast({
+                    title: "Error",
+                    description: "An unexpected error occurred",
+                    variant: "destructive",
+                });
             }
         });
     };
 
-    // Handle select all checkbox
-    const handleSelectAll = (checked: boolean) => {
-        if (checked) {
-            setSelectedUsers(filteredUsers.map(user => user.id));
-        } else {
-            setSelectedUsers([]);
-        }
-    };
-
-    // Handle individual checkbox
-    const handleSelectUser = (userId: string, checked: boolean) => {
+    // Handle checkbox selection
+    const handleUserSelection = (userId: string, checked: boolean) => {
         if (checked) {
             setSelectedUsers([...selectedUsers, userId]);
         } else {
@@ -224,18 +178,19 @@ export function RoleManagementClient({
     const getRoleDisplay = (role: Role) => {
         const config = {
             SUPERADMIN: { color: "destructive", icon: Crown, label: "Super Admin" },
-            MANAGER: { color: "default", icon: UserCheck, label: "Manager" },
             HR: { color: "secondary", icon: Shield, label: "HR Specialist" },
             EMPLOYEE: { color: "outline", icon: Users, label: "Employee" },
         } as const;
 
-        return config[role];
+        return config[role] || config.EMPLOYEE;
     };
 
     return (
-        <div className="space-y-6">
-            {/* Statistics Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="space-y-6 p-6">
+            <h1 className="text-2xl font-bold">User Role Management</h1>
+            
+            {/* Role Statistics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -244,7 +199,7 @@ export function RoleManagementClient({
                     <CardContent>
                         <div className="text-2xl font-bold">{roleStats.total}</div>
                         <p className="text-xs text-muted-foreground">
-                            {roleStats.pending} pending approval
+                            Active users
                         </p>
                     </CardContent>
                 </Card>
@@ -264,13 +219,26 @@ export function RoleManagementClient({
 
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Managers</CardTitle>
-                        <UserCheck className="h-4 w-4 text-blue-600" />
+                        <CardTitle className="text-sm font-medium">HR Specialists</CardTitle>
+                        <Shield className="h-4 w-4 text-green-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{roleStats.MANAGER}</div>
+                        <div className="text-2xl font-bold">{roleStats.HR}</div>
                         <p className="text-xs text-muted-foreground">
-                            Team management access
+                            HR management access
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Employees</CardTitle>
+                        <Users className="h-4 w-4 text-blue-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{roleStats.EMPLOYEE}</div>
+                        <p className="text-xs text-muted-foreground">
+                            Regular access
                         </p>
                     </CardContent>
                 </Card>
@@ -283,276 +251,216 @@ export function RoleManagementClient({
                     <CardContent>
                         <div className="text-2xl font-bold">{roleStats.archived}</div>
                         <p className="text-xs text-muted-foreground">
-                            Inactive users
+                            Archived users
                         </p>
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Filters and Actions */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Filters & Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    {/* Search and Filters */}
-                    <div className="flex flex-col lg:flex-row gap-4">
-                        <div className="flex-1">
-                            <div className="relative">
-                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    placeholder="Search by name or email..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-8"
-                                />
-                            </div>
-                        </div>
-                        
-                        <Select value={selectedRole} onValueChange={setSelectedRole}>
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Filter by role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Roles</SelectItem>
-                                <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
-                                <SelectItem value="MANAGER">Manager</SelectItem>
-                                <SelectItem value="HR">HR Specialist</SelectItem>
-                                <SelectItem value="EMPLOYEE">Employee</SelectItem>
-                            </SelectContent>
-                        </Select>
-
-                        <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Filter by status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Status</SelectItem>
-                                <SelectItem value="APPROVED">Approved</SelectItem>
-                                <SelectItem value="PENDING">Pending</SelectItem>
-                            </SelectContent>
-                        </Select>
-
-                        <Button
-                            variant="outline"
-                            onClick={() => setShowArchived(!showArchived)}
-                        >
-                            <Archive className="mr-2 h-4 w-4" />
-                            {showArchived ? "Hide" : "Show"} Archived
-                        </Button>
+            {/* Search and Filters */}
+            <div className="flex flex-col lg:flex-row gap-4">
+                <div className="flex-1">
+                    <div className="relative">
+                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search by name or email..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-8"
+                        />
                     </div>
+                </div>
+                
+                <Select value={selectedRole} onValueChange={setSelectedRole}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Filter by role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Roles</SelectItem>
+                        <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
+                        <SelectItem value="HR">HR Specialist</SelectItem>
+                        <SelectItem value="EMPLOYEE">Employee</SelectItem>
+                    </SelectContent>
+                </Select>
 
-                    {/* Bulk Actions */}
-                    {selectedUsers.length > 0 && (
-                        <div className="flex items-center gap-4 p-4 bg-muted rounded-lg">
-                            <span className="text-sm font-medium">
-                                {selectedUsers.length} users selected
-                            </span>
-                            <Select 
-                                value={bulkRole} 
-                                onValueChange={(value: Role) => setBulkRole(value)}
-                            >
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue placeholder="Change role to..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
-                                    <SelectItem value="MANAGER">Manager</SelectItem>
-                                    <SelectItem value="HR">HR Specialist</SelectItem>
-                                    <SelectItem value="EMPLOYEE">Employee</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Button
-                                onClick={handleBulkRoleChange}
-                                disabled={!bulkRole || isPending}
-                            >
-                                Apply Changes
-                            </Button>
-                            <Button
-                                variant="outline"
-                                onClick={() => setSelectedUsers([])}
-                            >
-                                Clear Selection
-                            </Button>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="PENDING">Pending</SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <Button
+                    variant={showArchived ? "default" : "outline"}
+                    onClick={() => setShowArchived(!showArchived)}
+                    className="whitespace-nowrap"
+                >
+                    {showArchived ? "Hide Archived" : "Show Archived"}
+                </Button>
+            </div>
+
+            {/* Bulk Actions */}
+            {selectedUsers.length > 0 && (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <span className="text-sm text-blue-700">
+                        {selectedUsers.length} users selected
+                    </span>
+                    <Select 
+                        value={bulkRole} 
+                        onValueChange={(value: Role) => setBulkRole(value)}
+                    >
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Change role to..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
+                            <SelectItem value="HR">HR Specialist</SelectItem>
+                            <SelectItem value="EMPLOYEE">Employee</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Button
+                        onClick={handleBulkRoleChange}
+                        disabled={!bulkRole || isPending}
+                    >
+                        Apply Changes
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => setSelectedUsers([])}
+                    >
+                        Clear Selection
+                    </Button>
+                </div>
+            )}
 
             {/* Users Table */}
             <Card>
                 <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <CardTitle>
-                            Users ({filteredUsers.length})
-                        </CardTitle>
-                        <div className="flex gap-2">
-                            <Button variant="outline" size="sm">
-                                <Download className="mr-2 h-4 w-4" />
-                                Export
-                            </Button>
-                            <Button variant="outline" size="sm">
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                                Refresh
-                            </Button>
-                        </div>
-                    </div>
+                    <CardTitle>Users ({filteredUsers.length})</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[50px]">
-                                    <Checkbox
-                                        checked={
-                                            filteredUsers.length > 0 && 
-                                            selectedUsers.length === filteredUsers.length
-                                        }
-                                        onCheckedChange={handleSelectAll}
-                                    />
-                                </TableHead>
-                                <TableHead>User</TableHead>
-                                <TableHead>Role</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Department</TableHead>
-                                <TableHead>Joined</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredUsers.map((user) => {
-                                const roleDisplay = getRoleDisplay(user.role);
-                                const IconComponent = roleDisplay.icon;
-
-                                return (
-                                    <TableRow key={user.id} className={user.isArchived ? "opacity-60" : ""}>
-                                        <TableCell>
-                                            <Checkbox
-                                                checked={selectedUsers.includes(user.id)}
-                                                onCheckedChange={(checked) => 
-                                                    handleSelectUser(user.id, checked as boolean)
+                    <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                            <thead>
+                                <tr className="border-b">
+                                    <th className="text-left p-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedUsers.length === filteredUsers.length && filteredUsers.length > 0}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedUsers(filteredUsers.map(u => u.id));
+                                                } else {
+                                                    setSelectedUsers([]);
                                                 }
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center space-x-3">
-                                                <Avatar className="h-8 w-8">
-                                                    <AvatarImage src={user.imageUrl || undefined} />
-                                                    <AvatarFallback>
-                                                        {user.firstName?.charAt(0) || user.email.charAt(0)}
-                                                    </AvatarFallback>
-                                                </Avatar>
+                                            }}
+                                        />
+                                    </th>
+                                    <th className="text-left p-2">User</th>
+                                    <th className="text-left p-2">Role</th>
+                                    <th className="text-left p-2">Status</th>
+                                    <th className="text-left p-2">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredUsers.map((user) => {
+                                    const roleDisplay = getRoleDisplay(user.role);
+                                    const RoleIcon = roleDisplay.icon;
+                                    
+                                    return (
+                                        <tr key={user.id} className={`border-b hover:bg-gray-50 ${user.isArchived ? 'opacity-50' : ''}`}>
+                                            <td className="p-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedUsers.includes(user.id)}
+                                                    onChange={(e) => handleUserSelection(user.id, e.target.checked)}
+                                                />
+                                            </td>
+                                            <td className="p-2">
                                                 <div>
-                                                    <div className="font-medium">
-                                                        {user.firstName} {user.lastName}
-                                                    </div>
-                                                    <div className="text-sm text-muted-foreground">
-                                                        {user.email}
-                                                    </div>
+                                                    <div className="font-medium">{user.name}</div>
+                                                    <div className="text-sm text-gray-500">{user.email}</div>
                                                 </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant={roleDisplay.color} className="gap-1">
-                                                <IconComponent className="h-3 w-3" />
-                                                {roleDisplay.label}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge 
-                                                variant={user.status === "APPROVED" ? "default" : "secondary"}
-                                            >
-                                                {user.status}
-                                            </Badge>
-                                            {user.isArchived && (
-                                                <Badge variant="outline" className="ml-2">
-                                                    Archived
+                                            </td>
+                                            <td className="p-2">
+                                                <Badge variant={roleDisplay.color as any} className="gap-1">
+                                                    <RoleIcon className="h-3 w-3" />
+                                                    {roleDisplay.label}
                                                 </Badge>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="text-sm">
-                                                {user.department?.name || "Not assigned"}
-                                            </div>
-                                            {user.branch && (
-                                                <div className="text-xs text-muted-foreground">
-                                                    {user.branch.name}
-                                                </div>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {user.dateOfJoining?.toLocaleDateString() || "Not set"}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleRoleChange(user.id, "EMPLOYEE")}
-                                                        disabled={user.role === "EMPLOYEE"}
-                                                    >
-                                                        <Users className="mr-2 h-4 w-4" />
-                                                        Make Employee
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleRoleChange(user.id, "MANAGER")}
-                                                        disabled={user.role === "MANAGER"}
-                                                    >
-                                                        <UserCheck className="mr-2 h-4 w-4" />
-                                                        Make Manager
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleRoleChange(user.id, "HR")}
-                                                        disabled={user.role === "HR"}
-                                                    >
-                                                        <Shield className="mr-2 h-4 w-4" />
-                                                        Make HR Specialist
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleRoleChange(user.id, "SUPERADMIN")}
-                                                        disabled={user.role === "SUPERADMIN"}
-                                                    >
-                                                        <Crown className="mr-2 h-4 w-4" />
-                                                        Make Super Admin
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleArchiveToggle(user.id)}
-                                                    >
-                                                        {user.isArchived ? (
-                                                            <>
-                                                                <ArchiveRestore className="mr-2 h-4 w-4" />
-                                                                Restore User
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <Archive className="mr-2 h-4 w-4" />
-                                                                Archive User
-                                                            </>
-                                                        )}
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
-                        </TableBody>
-                    </Table>
-
-                    {filteredUsers.length === 0 && (
-                        <div className="text-center py-12">
-                            <Users className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                            <h3 className="text-lg font-semibold">No users found</h3>
-                            <p className="text-muted-foreground">
-                                Try adjusting your search criteria or filters
-                            </p>
-                        </div>
-                    )}
+                                            </td>
+                                            <td className="p-2">
+                                                <Badge variant={user.status === "VERIFIED" ? "default" : "secondary"}>
+                                                    {user.status === "VERIFIED" ? (
+                                                        <>
+                                                            <CheckCircle className="mr-1 h-3 w-3" />
+                                                            Active
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <XCircle className="mr-1 h-3 w-3" />
+                                                            Pending
+                                                        </>
+                                                    )}
+                                                </Badge>
+                                            </td>
+                                            <td className="p-2">
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="sm">
+                                                            <MoreHorizontal className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleRoleChange(user.id, "EMPLOYEE")}
+                                                            disabled={user.role === "EMPLOYEE"}
+                                                        >
+                                                            <Users className="mr-2 h-4 w-4" />
+                                                            Make Employee
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleRoleChange(user.id, "HR")}
+                                                            disabled={user.role === "HR"}
+                                                        >
+                                                            <Shield className="mr-2 h-4 w-4" />
+                                                            Make HR Specialist
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleRoleChange(user.id, "SUPERADMIN")}
+                                                            disabled={user.role === "SUPERADMIN"}
+                                                        >
+                                                            <Crown className="mr-2 h-4 w-4" />
+                                                            Make Super Admin
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleArchiveToggle(user.id)}
+                                                        >
+                                                            {user.isArchived ? (
+                                                                <>
+                                                                    <ArchiveRestore className="mr-2 h-4 w-4" />
+                                                                    Restore User
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Archive className="mr-2 h-4 w-4" />
+                                                                    Archive User
+                                                                </>
+                                                            )}
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 </CardContent>
             </Card>
         </div>

@@ -24,7 +24,7 @@ function minutesToTimeString(minutes: number): string {
 
 export async function getOvertimePayoutSummary(userId: string, year: number) {
   const admin = await getDbUser();
-  if (!admin || !['SUPERADMIN', 'MANAGER'].includes(admin.role)) {
+  if (!admin || admin.role !== 'SUPERADMIN') {
     throw new Error("Unauthorized");
   }
 
@@ -109,7 +109,7 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
 
 export async function getEligibleEmployeesForOvertime(branchId?: string) {
   const admin = await getDbUser();
-  if (!admin || !['SUPERADMIN', 'MANAGER'].includes(admin.role)) {
+  if (!admin || admin.role !== 'SUPERADMIN') {
     throw new Error("Unauthorized");
   }
 
@@ -133,7 +133,7 @@ export async function getEligibleEmployeesForOvertime(branchId?: string) {
 
 export async function applyOvertimePayout(userId: string, year: number) {
   const admin = await getDbUser();
-  if (!admin || !['SUPERADMIN', 'MANAGER'].includes(admin.role)) {
+  if (!admin || admin.role !== 'SUPERADMIN') {
     throw new Error("Unauthorized");
   }
 
