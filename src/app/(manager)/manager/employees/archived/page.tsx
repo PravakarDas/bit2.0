@@ -4,7 +4,7 @@ import { getArchivedEmployeesForManager } from "@/actions/manager.actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SearchInput } from "@/components/ui/search-input";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -17,6 +17,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Archive, RotateCcw, Search } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Archived Employees - Manager Portal",
@@ -82,7 +83,11 @@ async function ArchivedEmployeesList() {
               Archived Employees ({archivedEmployees.length})
             </CardTitle>
             <div className="flex items-center gap-2">
-              <SearchInput placeholder="Search archived employees..." className="w-64" />
+              <Input
+                placeholder="Search archived employees..."
+                className="w-64"
+                aria-label="Search archived employees"
+              />
             </div>
           </div>
         </CardHeader>
@@ -180,15 +185,23 @@ async function ArchivedEmployeesList() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex items-center gap-1"
-                        disabled // Managers cannot restore employees
-                      >
-                        <RotateCcw className="h-3 w-3" />
-                        Restore
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/manager/employees/${employee.id}`}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline"
+                        >
+                          View Details
+                        </Link>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center gap-1"
+                          disabled // Managers cannot restore employees
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          Restore
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

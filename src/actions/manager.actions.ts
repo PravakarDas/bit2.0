@@ -222,6 +222,93 @@ export async function approveEmployeeAsManager(userId: string) {
   }
 }
 
+// Single employee fetch for manager (includes archived)
+export async function getEmployeeForManagerById(id: string) {
+  const user = await getDbUser();
+  if (!user || user.role !== "EMPLOYEE" || !user.isManager) {
+    throw new Error("Unauthorized");
+  }
+
+  return await prisma.user.findFirst({
+    where: {
+      id,
+      role: { not: "SUPERADMIN" },
+    },
+    select: {
+      id: true,
+      clerkId: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      imageUrl: true,
+      role: true,
+      isManager: true,
+      status: true,
+      employeeStatus: true,
+      // Personal Information
+      gender: true,
+      dateOfBirth: true,
+      bloodGroup: true,
+      nidNumber: true,
+      phoneNumber: true,
+      personalEmail: true,
+      dateOfJoining: true,
+      attendanceId: true,
+      // Address Information
+      currentStreet: true,
+      currentCity: true,
+      currentState: true,
+      currentCountry: true,
+      currentPostalCode: true,
+      permanentStreet: true,
+      permanentCity: true,
+      permanentState: true,
+      permanentCountry: true,
+      permanentPostalCode: true,
+      // Emergency Contact
+      emergencyContactName: true,
+      emergencyContactRelationship: true,
+      emergencyContactPhone: true,
+      emergencyContactEmail: true,
+      // Nominee Details
+      nomineeName: true,
+      nomineeRelationship: true,
+      nomineePhone: true,
+      nomineeEmail: true,
+      nomineeNid: true,
+      nomineeAddress: true,
+      // Professional Info
+      portfolioLink: true,
+      githubLink: true,
+      linkedinLink: true,
+      // Work settings (non-salary)
+      workingDaysInMonth: true,
+      // Relations (no salary fields)
+      branch: {
+        select: {
+          id: true,
+          name: true,
+          location: true,
+        },
+      },
+      department: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      designation: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}
+
 // Manager Profile Request Functions
 export async function getPendingProfileUpdateRequestsForManager() {
   const user = await getDbUser();
@@ -244,10 +331,10 @@ export async function getPendingProfileUpdateRequestsForManager() {
           branch: {
             select: {
               name: true,
-            }
-          }
-        }
-      }
+            },
+          },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });

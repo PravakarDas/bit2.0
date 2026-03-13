@@ -1,4 +1,4 @@
-import { getActiveEmployeesForManager } from "@/actions/manager.actions";
+import { getEmployeeForManagerById } from "@/actions/manager.actions";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,8 @@ export default async function ManagerEmployeeDetailPage({
 }: { 
     params: { id: string } 
 }) {
-    const { id } = await params;
-    const allEmployees = await getActiveEmployeesForManager();
-    const employee = allEmployees.find(emp => emp.id === id);
+    const { id } = params;
+    const employee = await getEmployeeForManagerById(id);
 
     if (!employee) {
         notFound();
