@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, User, Mail, Building, Calendar, Phone, MapPin, FileText } from "lucide-react";
+import { ArrowLeft, User, Mail, Building, Calendar, Phone, MapPin, FileText, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
+import { WorkingDaysInput } from "@/components/admin/WorkingDaysInput";
 
 export default async function ManagerEmployeeDetailPage({ 
     params 
@@ -24,6 +25,8 @@ export default async function ManagerEmployeeDetailPage({
     const employeeName = employee.firstName && employee.lastName
         ? `${employee.firstName} ${employee.lastName}`
         : employee.email;
+
+    const workingDaysInMonth = employee.workingDaysInMonth ?? 22;
 
     return (
         <div className="space-y-6">
@@ -141,6 +144,137 @@ export default async function ManagerEmployeeDetailPage({
                             >
                                 {employee.employeeStatus || "ACTIVE"}
                             </Badge>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Employment Details (mirroring admin view, without salary) */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Calendar className="h-5 w-5" />
+                        Employment Details
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div>
+                        <label className="text-sm font-medium text-muted-foreground">Date of Joining</label>
+                        <p className="font-medium flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                            {employee.dateOfJoining ? formatDate(employee.dateOfJoining) : "Not set"}
+                        </p>
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-muted-foreground">Working Days (Monthly)</label>
+                        <p className="text-sm text-muted-foreground">
+                            Current setting: {workingDaysInMonth}
+                        </p>
+                        <WorkingDaysInput
+                            employeeId={employee.id}
+                            currentWorkingDays={workingDaysInMonth}
+                        />
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="grid gap-6 md:grid-cols-2">
+                {/* Emergency Contact */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Phone className="h-5 w-5" />
+                            Emergency Contact
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Name</label>
+                            <p className="font-medium">{employee.emergencyContactName || "Not provided"}</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Relationship</label>
+                            <p className="font-medium">{employee.emergencyContactRelationship || "Not provided"}</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                            <p className="font-medium flex items-center gap-2">
+                                {employee.emergencyContactPhone ? (
+                                    <>
+                                        <Phone className="h-4 w-4" />
+                                        {employee.emergencyContactPhone}
+                                    </>
+                                ) : (
+                                    "Not provided"
+                                )}
+                            </p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Email</label>
+                            <p className="font-medium flex items-center gap-2">
+                                {employee.emergencyContactEmail ? (
+                                    <>
+                                        <Mail className="h-4 w-4" />
+                                        {employee.emergencyContactEmail}
+                                    </>
+                                ) : (
+                                    "Not provided"
+                                )}
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Nominee Details */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5" />
+                            Nominee Details
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Name</label>
+                            <p className="font-medium">{employee.nomineeName || "Not provided"}</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Relationship</label>
+                            <p className="font-medium">{employee.nomineeRelationship || "Not provided"}</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                            <p className="font-medium flex items-center gap-2">
+                                {employee.nomineePhone ? (
+                                    <>
+                                        <Phone className="h-4 w-4" />
+                                        {employee.nomineePhone}
+                                    </>
+                                ) : (
+                                    "Not provided"
+                                )}
+                            </p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Email</label>
+                            <p className="font-medium flex items-center gap-2">
+                                {employee.nomineeEmail ? (
+                                    <>
+                                        <Mail className="h-4 w-4" />
+                                        {employee.nomineeEmail}
+                                    </>
+                                ) : (
+                                    "Not provided"
+                                )}
+                            </p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">NID Number</label>
+                            <p className="font-medium">{employee.nomineeNid || "Not provided"}</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Address</label>
+                            <p className="font-medium">{employee.nomineeAddress || "Not provided"}</p>
                         </div>
                     </CardContent>
                 </Card>

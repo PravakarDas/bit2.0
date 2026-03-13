@@ -61,6 +61,8 @@ export async function getActiveEmployeesForManager() {
       nomineeEmail: true,
       nomineeNid: true,
       nomineeAddress: true,
+      // Work settings (non-salary)
+      workingDaysInMonth: true,
       // Professional Info
       portfolioLink: true,
       githubLink: true,
