@@ -1,5 +1,4 @@
 import { getActiveEmployeesForManager, getPendingEmployeesForManager } from "@/actions/manager.actions";
-import { getActiveBranches } from "@/actions/branch.actions";
 import {
     Table,
     TableBody,
@@ -9,17 +8,16 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ApprovalButtons } from "@/components/admin/ApprovalButtons";
+import { ManagerApprovalButtons } from "@/components/manager/ManagerApprovalButtons";
 import { EmployeeStatusSelect } from "@/components/admin/EmployeeStatusSelect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Clock, CheckCircle } from "lucide-react";
 import Link from "next/link";
 
 export default async function ManagerEmployeesPage() {
-    const [activeEmployees, pendingEmployees, branches] = await Promise.all([
+    const [activeEmployees, pendingEmployees] = await Promise.all([
         getActiveEmployeesForManager(),
         getPendingEmployeesForManager(),
-        getActiveBranches()
     ]);
 
     return (
@@ -137,7 +135,7 @@ export default async function ManagerEmployeesPage() {
                                                 {employee.department?.name || "Not assigned"}
                                             </TableCell>
                                             <TableCell>
-                                                <ApprovalButtons userId={employee.id} />
+                                                <ManagerApprovalButtons employeeId={employee.id} />
                                             </TableCell>
                                         </TableRow>
                                     ))}

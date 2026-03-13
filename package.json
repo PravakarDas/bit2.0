@@ -14,7 +14,7 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.36.10",
+    "@clerk/nextjs": "^7.0.0",
     "@hookform/resolvers": "^5.2.2",
     "@prisma/client": "^6.2.1",
     "@radix-ui/react-avatar": "^1.1.11",

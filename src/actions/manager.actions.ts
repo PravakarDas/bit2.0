@@ -1,4 +1,7 @@
+"use server";
+
 import { PrismaClient } from "@prisma/client";
+import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
 
 const prisma = new PrismaClient();
@@ -187,6 +190,34 @@ export async function getArchivedEmployeesForManager() {
     },
     orderBy: { updatedAt: "desc" },
   });
+}
+
+// Manager Approval Function (no salary updates)
+export async function approveEmployeeAsManager(userId: string) {
+  const approver = await getDbUser();
+
+  if (!approver || approver.role !== "EMPLOYEE" || !approver.isManager) {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        status: "APPROVED",
+        employeeStatus: "ACTIVE",
+      },
+    });
+
+    // Refresh manager and admin views of employees
+    revalidatePath("/manager/employees");
+    revalidatePath("/admin/employees");
+
+    return { success: true, user };
+  } catch (error) {
+    console.error("Error manager approving employee:", error);
+    return { success: false, error: "Failed to approve employee" };
+  }
 }
 
 // Manager Profile Request Functions
