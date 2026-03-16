@@ -3,6 +3,45 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { LeaveApplicationStatus, Prisma } from "@prisma/client";
+import { getDbUser } from "./user.actions";
+import { createAdminNotification } from "./notification.actions";
+
+async function logManagerHolidayAction(params: {
+    actorId: string;
+    actorName: string;
+    action: "CREATE" | "UPDATE" | "DELETE";
+    holidayName: string;
+    holidayDate: Date;
+    holidayId: string;
+}) {
+    try {
+        await prisma.auditLog.create({
+            data: {
+                userId: params.actorId,
+                oldEmi: null,
+                newEmi: null,
+                changeReason: `Manager holiday ${params.action.toLowerCase()}: ${params.holidayName} on ${params.holidayDate.toISOString().split("T")[0]} (holidayId: ${params.holidayId})`,
+            },
+        });
+
+        await createAdminNotification({
+            type: "SYSTEM_ALERT",
+            title: `Manager Holiday ${params.action}`,
+            message: `${params.actorName} ${params.action.toLowerCase()}d holiday "${params.holidayName}" for ${params.holidayDate.toISOString().split("T")[0]}`,
+            metadata: {
+                actorId: params.actorId,
+                actorName: params.actorName,
+                action: params.action,
+                holidayId: params.holidayId,
+                holidayName: params.holidayName,
+                holidayDate: params.holidayDate.toISOString(),
+                source: "holiday_management",
+            },
+        });
+    } catch (error) {
+        console.error("Failed to log manager holiday action:", error);
+    }
+}
 
 // Leave Types Management
 export async function getActiveLeaveTypes() {
@@ -576,6 +615,19 @@ export async function createPublicHoliday(data: {
                 applicableBranchIds
             }
         });
+
+        const actor = await getDbUser();
+        if (actor?.role === "EMPLOYEE" && actor.isManager) {
+            const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+            await logManagerHolidayAction({
+                actorId: actor.id,
+                actorName,
+                action: "CREATE",
+                holidayName: holiday.name,
+                holidayDate: holiday.date,
+                holidayId: holiday.id,
+            });
+        }
         
         revalidatePath("/admin/holidays");
         return { success: true, holiday };
@@ -668,6 +720,19 @@ export async function updatePublicHoliday(id: string, data: {
             where: { id },
             data: updateData
         });
+
+        const actor = await getDbUser();
+        if (actor?.role === "EMPLOYEE" && actor.isManager) {
+            const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+            await logManagerHolidayAction({
+                actorId: actor.id,
+                actorName,
+                action: "UPDATE",
+                holidayName: holiday.name,
+                holidayDate: holiday.date,
+                holidayId: holiday.id,
+            });
+        }
         
         revalidatePath("/admin/holidays");
         return { success: true, holiday };
@@ -679,9 +744,27 @@ export async function updatePublicHoliday(id: string, data: {
 
 export async function deletePublicHoliday(id: string) {
     try {
+        const existingHoliday = await prisma.publicHoliday.findUnique({ where: { id } });
+        if (!existingHoliday) {
+            return { success: false, error: "Holiday not found" };
+        }
+
         await prisma.publicHoliday.delete({
             where: { id }
         });
+
+        const actor = await getDbUser();
+        if (actor?.role === "EMPLOYEE" && actor.isManager) {
+            const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+            await logManagerHolidayAction({
+                actorId: actor.id,
+                actorName,
+                action: "DELETE",
+                holidayName: existingHoliday.name,
+                holidayDate: existingHoliday.date,
+                holidayId: existingHoliday.id,
+            });
+        }
         
         revalidatePath("/admin/holidays");
         return { success: true };

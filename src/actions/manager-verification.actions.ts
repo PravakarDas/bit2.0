@@ -149,7 +149,7 @@ export async function verifyLoanRequest(
       data: {
         type: "LOAN_APPLICATION_PENDING",
         title: `Manager Verified Loan Request`,
-        message: `Manager ${user.firstName} ${user.lastName} has verified the loan request of ${employee?.firstName} ${employee?.lastName} for amount ₹${loan.issuedAmount.toLocaleString()}. ${comments ? `Manager's notes: ${comments}` : ""}`,
+        message: `Manager ${user.firstName} ${user.lastName} has verified the loan request of ${employee?.firstName} ${employee?.lastName} for amount ৳${loan.issuedAmount.toLocaleString()}. ${comments ? `Manager's notes: ${comments}` : ""}`,
         metadata: {
           loanId: loan.id,
           employeeId: loan.userId,
@@ -228,7 +228,7 @@ export async function rejectLoanRequest(
         userId: loan.userId,
         type: "LOAN_APPLICATION_DECLINED",
         title: "Loan Request Rejected",
-        message: `Your loan request for ₹${loan.issuedAmount.toLocaleString()} has been rejected by Manager ${user.firstName} ${user.lastName}. Reason: ${rejectionReason}`,
+        message: `Your loan request for ৳${loan.issuedAmount.toLocaleString()} has been rejected by Manager ${user.firstName} ${user.lastName}. Reason: ${rejectionReason}`,
         relatedEntityId: loan.id,
       },
     });

@@ -279,7 +279,7 @@ export async function approveLoan(
                         userId: loan.managerVerifiedById,
                         type: "LOAN_APPLICATION_APPROVED",
                         title: "Loan Approved by Admin",
-                        message: `The loan request you verified for ${employee?.firstName} ${employee?.lastName} (₹${data.issuedAmount.toLocaleString()}) has been approved by Admin ${user.firstName} ${user.lastName}.`,
+                        message: `The loan request you verified for ${employee?.firstName} ${employee?.lastName} (৳${data.issuedAmount.toLocaleString()}) has been approved by Admin ${user.firstName} ${user.lastName}.`,
                         relatedEntityId: loan.id,
                     }
                 });
