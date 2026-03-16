@@ -2,9 +2,44 @@
 
 import { PrismaClient } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { createAdminNotification } from "./notification.actions";
 import { getDbUser } from "./user.actions";
 
 const prisma = new PrismaClient();
+
+async function logManagerEmployeeApprovalAction(params: {
+  actorId: string;
+  actorName: string;
+  employeeId: string;
+  employeeName: string;
+}) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId: params.actorId,
+        oldEmi: null,
+        newEmi: null,
+        changeReason: `Manager approved employee account: ${params.employeeName} (${params.employeeId})`,
+      },
+    });
+
+    await createAdminNotification({
+      type: "SYSTEM_ALERT",
+      title: "Manager Approved Employee Account",
+      message: `${params.actorName} approved the employee account for ${params.employeeName}`,
+      metadata: {
+        actorId: params.actorId,
+        actorName: params.actorName,
+        action: "APPROVED",
+        employeeId: params.employeeId,
+        employeeName: params.employeeName,
+        source: "employee_account_approval",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to log manager employee approval action:", error);
+  }
+}
 
 // Manager Employee Management Functions (No Salary Access)
 export async function getActiveEmployeesForManager() {
@@ -208,12 +243,31 @@ export async function approveEmployeeAsManager(userId: string) {
   }
 
   try {
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+
+    if (!existingUser) {
+      return { success: false, error: "Employee not found" };
+    }
+
     const user = await prisma.user.update({
       where: { id: userId },
       data: {
         status: "APPROVED",
         employeeStatus: "ACTIVE",
       },
+    });
+
+    const actorName = [approver.firstName, approver.lastName].filter(Boolean).join(" ") || approver.email;
+    const employeeName = [existingUser.firstName, existingUser.lastName].filter(Boolean).join(" ") || existingUser.email;
+
+    await logManagerEmployeeApprovalAction({
+      actorId: approver.id,
+      actorName,
+      employeeId: existingUser.id,
+      employeeName,
     });
 
     // Refresh manager and admin views of employees

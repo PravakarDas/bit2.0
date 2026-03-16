@@ -14,6 +14,7 @@ import {
     Stethoscope,
     Wallet,
     Timer,
+    Building2,
 } from "lucide-react";
 
 import {
@@ -74,6 +75,11 @@ const managerNavItems = [
         title: "Overtime Requests",
         url: "/manager/overtime-requests",
         icon: Timer,
+    },
+    {
+        title: "Organization Settings",
+        url: "/manager/organization",
+        icon: Building2,
     },
 ];
 

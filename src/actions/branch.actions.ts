@@ -3,6 +3,32 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
+import { logManagerOrganizationAction } from "./manager-organization.actions";
+
+function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
+    return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
+}
+
+async function notifyIfManager(params: {
+    user: NonNullable<Awaited<ReturnType<typeof getDbUser>>>;
+    action: "CREATED" | "UPDATED" | "ACTIVATED" | "DEACTIVATED";
+    entityId: string;
+    entityName: string;
+    details?: string;
+}) {
+    if (params.user.role === "EMPLOYEE" && params.user.isManager) {
+        const actorName = [params.user.firstName, params.user.lastName].filter(Boolean).join(" ") || params.user.email;
+        await logManagerOrganizationAction({
+            actorId: params.user.id,
+            actorName,
+            action: params.action,
+            entityType: "branch",
+            entityId: params.entityId,
+            entityName: params.entityName,
+            details: params.details,
+        });
+    }
+}
 
 export async function getBranches() {
     return await prisma.branch.findMany({
@@ -26,7 +52,7 @@ export async function createBranch(data: {
     weeklyOffDays?: string[];
 }) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') {
+    if (!canManageOrganization(user)) {
         throw new Error("Unauthorized");
     }
 
@@ -41,7 +67,17 @@ export async function createBranch(data: {
                 weeklyOffDays: data.weeklyOffDays || ["SUNDAY"]
             },
         });
-        revalidatePath("/admin/branches");
+
+        await notifyIfManager({
+            user: user!,
+            action: "CREATED",
+            entityId: branch.id,
+            entityName: branch.name,
+            details: `location=${branch.location}`,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, branch };
     } catch (error) {
         console.error("Error creating branch:", error);
@@ -51,7 +87,7 @@ export async function createBranch(data: {
 
 export async function toggleBranchStatus(id: string, isActive: boolean) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') {
+    if (!canManageOrganization(user)) {
         throw new Error("Unauthorized");
     }
 
@@ -60,7 +96,16 @@ export async function toggleBranchStatus(id: string, isActive: boolean) {
             where: { id },
             data: { isActive },
         });
-        revalidatePath("/admin/branches");
+
+        await notifyIfManager({
+            user: user!,
+            action: isActive ? "ACTIVATED" : "DEACTIVATED",
+            entityId: branch.id,
+            entityName: branch.name,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, branch };
     } catch (error) {
         console.error("Error toggling branch status:", error);
@@ -102,7 +147,7 @@ export async function updateBranchTimelineSettings(branchId: string, data: {
     weeklyOffDays: string[];
 }) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') {
+    if (!canManageOrganization(user)) {
         throw new Error("Unauthorized");
     }
 
@@ -116,7 +161,17 @@ export async function updateBranchTimelineSettings(branchId: string, data: {
                 weeklyOffDays: data.weeklyOffDays
             }
         });
-        revalidatePath("/admin/branches");
+
+        await notifyIfManager({
+            user: user!,
+            action: "UPDATED",
+            entityId: branch.id,
+            entityName: branch.name,
+            details: "timeline settings updated",
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, branch };
     } catch (error) {
         console.error("Error updating branch timeline settings:", error);
@@ -133,7 +188,7 @@ export async function updateBranch(id: string, data: {
     weeklyOffDays?: string[];
 }) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') {
+    if (!canManageOrganization(user)) {
         throw new Error("Unauthorized");
     }
 
@@ -149,8 +204,17 @@ export async function updateBranch(id: string, data: {
                 weeklyOffDays: data.weeklyOffDays || ["SUNDAY"]
             },
         });
-        revalidatePath("/admin/branches");
+
+        await notifyIfManager({
+            user: user!,
+            action: "UPDATED",
+            entityId: branch.id,
+            entityName: branch.name,
+            details: `location=${branch.location}`,
+        });
+
         revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, branch };
     } catch (error) {
         console.error("Error updating branch:", error);

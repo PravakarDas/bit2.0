@@ -4,6 +4,33 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { ValueType, AllowanceScope } from "@prisma/client";
 import { getDbUser } from "./user.actions";
+import { logManagerOrganizationAction } from "./manager-organization.actions";
+
+function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
+    return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
+}
+
+async function notifyIfManager(params: {
+    user: NonNullable<Awaited<ReturnType<typeof getDbUser>>>;
+    action: "CREATED" | "UPDATED" | "DELETED" | "ACTIVATED" | "DEACTIVATED";
+    entityType: string;
+    entityId: string;
+    entityName: string;
+    details?: string;
+}) {
+    if (params.user.role === "EMPLOYEE" && params.user.isManager) {
+        const actorName = [params.user.firstName, params.user.lastName].filter(Boolean).join(" ") || params.user.email;
+        await logManagerOrganizationAction({
+            actorId: params.user.id,
+            actorName,
+            action: params.action,
+            entityType: params.entityType,
+            entityId: params.entityId,
+            entityName: params.entityName,
+            details: params.details,
+        });
+    }
+}
 
 /**
  * Global Settings
@@ -29,7 +56,7 @@ export async function updateSystemSettings(data: {
     medicalClaimLimit: number;
 }) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
+    if (!canManageOrganization(user)) throw new Error("Unauthorized");
 
     const currentYear = new Date().getFullYear();
 
@@ -62,13 +89,23 @@ export async function updateSystemSettings(data: {
         }
     }
 
-    revalidatePath("/admin/settings");
+    await notifyIfManager({
+        user: user!,
+        action: "UPDATED",
+        entityType: "system settings",
+        entityId: "global",
+        entityName: "Global Settings",
+        details: `medicalClaimLimit=${data.medicalClaimLimit}`,
+    });
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true, settings };
 }
 
 export async function getAllowanceTypes() {
     const user = await getDbUser();
-    if (!user || user.role !== "SUPERADMIN") {
+    if (!canManageOrganization(user)) {
         throw new Error("Unauthorized");
     }
     
@@ -85,7 +122,7 @@ export async function createAllowanceType(data: {
     targetBranchIds: string[];
 }) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
+    if (!canManageOrganization(user)) throw new Error("Unauthorized");
 
     try {
         const allowance = await prisma.allowanceType.create({
@@ -97,7 +134,18 @@ export async function createAllowanceType(data: {
                 targetBranchIds: data.targetBranchIds,
             },
         });
-        revalidatePath("/admin/settings");
+
+        await notifyIfManager({
+            user: user!,
+            action: "CREATED",
+            entityType: "allowance",
+            entityId: allowance.id,
+            entityName: allowance.name,
+            details: `scope=${allowance.scope}, valueType=${allowance.valueType}, amount=${allowance.amount}`,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, allowance };
     } catch (error) {
         console.error(error);
@@ -113,7 +161,7 @@ export async function updateAllowanceType(id: string, data: {
     targetBranchIds: string[];
 }) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
+    if (!canManageOrganization(user)) throw new Error("Unauthorized");
 
     try {
         const allowance = await prisma.allowanceType.update({
@@ -126,7 +174,18 @@ export async function updateAllowanceType(id: string, data: {
                 targetBranchIds: data.targetBranchIds,
             },
         });
-        revalidatePath("/admin/settings");
+
+        await notifyIfManager({
+            user: user!,
+            action: "UPDATED",
+            entityType: "allowance",
+            entityId: allowance.id,
+            entityName: allowance.name,
+            details: `scope=${allowance.scope}, valueType=${allowance.valueType}, amount=${allowance.amount}`,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, allowance };
     } catch (error) {
         console.error(error);
@@ -136,22 +195,49 @@ export async function updateAllowanceType(id: string, data: {
 
 export async function toggleAllowanceStatus(id: string, isActive: boolean) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
+    if (!canManageOrganization(user)) throw new Error("Unauthorized");
 
-    await prisma.allowanceType.update({
+    const allowance = await prisma.allowanceType.update({
         where: { id },
         data: { isActive },
     });
-    revalidatePath("/admin/settings");
+
+    await notifyIfManager({
+        user: user!,
+        action: isActive ? "ACTIVATED" : "DEACTIVATED",
+        entityType: "allowance",
+        entityId: allowance.id,
+        entityName: allowance.name,
+    });
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true };
 }
 
 export async function deleteAllowanceType(id: string) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
+    if (!canManageOrganization(user)) throw new Error("Unauthorized");
+
+    const allowance = await prisma.allowanceType.findUnique({
+        where: { id },
+        select: { id: true, name: true },
+    });
 
     await prisma.allowanceType.delete({ where: { id } });
-    revalidatePath("/admin/settings");
+
+    if (allowance) {
+        await notifyIfManager({
+            user: user!,
+            action: "DELETED",
+            entityType: "allowance",
+            entityId: allowance.id,
+            entityName: allowance.name,
+        });
+    }
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true };
 }
 

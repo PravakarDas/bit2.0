@@ -5,6 +5,41 @@ import { revalidatePath } from "next/cache";
 import { UserStatus, EmployeeStatus, SalaryChangeReason } from "@prisma/client";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDbUser } from "./user.actions";
+import { createAdminNotification } from "./notification.actions";
+
+async function logManagerEmployeeRejectionAction(params: {
+    actorId: string;
+    actorName: string;
+    employeeId: string;
+    employeeName: string;
+}) {
+    try {
+        await prisma.auditLog.create({
+            data: {
+                userId: params.actorId,
+                oldEmi: null,
+                newEmi: null,
+                changeReason: `Manager rejected employee account: ${params.employeeName} (${params.employeeId})`,
+            },
+        });
+
+        await createAdminNotification({
+            type: "SYSTEM_ALERT",
+            title: "Manager Rejected Employee Account",
+            message: `${params.actorName} rejected the employee account for ${params.employeeName}`,
+            metadata: {
+                actorId: params.actorId,
+                actorName: params.actorName,
+                action: "REJECTED",
+                employeeId: params.employeeId,
+                employeeName: params.employeeName,
+                source: "employee_account_approval",
+            },
+        });
+    } catch (error) {
+        console.error("Failed to log manager employee rejection action:", error);
+    }
+}
 
 export async function getActiveEmployees() {
     return await prisma.user.findMany({
@@ -137,6 +172,8 @@ export async function approveEmployee(userId: string) {
 
 export async function rejectEmployee(userId: string) {
     try {
+        const actor = await getDbUser();
+
         // Get user details before deletion
         const user = await prisma.user.findUnique({
             where: { id: userId },
@@ -159,7 +196,20 @@ export async function rejectEmployee(userId: string) {
             console.warn("Could not delete user from Clerk:", clerkError);
         }
 
+        if (actor && actor.role === "EMPLOYEE" && actor.isManager) {
+            const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+            const employeeName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email;
+
+            await logManagerEmployeeRejectionAction({
+                actorId: actor.id,
+                actorName,
+                employeeId: user.id,
+                employeeName,
+            });
+        }
+
         revalidatePath("/admin/employees");
+        revalidatePath("/manager/employees");
         return { success: true };
     } catch (error) {
         console.error("Error rejecting employee:", error);

@@ -5,6 +5,32 @@ import { revalidatePath } from "next/cache";
 import { LeaveApplicationStatus, Prisma } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
+import { logManagerOrganizationAction } from "./manager-organization.actions";
+
+function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
+    return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
+}
+
+async function notifyIfManagerLeaveType(params: {
+    user: NonNullable<Awaited<ReturnType<typeof getDbUser>>>;
+    action: "CREATED" | "UPDATED" | "ACTIVATED" | "DEACTIVATED";
+    entityId: string;
+    entityName: string;
+    details?: string;
+}) {
+    if (params.user.role === "EMPLOYEE" && params.user.isManager) {
+        const actorName = [params.user.firstName, params.user.lastName].filter(Boolean).join(" ") || params.user.email;
+        await logManagerOrganizationAction({
+            actorId: params.user.id,
+            actorName,
+            action: params.action,
+            entityType: "leave type",
+            entityId: params.entityId,
+            entityName: params.entityName,
+            details: params.details,
+        });
+    }
+}
 
 async function logManagerHolidayAction(params: {
     actorId: string;
@@ -52,6 +78,11 @@ export async function getActiveLeaveTypes() {
 }
 
 export async function getAllLeaveTypes() {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
     return await prisma.leaveType.findMany({
         orderBy: { name: "asc" }
     });
@@ -64,6 +95,11 @@ export async function createLeaveType(data: {
     leaveResetPolicy: "ROSTER_EVERY_YEAR" | "FIXED";
     applicableBranches: string[]; // Array of branch IDs
 }) {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
     try {
         const leaveType = await prisma.leaveType.create({
             data: {
@@ -75,7 +111,16 @@ export async function createLeaveType(data: {
             }
         });
         
-        revalidatePath("/admin/leave-types");
+        await notifyIfManagerLeaveType({
+            user: user!,
+            action: "CREATED",
+            entityId: leaveType.id,
+            entityName: leaveType.name,
+            details: `allocatedDays=${leaveType.allocatedDays}, requiresApproval=${leaveType.requiresApproval}`,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, leaveType };
     } catch (error) {
         console.error("Error creating leave type:", error);
@@ -91,6 +136,11 @@ export async function updateLeaveType(id: string, data: {
     applicableBranches?: string[];
     isActive?: boolean;
 }) {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
     try {
         const updateData: any = { ...data };
         if (data.applicableBranches) {
@@ -102,7 +152,16 @@ export async function updateLeaveType(id: string, data: {
             data: updateData
         });
         
-        revalidatePath("/admin/leave-types");
+        await notifyIfManagerLeaveType({
+            user: user!,
+            action: "UPDATED",
+            entityId: leaveType.id,
+            entityName: leaveType.name,
+            details: data.allocatedDays !== undefined ? `allocatedDays=${data.allocatedDays}` : undefined,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, leaveType };
     } catch (error) {
         console.error("Error updating leave type:", error);
@@ -111,6 +170,11 @@ export async function updateLeaveType(id: string, data: {
 }
 
 export async function toggleLeaveTypeStatus(id: string) {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
     try {
         const leaveType = await prisma.leaveType.findUnique({ where: { id } });
         if (!leaveType) {
@@ -122,7 +186,15 @@ export async function toggleLeaveTypeStatus(id: string) {
             data: { isActive: !leaveType.isActive }
         });
         
-        revalidatePath("/admin/leave-types");
+        await notifyIfManagerLeaveType({
+            user: user!,
+            action: updated.isActive ? "ACTIVATED" : "DEACTIVATED",
+            entityId: updated.id,
+            entityName: updated.name,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, leaveType: updated };
     } catch (error) {
         console.error("Error toggling leave type status:", error);
