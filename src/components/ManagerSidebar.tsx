@@ -11,6 +11,7 @@ import {
     ChevronRight,
     ArrowLeft,
     Crown,
+    Stethoscope,
 } from "lucide-react";
 
 import {
@@ -56,6 +57,11 @@ const managerNavItems = [
         title: "Profile Requests", 
         url: "/manager/profile-requests", 
         icon: FileCheck,
+    },
+    {
+        title: "Medical",
+        url: "/manager/medical",
+        icon: Stethoscope,
     },
 ];
 

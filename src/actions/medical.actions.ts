@@ -134,6 +134,7 @@ export async function approveMedicalClaim(claimId: string) {
         });
 
         revalidatePath("/admin/medical-claims");
+        revalidatePath("/manager/medical");
         revalidatePath("/medical");
         return { success: true };
     });
@@ -154,6 +155,7 @@ export async function rejectMedicalClaim(claimId: string) {
     });
 
     revalidatePath("/admin/medical-claims");
+    revalidatePath("/manager/medical");
     revalidatePath("/medical");
     return { success: true };
 }
