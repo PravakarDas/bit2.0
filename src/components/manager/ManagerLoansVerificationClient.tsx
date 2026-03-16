@@ -110,7 +110,7 @@ export default function ManagerLoansVerificationClient() {
           <Card key={loan.id}>
             <CardHeader>
               <CardTitle>
-                {loan.user.firstName} {loan.user.lastName} - ₹{loan.issuedAmount.toLocaleString()}
+                {loan.user.firstName} {loan.user.lastName} - ৳{loan.issuedAmount.toLocaleString("en-BD")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -122,10 +122,10 @@ export default function ManagerLoansVerificationClient() {
                   <p><strong>Designation:</strong> {loan.user.designation?.name || "N/A"}</p>
                 </div>
                 <div>
-                  <p><strong>Amount:</strong> ₹{loan.issuedAmount.toLocaleString()}</p>
+                  <p><strong>Amount:</strong> ৳{loan.issuedAmount.toLocaleString("en-BD")}</p>
                   <p><strong>Duration:</strong> {loan.totalMonths} months</p>
                   <p><strong>Grace Period:</strong> {loan.gracePeriodMonths} months</p>
-                  <p><strong>Salary:</strong> ₹{loan.user.baseSalary.toLocaleString()}</p>
+                  <p><strong>Salary:</strong> ৳{loan.user.baseSalary.toLocaleString("en-BD")}</p>
                 </div>
               </div>
 
