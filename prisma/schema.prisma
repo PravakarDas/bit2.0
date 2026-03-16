@@ -218,6 +218,12 @@ model User {
   githubLink           String?
   linkedinLink         String?
   
+  // Employee Document Links
+  loanPapersLink       String?
+  nomineesPapersLink   String?
+  emergencyContactLink String?
+  personalInfoLink     String?
+  
   loans               Loan[]
   medicalClaims       MedicalClaim[]
   medicalEntitlements MedicalEntitlement[]

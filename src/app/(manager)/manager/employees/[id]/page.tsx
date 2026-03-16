@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { WorkingDaysInput } from "@/components/admin/WorkingDaysInput";
+import { EmployeeDocumentLinksForm } from "@/components/admin/EmployeeDocumentLinksForm";
 
 export default async function ManagerEmployeeDetailPage({ 
     params 
@@ -278,6 +279,26 @@ export default async function ManagerEmployeeDetailPage({
                     </CardContent>
                 </Card>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        Employee Document Links
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <EmployeeDocumentLinksForm
+                        employeeId={employee.id}
+                        initialValues={{
+                            loanPapersLink: employee.loanPapersLink,
+                            nomineesPapersLink: employee.nomineesPapersLink,
+                            emergencyContactLink: employee.emergencyContactLink,
+                            personalInfoLink: employee.personalInfoLink,
+                        }}
+                    />
+                </CardContent>
+            </Card>
 
             {/* Personal Information */}
             <Card>

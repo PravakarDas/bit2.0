@@ -67,6 +67,11 @@ export async function getActiveEmployeesForManager() {
       portfolioLink: true,
       githubLink: true,
       linkedinLink: true,
+      // Employee Document Links
+      loanPapersLink: true,
+      nomineesPapersLink: true,
+      emergencyContactLink: true,
+      personalInfoLink: true,
       // Relations (no salary fields)
       branch: {
         select: {
@@ -281,6 +286,11 @@ export async function getEmployeeForManagerById(id: string) {
       portfolioLink: true,
       githubLink: true,
       linkedinLink: true,
+      // Employee Document Links
+      loanPapersLink: true,
+      nomineesPapersLink: true,
+      emergencyContactLink: true,
+      personalInfoLink: true,
       // Work settings (non-salary)
       workingDaysInMonth: true,
       // Relations (no salary fields)

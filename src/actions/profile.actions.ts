@@ -49,6 +49,12 @@ export type ProfileData = {
   portfolioLink?: string | null;
   githubLink?: string | null;
   linkedinLink?: string | null;
+
+  // Employee Document Links
+  loanPapersLink?: string | null;
+  nomineesPapersLink?: string | null;
+  emergencyContactLink?: string | null;
+  personalInfoLink?: string | null;
 };
 
 const normalizeWorkingDaysInMonth = (value: unknown) => {
@@ -177,6 +183,10 @@ export async function submitProfileUpdateRequest(data: ProfileData) {
       portfolioLink: user.portfolioLink,
       githubLink: user.githubLink,
       linkedinLink: user.linkedinLink,
+      loanPapersLink: user.loanPapersLink,
+      nomineesPapersLink: user.nomineesPapersLink,
+      emergencyContactLink: user.emergencyContactLink,
+      personalInfoLink: user.personalInfoLink,
     };
 
     // Create update request

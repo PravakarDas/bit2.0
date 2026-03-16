@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { UserStatus, EmployeeStatus, SalaryChangeReason } from "@prisma/client";
 import { clerkClient } from "@clerk/nextjs/server";
+import { getDbUser } from "./user.actions";
 
 export async function getActiveEmployees() {
     return await prisma.user.findMany({
@@ -215,6 +216,48 @@ export async function updateWorkingDaysInMonth(userId: string, workingDaysInMont
     } catch (error) {
         console.error("Error updating working days in month:", error);
         return { success: false, error: "Failed to update working days" };
+    }
+}
+
+export async function updateEmployeeDocumentLinks(
+    userId: string,
+    links: {
+        loanPapersLink?: string | null;
+        nomineesPapersLink?: string | null;
+        emergencyContactLink?: string | null;
+        personalInfoLink?: string | null;
+    }
+) {
+    try {
+        const actor = await getDbUser();
+        const isAuthorized = !!actor && (
+            actor.role === "SUPERADMIN" ||
+            (actor.role === "EMPLOYEE" && actor.isManager)
+        );
+
+        if (!isAuthorized) {
+            return { success: false, error: "Unauthorized" };
+        }
+
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data: {
+                loanPapersLink: links.loanPapersLink ?? null,
+                nomineesPapersLink: links.nomineesPapersLink ?? null,
+                emergencyContactLink: links.emergencyContactLink ?? null,
+                personalInfoLink: links.personalInfoLink ?? null,
+            },
+        });
+
+        revalidatePath(`/admin/employees/${userId}`);
+        revalidatePath(`/admin/admin/employees/${userId}`);
+        revalidatePath(`/manager/employees/${userId}`);
+        revalidatePath(`/manager/manager/employees/${userId}`);
+
+        return { success: true, user };
+    } catch (error) {
+        console.error("Error updating employee document links:", error);
+        return { success: false, error: "Failed to update document links" };
     }
 }
 

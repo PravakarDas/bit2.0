@@ -11,6 +11,7 @@ import { EmployeeStatusSelect } from "@/components/admin/EmployeeStatusSelect";
 import { ManagerToggle } from "@/components/admin/ManagerToggle";
 import { getActiveBranches } from "@/actions/branch.actions";
 import { WorkingDaysInput } from "@/components/admin/WorkingDaysInput";
+import { EmployeeDocumentLinksForm } from "@/components/admin/EmployeeDocumentLinksForm";
 
 export default async function EmployeeProfilePage({ params }: { params: { id: string } }) {
     const { id } = await params;
@@ -259,6 +260,26 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
                     </CardContent>
                 </Card>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Settings className="h-5 w-5" />
+                        Employee Document Links
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <EmployeeDocumentLinksForm
+                        employeeId={user.id}
+                        initialValues={{
+                            loanPapersLink: user.loanPapersLink,
+                            nomineesPapersLink: user.nomineesPapersLink,
+                            emergencyContactLink: user.emergencyContactLink,
+                            personalInfoLink: user.personalInfoLink,
+                        }}
+                    />
+                </CardContent>
+            </Card>
 
             {/* Quick Actions */}
             <Card>
