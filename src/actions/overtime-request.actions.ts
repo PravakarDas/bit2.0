@@ -95,24 +95,7 @@ export async function submitOvertimeRequest(data: {
       },
     });
 
-    // Create admin notification
-    await prisma.adminNotification.create({
-      data: {
-        type: "OVERTIME_REQUEST_PENDING",
-        title: "New Overtime Request",
-        message: `${user.firstName} ${user.lastName} has requested ${data.totalOvertime} hours of overtime for ${new Date(data.overtimeDate).toLocaleDateString()}`,
-        metadata: {
-          overtimeRequestId: overtimeRequest.id,
-          userId: user.id,
-          userName: `${user.firstName} ${user.lastName}`,
-          overtimeDate: data.overtimeDate,
-          totalOvertime: data.totalOvertime,
-        },
-      },
-    });
-
     revalidatePath("/employee/overtime-requests");
-    revalidatePath("/admin/notifications");
     
     return { success: true, data: overtimeRequest };
   } catch (error) {
@@ -202,6 +185,13 @@ export async function getOvertimeRequests(filters?: {
             },
           },
         },
+        managerVerifiedBy: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
       orderBy: {
         requestedAt: "desc",
@@ -237,6 +227,15 @@ export async function getMyOvertimeRequests() {
     const requests = await prisma.overtimeRequest.findMany({
       where: {
         userId: user.id,
+      },
+      include: {
+        managerVerifiedBy: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
       orderBy: {
         requestedAt: "desc",
@@ -287,7 +286,8 @@ export async function approveOvertimeRequest(requestId: string) {
       return { success: false, error: "Request not found" };
     }
 
-    if (request.status !== "PENDING") {
+    // Allow approval for manager-verified or pending requests
+    if (request.status !== "PENDING" && request.status !== "MANAGER_VERIFIED") {
       return { success: false, error: "Request has already been processed" };
     }
 
@@ -362,6 +362,19 @@ export async function approveOvertimeRequest(requestId: string) {
         },
       });
 
+      if (request.managerVerifiedById) {
+        await tx.employeeNotification.create({
+          data: {
+            userId: request.managerVerifiedById,
+            type: "OVERTIME_REQUEST_APPROVED",
+            title: "Overtime Request Approved by Admin",
+            message: `The overtime request you verified for ${request.user.firstName} ${request.user.lastName} (${request.totalOvertime} hours on ${new Date(request.overtimeDate).toLocaleDateString()}) has been approved by ${admin.firstName} ${admin.lastName}.`,
+            relatedDate: request.overtimeDate,
+            relatedEntityId: request.id,
+          }
+        });
+      }
+
       return updatedRequest;
     });
 
@@ -414,7 +427,8 @@ export async function declineOvertimeRequest(requestId: string, declineReason: s
       return { success: false, error: "Request not found" };
     }
 
-    if (request.status !== "PENDING") {
+    // Allow decline for manager-verified or pending requests
+    if (request.status !== "PENDING" && request.status !== "MANAGER_VERIFIED") {
       return { success: false, error: "Request has already been processed" };
     }
 
@@ -426,6 +440,8 @@ export async function declineOvertimeRequest(requestId: string, declineReason: s
         reviewedBy: clerkId,
         reviewedAt: new Date(),
         declineReason,
+        adminDeclinedReason: declineReason,
+        adminDeclinedAt: new Date(),
       },
     });
 
@@ -440,6 +456,19 @@ export async function declineOvertimeRequest(requestId: string, declineReason: s
         relatedEntityId: request.id,
       },
     });
+
+    if (updatedRequest.managerVerifiedById) {
+      await prisma.employeeNotification.create({
+        data: {
+          userId: updatedRequest.managerVerifiedById,
+          type: "OVERTIME_REQUEST_DECLINED",
+          title: "Verified Overtime Request Declined by Admin",
+          message: `The overtime request you verified for ${request.user.firstName} ${request.user.lastName} (${request.totalOvertime} hours on ${new Date(request.overtimeDate).toLocaleDateString()}) has been declined by ${admin.firstName} ${admin.lastName}. Reason: ${declineReason}`,
+          relatedDate: request.overtimeDate,
+          relatedEntityId: request.id,
+        }
+      });
+    }
 
     revalidatePath("/admin/overtime-requests");
     revalidatePath("/admin/notifications");

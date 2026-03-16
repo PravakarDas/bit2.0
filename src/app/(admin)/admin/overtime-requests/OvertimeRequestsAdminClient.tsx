@@ -70,10 +70,20 @@ interface OvertimeRequest {
   totalOvertime: string;
   reason: string;
   taskNo: string | null;
-  status: "PENDING" | "APPROVED" | "DECLINED";
+  status: "PENDING" | "MANAGER_VERIFIED" | "MANAGER_REJECTED" | "APPROVED" | "DECLINED";
   reviewedBy: string | null;
   reviewedAt: Date | null;
   declineReason: string | null;
+  managerVerifiedAt?: Date | null;
+  managerVerifiedById?: string | null;
+  managerVerifiedBy?: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+  } | null;
+  managerComments?: string | null;
+  managerRejectionReason?: string | null;
+  adminDeclinedReason?: string | null;
   requestedAt: Date;
   user: User;
 }
@@ -167,6 +177,20 @@ export function OvertimeRequestsAdminClient({
             Pending
           </Badge>
         );
+      case "MANAGER_VERIFIED":
+        return (
+          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+            <CheckCircle2 className="mr-1 h-3 w-3" />
+            Manager Verified
+          </Badge>
+        );
+      case "MANAGER_REJECTED":
+        return (
+          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
+            <XCircle className="mr-1 h-3 w-3" />
+            Manager Rejected
+          </Badge>
+        );
       case "APPROVED":
         return (
           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
@@ -187,13 +211,14 @@ export function OvertimeRequestsAdminClient({
   };
 
   const pendingCount = requests.filter((r) => r.status === "PENDING").length;
+  const managerVerifiedCount = requests.filter((r) => r.status === "MANAGER_VERIFIED").length;
   const approvedCount = requests.filter((r) => r.status === "APPROVED").length;
   const declinedCount = requests.filter((r) => r.status === "DECLINED").length;
 
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -204,6 +229,20 @@ export function OvertimeRequestsAdminClient({
                 <p className="text-2xl font-bold">{pendingCount}</p>
               </div>
               <Clock className="h-8 w-8 text-yellow-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Manager Verified
+                </p>
+                <p className="text-2xl font-bold">{managerVerifiedCount}</p>
+              </div>
+              <CheckCircle2 className="h-8 w-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
@@ -257,6 +296,7 @@ export function OvertimeRequestsAdminClient({
                 <SelectContent>
                   <SelectItem value="all">All Requests</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="manager_verified">Manager Verified</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
                   <SelectItem value="declined">Declined</SelectItem>
                 </SelectContent>
@@ -396,10 +436,46 @@ export function OvertimeRequestsAdminClient({
                 </div>
               </div>
 
+              {selectedRequest.managerVerifiedBy && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Verified By Manager</Label>
+                    <p className="font-medium mt-1">
+                      {selectedRequest.managerVerifiedBy.firstName} {selectedRequest.managerVerifiedBy.lastName}
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Manager Verified At</Label>
+                    <p className="font-medium mt-1">
+                      {selectedRequest.managerVerifiedAt ? format(new Date(selectedRequest.managerVerifiedAt), "PPpp") : "N/A"}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <Label className="text-sm text-muted-foreground">Reason for Overtime</Label>
                 <p className="mt-1 p-3 bg-muted rounded-md">{selectedRequest.reason}</p>
               </div>
+
+              {selectedRequest.managerComments && (
+                <div>
+                  <Label className="text-sm text-muted-foreground">Manager Notes</Label>
+                  <p className="mt-1 p-3 bg-blue-50 border border-blue-200 rounded-md text-blue-700">
+                    {selectedRequest.managerComments}
+                  </p>
+                </div>
+              )}
+
+              {selectedRequest.status === "MANAGER_REJECTED" && selectedRequest.managerRejectionReason && (
+                <div>
+                  <Label className="text-sm text-muted-foreground">Manager Rejection Reason</Label>
+                  <p className="mt-1 p-3 bg-orange-50 border border-orange-200 rounded-md text-orange-700">
+                    {selectedRequest.managerRejectionReason}
+                  </p>
+                </div>
+              )}
 
               {selectedRequest.status === "DECLINED" && selectedRequest.declineReason && (
                 <div>
@@ -416,7 +492,7 @@ export function OvertimeRequestsAdminClient({
             </div>
           )}
 
-          {selectedRequest && selectedRequest.status === "PENDING" && (
+          {selectedRequest && selectedRequest.status === "MANAGER_VERIFIED" && (
             <DialogFooter>
               <Button
                 variant="outline"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAllLoans } from "@/actions/loan.actions";
+import { getAllLoansWithManagerInfo } from "@/actions/manager-verification.actions";
 import {
     Table,
     TableBody,
@@ -45,6 +45,15 @@ interface Loan {
         designation: { name: string } | null;
         branch: { name: string } | null;
     };
+        managerVerifiedAt?: Date | null;
+        managerVerifiedBy?: {
+            id: string;
+            firstName: string | null;
+            lastName: string | null;
+        } | null;
+        managerComments?: string | null;
+        managerRejectionReason?: string | null;
+        adminDeclinedReason?: string | null;
     emiState: {
         currentEmi: number;
         carryForward: number;
@@ -59,7 +68,7 @@ export default function AdminLoansPage() {
     const loadLoans = async () => {
         try {
             setRefreshing(true);
-            const loans = await getAllLoans();
+            const loans = await getAllLoansWithManagerInfo();
             setAllLoans(loans as Loan[]);
         } catch (error) {
             console.error("Failed to load loans:", error);
@@ -84,6 +93,7 @@ export default function AdminLoansPage() {
     // Helper function to extract decline reason from adminComments (temporary)
     const getDeclineReason = (loan: Loan) => {
         if (loan.declineReason) return loan.declineReason;
+        if (loan.adminDeclinedReason) return loan.adminDeclinedReason;
         if (loan.adminComments && loan.adminComments.startsWith('DECLINED:')) {
             return loan.adminComments.replace(/^DECLINED:\s*/, '').replace(/\s*\(Declined by:.*\)$/, '');
         }
@@ -92,6 +102,7 @@ export default function AdminLoansPage() {
 
     // Filter loans for tabs
     const pendingLoans = allLoans.filter(l => l.status === "PENDING");
+    const managerVerifiedLoans = allLoans.filter(l => l.status === "MANAGER_VERIFIED");
     const activeLoans = allLoans.filter(l => l.status === "ACTIVE" || l.status === "CLOSED");
     const declinedLoans = allLoans.filter(l => l.status === "DECLINED");
 
@@ -133,7 +144,8 @@ export default function AdminLoansPage() {
 
             <Tabs defaultValue="pending" className="space-y-4">
                 <TabsList>
-                    <TabsTrigger value="pending">Pending Reviews ({pendingLoans.length})</TabsTrigger>
+                    <TabsTrigger value="pending">Awaiting Manager ({pendingLoans.length})</TabsTrigger>
+                    <TabsTrigger value="manager-verified">Manager Verified ({managerVerifiedLoans.length})</TabsTrigger>
                     <TabsTrigger value="active">Active Portfolio ({activeLoans.length})</TabsTrigger>
                     <TabsTrigger value="declined">Declined ({declinedLoans.length})</TabsTrigger>
                 </TabsList>
@@ -189,12 +201,7 @@ export default function AdminLoansPage() {
                                                 })}
                                             </TableCell>
                                             <TableCell className="text-right pr-6">
-                                                {loan.status === "PENDING" ? (
-                                                    <ApproveLoanDialog 
-                                                        loan={loan as any} 
-                                                        onApprovalSuccess={handleApprovalSuccess}
-                                                    />
-                                                ) : loan.status === "DECLINED" ? (
+                                                {loan.status === "DECLINED" ? (
                                                     <div className="text-sm text-red-600">
                                                         <div className="font-medium">Declined</div>
                                                         {getDeclineReason(loan) && (
@@ -205,9 +212,70 @@ export default function AdminLoansPage() {
                                                     </div>
                                                 ) : (
                                                     <Badge variant="secondary" className="text-xs">
-                                                        {loan.status}
+                                                        Awaiting manager verification
                                                     </Badge>
                                                 )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="manager-verified">
+                    <div className="border rounded-lg bg-card shadow-sm overflow-hidden">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-muted/50">
+                                    <TableHead className="font-semibold">Employee</TableHead>
+                                    <TableHead className="font-semibold">Verified By</TableHead>
+                                    <TableHead className="font-semibold text-right">Requested Amount</TableHead>
+                                    <TableHead className="font-semibold text-center">Verification Notes</TableHead>
+                                    <TableHead className="font-semibold text-center">Date Verified</TableHead>
+                                    <TableHead className="font-semibold text-right pr-6">Action</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {managerVerifiedLoans.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                                            No manager-verified loan requests found.
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    managerVerifiedLoans.map((loan) => (
+                                        <TableRow key={loan.id} className="hover:bg-muted/30 transition-colors">
+                                            <TableCell className="font-medium">
+                                                <div className="flex flex-col">
+                                                    <span>{getEmployeeName(loan.user)}</span>
+                                                    <span className="text-xs text-muted-foreground">{loan.user.email}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="text-sm">
+                                                    <div>{loan.managerVerifiedBy?.firstName} {loan.managerVerifiedBy?.lastName}</div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums font-medium">
+                                                ৳{loan.issuedAmount.toLocaleString("en-BD")}
+                                            </TableCell>
+                                            <TableCell className="text-center text-sm text-muted-foreground max-w-xs truncate">
+                                                {loan.managerComments || "No notes"}
+                                            </TableCell>
+                                            <TableCell className="text-center text-muted-foreground text-sm">
+                                                {loan.managerVerifiedAt ? new Date(loan.managerVerifiedAt).toLocaleDateString('en-US', {
+                                                    year: 'numeric',
+                                                    month: 'short',
+                                                    day: 'numeric'
+                                                }) : 'N/A'}
+                                            </TableCell>
+                                            <TableCell className="text-right pr-6">
+                                                <ApproveLoanDialog 
+                                                    loan={loan as any} 
+                                                    onApprovalSuccess={handleApprovalSuccess}
+                                                />
                                             </TableCell>
                                         </TableRow>
                                     ))

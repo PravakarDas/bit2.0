@@ -32,10 +32,19 @@ interface OvertimeRequest {
   totalOvertime: string;
   reason: string;
   taskNo: string | null;
-  status: "PENDING" | "APPROVED" | "DECLINED";
+  status: "PENDING" | "MANAGER_VERIFIED" | "MANAGER_REJECTED" | "APPROVED" | "DECLINED";
   reviewedBy: string | null;
   reviewedAt: Date | null;
   declineReason: string | null;
+  managerVerifiedAt?: Date | null;
+  managerVerifiedBy?: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+  } | null;
+  managerRejectionReason?: string | null;
+  managerComments?: string | null;
+  adminDeclinedReason?: string | null;
   requestedAt: Date;
 }
 
@@ -85,6 +94,20 @@ export function OvertimeRequestsClient({ initialRequests }: OvertimeRequestsClie
           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
             <CheckCircle2 className="mr-1 h-3 w-3" />
             Approved
+          </Badge>
+        );
+      case "MANAGER_VERIFIED":
+        return (
+          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+            <CheckCircle2 className="mr-1 h-3 w-3" />
+            Manager Verified
+          </Badge>
+        );
+      case "MANAGER_REJECTED":
+        return (
+          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
+            <XCircle className="mr-1 h-3 w-3" />
+            Manager Rejected
           </Badge>
         );
       case "DECLINED":
@@ -153,10 +176,29 @@ export function OvertimeRequestsClient({ initialRequests }: OvertimeRequestsClie
                         <span className="text-muted-foreground">{request.reason}</span>
                       </div>
 
-                      {request.status === "DECLINED" && request.declineReason && (
+                      {request.managerVerifiedBy && (
+                        <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
+                          <span className="font-medium text-blue-700">Checked by Manager: </span>
+                          <span className="text-blue-700">
+                            {request.managerVerifiedBy.firstName} {request.managerVerifiedBy.lastName}
+                          </span>
+                          {request.managerComments && (
+                            <div className="mt-1 text-blue-600">Notes: {request.managerComments}</div>
+                          )}
+                        </div>
+                      )}
+
+                      {request.status === "MANAGER_REJECTED" && request.managerRejectionReason && (
+                        <div className="mb-3 p-2 bg-orange-50 border border-orange-200 rounded text-sm">
+                          <span className="font-medium text-orange-700">Manager Rejection Reason: </span>
+                          <span className="text-orange-600">{request.managerRejectionReason}</span>
+                        </div>
+                      )}
+
+                      {request.status === "DECLINED" && (request.adminDeclinedReason || request.declineReason) && (
                         <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm">
                           <span className="font-medium text-red-700">Decline Reason: </span>
-                          <span className="text-red-600">{request.declineReason}</span>
+                          <span className="text-red-600">{request.adminDeclinedReason || request.declineReason}</span>
                         </div>
                       )}
 

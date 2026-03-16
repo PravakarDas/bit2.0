@@ -12,6 +12,8 @@ import {
     ArrowLeft,
     Crown,
     Stethoscope,
+    Wallet,
+    Timer,
 } from "lucide-react";
 
 import {
@@ -62,6 +64,16 @@ const managerNavItems = [
         title: "Medical",
         url: "/manager/medical",
         icon: Stethoscope,
+    },
+    {
+        title: "Loans",
+        url: "/manager/loans",
+        icon: Wallet,
+    },
+    {
+        title: "Overtime Requests",
+        url: "/manager/overtime-requests",
+        icon: Timer,
     },
 ];
 

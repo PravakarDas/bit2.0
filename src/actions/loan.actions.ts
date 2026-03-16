@@ -188,10 +188,17 @@ export async function approveLoan(
     // 1. Validation Logic
     const loan = await prisma.loan.findUnique({ where: { id: loanId } });
     if (!loan) throw new Error("Loan not found");
+    // Allow approval for manager-verified loans or pending loans
+    if (loan.status !== LoanStatus.PENDING && loan.status !== LoanStatus.MANAGER_VERIFIED) {
+        throw new Error("Only pending or manager-verified loans can be approved");
+    }
 
-    const eligibility = await checkLoanEligibility(loan.userId, data.issuedAmount);
-    if (!eligibility.eligible) {
-        throw new Error(eligibility.reason);
+    // Skip eligibility check for manager-verified loans (manager already verified)
+    if (loan.status === LoanStatus.PENDING) {
+        const eligibility = await checkLoanEligibility(loan.userId, data.issuedAmount);
+        if (!eligibility.eligible) {
+            throw new Error(eligibility.reason);
+        }
     }
 
     return await prisma.$transaction(async (tx) => {
@@ -253,6 +260,31 @@ export async function approveLoan(
                 description: `Loan Disbursement - Loan #${loan.id.slice(-6)}`
             }
         });
+
+        // 6. Notify manager if this was a manager-verified loan
+        if (loan.managerVerifiedById) {
+            const manager = await tx.user.findUnique({
+                where: { id: loan.managerVerifiedById },
+                select: { id: true }
+            });
+
+            if (manager) {
+                const employee = await tx.user.findUnique({
+                    where: { id: loan.userId },
+                    select: { firstName: true, lastName: true }
+                });
+
+                await tx.employeeNotification.create({
+                    data: {
+                        userId: loan.managerVerifiedById,
+                        type: "LOAN_APPLICATION_APPROVED",
+                        title: "Loan Approved by Admin",
+                        message: `The loan request you verified for ${employee?.firstName} ${employee?.lastName} (₹${data.issuedAmount.toLocaleString()}) has been approved by Admin ${user.firstName} ${user.lastName}.`,
+                        relatedEntityId: loan.id,
+                    }
+                });
+            }
+        }
 
         revalidatePath("/admin/loans");
         return updatedLoan;
@@ -509,7 +541,16 @@ export async function getMyLoans() {
 
     return await prisma.loan.findMany({
         where: { userId: user.id },
-        include: { emiState: true },
+        include: {
+            emiState: true,
+            managerVerifiedBy: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                }
+            }
+        },
         orderBy: { createdAt: "desc" },
     });
 }
@@ -703,19 +744,47 @@ export async function declineLoan(
     const loan = await prisma.loan.findUnique({ where: { id: loanId } });
     if (!loan) throw new Error("Loan not found");
     
-    if (loan.status !== "PENDING") {
-        throw new Error("Only pending loans can be declined");
+    // Allow decline for pending or manager-verified loans
+    if (loan.status !== LoanStatus.PENDING && loan.status !== LoanStatus.MANAGER_VERIFIED) {
+        throw new Error("Only pending or manager-verified loans can be declined");
     }
 
     return await prisma.$transaction(async (tx) => {
-        // Update the Loan record (temporary solution until migration is applied)
         const updatedLoan = await tx.loan.update({
             where: { id: loanId },
             data: {
-                status: "DECLINED" as any, // Temporary fix until migration is applied
-                adminComments: `DECLINED: ${declineReason.trim()} (Declined by: ${user.id})`
+                status: LoanStatus.DECLINED,
+                adminDeclinedReason: declineReason,
+                adminDeclinedAt: new Date()
             }
         });
+
+        const employee = await tx.user.findUnique({
+            where: { id: loan.userId },
+            select: { firstName: true, lastName: true }
+        });
+
+        await tx.employeeNotification.create({
+            data: {
+                userId: loan.userId,
+                type: "LOAN_APPLICATION_DECLINED",
+                title: "Loan Request Declined",
+                message: `Your loan request for ৳${loan.issuedAmount.toLocaleString("en-BD")} has been declined. Reason: ${declineReason}`,
+                relatedEntityId: loan.id,
+            }
+        });
+
+        if (loan.managerVerifiedById) {
+            await tx.employeeNotification.create({
+                data: {
+                    userId: loan.managerVerifiedById,
+                    type: "LOAN_APPLICATION_DECLINED",
+                    title: "Verified Loan Declined by Admin",
+                    message: `The loan request you verified for ${employee?.firstName} ${employee?.lastName} (৳${loan.issuedAmount.toLocaleString("en-BD")}) has been declined by Admin ${user.firstName ?? ""} ${user.lastName ?? ""}. Reason: ${declineReason}`.trim(),
+                    relatedEntityId: loan.id,
+                }
+            });
+        }
 
         revalidatePath("/admin/loans");
         return updatedLoan;

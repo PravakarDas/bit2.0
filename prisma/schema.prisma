@@ -31,13 +31,17 @@ enum LoanStatus {
   ACTIVE
   CLOSED
   DECLINED
-}
 
+  MANAGER_VERIFIED
+  MANAGER_REJECTED
+}
 enum PaymentType {
   EMI
   MANUAL
-}
 
+  MANAGER_VERIFIED
+  MANAGER_REJECTED
+}
 enum ValueType {
   FIXED
   PERCENTAGE
@@ -88,6 +92,8 @@ enum OvertimeRequestStatus {
   PENDING
   APPROVED
   DECLINED
+  MANAGER_VERIFIED
+  MANAGER_REJECTED
 }
 
 model PublicHoliday {
@@ -248,6 +254,10 @@ model User {
   
   // Profile Update Requests
   profileUpdateRequests ProfileUpdateRequest[]
+  
+    // Manager verification relations
+    loansVerifiedByManager Loan[] @relation("LoanManagerVerification")
+    overtimeRequestsVerifiedByManager OvertimeRequest[] @relation("OvertimeRequestManagerVerification")
   
   // Employee Notifications
   employeeNotifications EmployeeNotification[]
@@ -445,6 +455,14 @@ model Loan {
   adminComments      String?    // Admin comments during approval
   declineReason      String?    // Reason for declining the loan
   declinedBy         String?    // Admin who declined the loan
+
+  managerVerifiedAt   DateTime?
+  managerVerifiedById String?
+  managerVerifiedBy   User?      @relation("LoanManagerVerification", fields: [managerVerifiedById], references: [id])
+  managerRejectionReason String?
+  managerComments     String?
+  adminDeclinedReason String?
+  adminDeclinedAt     DateTime?
 
   auditLogs AuditLog[]
 
@@ -773,6 +791,17 @@ model OvertimeRequest {
   reviewedBy          String?                 // Clerk ID of admin who reviewed
   reviewedAt          DateTime?
   declineReason       String?                 // Reason for declining (if declined)
+    // Manager verification fields
+    managerVerifiedAt   DateTime?
+    managerVerifiedById String?
+    managerVerifiedBy   User?      @relation("OvertimeRequestManagerVerification", fields: [managerVerifiedById], references: [id])
+    managerRejectionReason String?
+    managerComments     String?
+
+    // Admin decline fields (after manager verified)
+    adminDeclinedReason String?
+    adminDeclinedAt     DateTime?
+
   
   // Timestamps
   requestedAt         DateTime                @default(now())
