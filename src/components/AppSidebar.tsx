@@ -57,6 +57,7 @@ import { Button } from "@/components/ui/button";
 
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
+    { title: "Late Check-Ins", url: "/admin/late-checkins", icon: Clock },
     { title: "Notifications", url: "/admin/notifications", icon: Bell },
     { title: "Role Management", url: "/admin/role-management", icon: UserCog },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
@@ -86,6 +87,7 @@ const requestSubItems = [
 
 const employeeItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+    { title: "My Late Check-Ins", url: "/late-checkins", icon: Clock },
     { title: "My Profile", url: "/profile", icon: UserCircle },
     { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },

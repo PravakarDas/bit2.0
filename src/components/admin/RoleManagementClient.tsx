@@ -33,10 +33,24 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { changeUserRole, toggleUserArchiveStatus, toggleManagerStatus } from "@/actions/user.actions";
-import { User as PrismaUser, Role } from "@prisma/client";
+import { Role, UserStatus } from "@prisma/client";
 
-interface User extends PrismaUser {
+interface User {
+    id: string;
+    clerkId: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
     name: string;
+    imageUrl: string | null;
+    role: Role;
+    isManager: boolean;
+    status: UserStatus;
+    employeeStatus: string | null;
+    isArchived: boolean;
+    dateOfJoining: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
     branch?: {
         id: string;
         name: string;

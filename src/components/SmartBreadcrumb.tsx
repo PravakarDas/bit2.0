@@ -28,12 +28,14 @@ export function SmartBreadcrumb() {
                 { name: "Home", href: "/" }
             ];
 
+            const employeeNameParentSegments = new Set(["employees", "late-checkins"]);
+
             for (let i = 0; i < pathSegments.length; i++) {
                 const segment = pathSegments[i];
                 const url = `/${pathSegments.slice(0, i + 1).join("/")}`;
                 
                 // Check if this is an employee ID segment
-                if (pathSegments[i - 1] === "employees" && segment.match(/^[a-zA-Z0-9_-]+$/)) {
+                if (employeeNameParentSegments.has(pathSegments[i - 1]) && segment.match(/^[a-zA-Z0-9_-]+$/)) {
                     try {
                         const response = await fetch(`/api/employees/${segment}/name`);
                         if (response.ok) {

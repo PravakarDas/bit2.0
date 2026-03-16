@@ -20,7 +20,7 @@ export function ManagerHeader() {
                     <Crown className="h-3 w-3 mr-1" />
                     Manager Mode
                 </Badge>
-                <UserButton afterSignOutUrl="/sign-in" />
+                <UserButton />
             </div>
         </header>
     );

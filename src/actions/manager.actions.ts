@@ -465,8 +465,8 @@ export async function getManagerDashboardData(branchId?: string, fromDate?: stri
       employeeName: `${record.user.firstName} ${record.user.lastName}`,
       date: record.date,
       status: record.status,
-      checkIn: record.checkIn,
-      checkOut: record.checkOut,
+      checkIn: record.actualCheckIn,
+      checkOut: record.actualCheckOut,
     })),
   };
 }

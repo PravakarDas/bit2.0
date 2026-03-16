@@ -28,8 +28,8 @@ interface ArchivedEmployee {
   id: string;
   clerkId: string;
   email: string;
-  firstName: string;
-  lastName: string;
+  firstName: string | null;
+  lastName: string | null;
   imageUrl: string | null;
   role: string;
   isManager: boolean;
@@ -113,12 +113,12 @@ async function ArchivedEmployeesList() {
                         <Avatar className="h-9 w-9">
                           <AvatarImage src={employee.imageUrl || undefined} />
                           <AvatarFallback className="bg-gray-100">
-                            {employee.firstName.charAt(0) + employee.lastName.charAt(0)}
+                            {(employee.firstName?.charAt(0) || "?") + (employee.lastName?.charAt(0) || "")}
                           </AvatarFallback>
                         </Avatar>
                         <div>
                           <p className="font-medium text-gray-900">
-                            {employee.firstName} {employee.lastName}
+                            {[employee.firstName, employee.lastName].filter(Boolean).join(" ") || "Unnamed Employee"}
                           </p>
                           <p className="text-sm text-gray-500">
                             {employee.email}

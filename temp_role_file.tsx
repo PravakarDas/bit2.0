@@ -45,7 +45,6 @@ import {
     ArchiveRestore,
     Users,
     Crown,
-    UserCheck,
     Shield,
     Settings,
     Download,
@@ -63,6 +62,7 @@ interface User {
     lastName: string | null;
     imageUrl: string | null;
     role: Role;
+    isManager: boolean;
     status: UserStatus;
     employeeStatus: string | null;
     isArchived: boolean;
@@ -117,6 +117,7 @@ export function RoleManagementClient({
             SUPERADMIN: 0,
             HR: 0,
             EMPLOYEE: 0,
+            MANAGERS: 0,
             total: users.filter(u => !u.isArchived).length,
             archived: users.filter(u => u.isArchived).length,
             pending: users.filter(u => u.status === "PENDING" && !u.isArchived).length,
@@ -124,6 +125,9 @@ export function RoleManagementClient({
         
         users.filter(u => !u.isArchived).forEach(user => {
             stats[user.role]++;
+            if (user.role === "EMPLOYEE" && user.isManager) {
+                stats.MANAGERS++;
+            }
         });
 
         return stats;
@@ -263,7 +267,11 @@ export function RoleManagementClient({
 
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-
+                        <CardTitle className="text-sm font-medium">Managers</CardTitle>
+                        <Settings className="h-4 w-4 text-purple-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{roleStats.MANAGERS}</div>
                         <p className="text-xs text-muted-foreground">
                             Team management access
                         </p>
@@ -492,13 +500,6 @@ export function RoleManagementClient({
                                                     >
                                                         <Users className="mr-2 h-4 w-4" />
                                                         Make Employee
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleRoleChange(user.id, "")}
-                                                        disabled={user.role === ""}
-                                                    >
-                                                        <UserCheck className="mr-2 h-4 w-4" />
-                                                        Make 
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
                                                         onClick={() => handleRoleChange(user.id, "HR")}

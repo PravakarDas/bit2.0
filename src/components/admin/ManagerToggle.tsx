@@ -28,7 +28,7 @@ export function ManagerToggle({ userId, isManager, userRole, userName }: Manager
         try {
             const result = await toggleManagerStatus(userId);
             if (result.success) {
-                setCurrentManagerStatus(result.isManager);
+                setCurrentManagerStatus(result.isManager ?? currentManagerStatus);
                 toast.success(result.message);
             } else {
                 toast.error(result.error || "Failed to update manager status");
