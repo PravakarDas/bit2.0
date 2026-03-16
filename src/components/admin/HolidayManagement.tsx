@@ -34,14 +34,22 @@ interface PublicHoliday {
     description: string | null;
     isRecurring: boolean;
     isActive: boolean;
+    appliesToAllBranches: boolean;
+    applicableBranchIds: string[];
+}
+
+interface Branch {
+    id: string;
+    name: string;
 }
 
 interface HolidayManagementProps {
     holidays: PublicHoliday[];
     currentYear: number;
+    branches: Branch[];
 }
 
-export function HolidayManagement({ holidays: initialHolidays, currentYear }: HolidayManagementProps) {
+export function HolidayManagement({ holidays: initialHolidays, currentYear, branches }: HolidayManagementProps) {
     const [holidays, setHolidays] = useState(initialHolidays);
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [editingHoliday, setEditingHoliday] = useState<PublicHoliday | null>(null);
@@ -50,7 +58,9 @@ export function HolidayManagement({ holidays: initialHolidays, currentYear }: Ho
         name: "",
         date: "",
         description: "",
-        isRecurring: false
+        isRecurring: false,
+        appliesToAllBranches: true,
+        selectedBranchIds: [] as string[]
     });
 
     const resetForm = () => {
@@ -58,7 +68,9 @@ export function HolidayManagement({ holidays: initialHolidays, currentYear }: Ho
             name: "",
             date: "",
             description: "",
-            isRecurring: false
+            isRecurring: false,
+            appliesToAllBranches: true,
+            selectedBranchIds: []
         });
         setEditingHoliday(null);
     };
@@ -81,14 +93,18 @@ export function HolidayManagement({ holidays: initialHolidays, currentYear }: Ho
                     name: formData.name,
                     date: formData.date,
                     description: formData.description || undefined,
-                    isRecurring: formData.isRecurring
+                    isRecurring: formData.isRecurring,
+                    appliesToAllBranches: formData.appliesToAllBranches,
+                    applicableBranchIds: formData.selectedBranchIds
                 });
             } else {
                 result = await createPublicHoliday({
                     name: formData.name,
                     date: formData.date,
                     description: formData.description || undefined,
-                    isRecurring: formData.isRecurring
+                    isRecurring: formData.isRecurring,
+                    appliesToAllBranches: formData.appliesToAllBranches,
+                    applicableBranchIds: formData.selectedBranchIds
                 });
             }
             
@@ -134,9 +150,33 @@ export function HolidayManagement({ holidays: initialHolidays, currentYear }: Ho
             name: holiday.name,
             date: holiday.date.toISOString().split('T')[0],
             description: holiday.description || "",
-            isRecurring: holiday.isRecurring
+            isRecurring: holiday.isRecurring,
+            appliesToAllBranches: holiday.appliesToAllBranches,
+            selectedBranchIds: holiday.appliesToAllBranches ? [] : holiday.applicableBranchIds
         });
         setIsAddOpen(true);
+    };
+
+    const handleBranchToggle = (branchId: string) => {
+        setFormData((prev) => ({
+            ...prev,
+            selectedBranchIds: prev.selectedBranchIds.includes(branchId)
+                ? prev.selectedBranchIds.filter((id) => id !== branchId)
+                : [...prev.selectedBranchIds, branchId]
+        }));
+    };
+
+    const getBranchLabel = (holiday: PublicHoliday) => {
+        if (holiday.appliesToAllBranches) {
+            return { text: "All Branches", variant: "default" as const };
+        }
+
+        const matchedBranches = branches.filter((branch) => holiday.applicableBranchIds.includes(branch.id));
+        if (matchedBranches.length === 0) {
+            return { text: "No Branch Selected", variant: "destructive" as const };
+        }
+
+        return { text: matchedBranches.map((branch) => branch.name).join(", "), variant: "secondary" as const };
     };
 
     const formatDate = (date: Date) => {
@@ -156,7 +196,7 @@ export function HolidayManagement({ holidays: initialHolidays, currentYear }: Ho
                         <div>
                             <CardTitle>Public Holidays ({currentYear})</CardTitle>
                             <CardDescription>
-                                Manage public holidays that prevent leave applications
+                                Manage public holidays for all branches or selected branches
                             </CardDescription>
                         </div>
                         
@@ -223,6 +263,43 @@ export function HolidayManagement({ holidays: initialHolidays, currentYear }: Ho
                                         <Label htmlFor="isRecurring">Recurring annually</Label>
                                     </div>
 
+                                    <div className="space-y-3">
+                                        <div className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id="allBranches"
+                                                checked={formData.appliesToAllBranches}
+                                                onCheckedChange={(checked) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        appliesToAllBranches: !!checked,
+                                                        selectedBranchIds: !!checked ? [] : formData.selectedBranchIds
+                                                    })
+                                                }
+                                            />
+                                            <Label htmlFor="allBranches">Apply to all branches</Label>
+                                        </div>
+
+                                        {!formData.appliesToAllBranches && (
+                                            <div className="space-y-2">
+                                                <Label>Select Branches</Label>
+                                                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded p-2">
+                                                    {branches.map((branch) => (
+                                                        <div key={branch.id} className="flex items-center space-x-2">
+                                                            <Checkbox
+                                                                id={`holiday-branch-${branch.id}`}
+                                                                checked={formData.selectedBranchIds.includes(branch.id)}
+                                                                onCheckedChange={() => handleBranchToggle(branch.id)}
+                                                            />
+                                                            <Label htmlFor={`holiday-branch-${branch.id}`} className="text-sm">
+                                                                {branch.name}
+                                                            </Label>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     <div className="flex justify-end gap-2 pt-4">
                                         <Button 
                                             type="button" 
@@ -259,6 +336,7 @@ export function HolidayManagement({ holidays: initialHolidays, currentYear }: Ho
                                     <TableHead>Date</TableHead>
                                     <TableHead>Description</TableHead>
                                     <TableHead>Type</TableHead>
+                                    <TableHead>Branches</TableHead>
                                     <TableHead>Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -280,6 +358,12 @@ export function HolidayManagement({ holidays: initialHolidays, currentYear }: Ho
                                             <Badge variant={holiday.isRecurring ? "default" : "secondary"}>
                                                 {holiday.isRecurring ? "Annual" : "One-time"}
                                             </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {(() => {
+                                                const branchLabel = getBranchLabel(holiday);
+                                                return <Badge variant={branchLabel.variant}>{branchLabel.text}</Badge>;
+                                            })()}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex gap-2">

@@ -1,9 +1,13 @@
 import { getPublicHolidays } from "@/actions/leave.actions";
+import { getActiveBranches } from "@/actions/branch.actions";
 import { HolidayManagement } from "@/components/admin/HolidayManagement";
 
 export default async function HolidaysPage() {
     const currentYear = new Date().getFullYear();
-    const holidays = await getPublicHolidays(currentYear);
+    const [holidays, branches] = await Promise.all([
+        getPublicHolidays(currentYear),
+        getActiveBranches()
+    ]);
 
     return (
         <div className="container mx-auto px-4 py-8">
@@ -17,6 +21,7 @@ export default async function HolidaysPage() {
             <HolidayManagement 
                 holidays={holidays} 
                 currentYear={currentYear} 
+                branches={branches}
             />
         </div>
     );

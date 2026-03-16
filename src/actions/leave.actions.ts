@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { LeaveApplicationStatus } from "@prisma/client";
+import { LeaveApplicationStatus, Prisma } from "@prisma/client";
 
 // Leave Types Management
 export async function getActiveLeaveTypes() {
@@ -251,15 +251,24 @@ export async function applyForLeave(data: {
             return { success: false, error: "No remaining leave days for this type" };
         }
         
-        // Check if the selected date is a public holiday
+        // Check if the selected date is a public holiday for the employee's branch
+        const holidayWhereCondition: Prisma.PublicHolidayWhereInput = {
+            date: {
+                gte: new Date(leaveDate.getFullYear(), leaveDate.getMonth(), leaveDate.getDate()),
+                lt: new Date(leaveDate.getFullYear(), leaveDate.getMonth(), leaveDate.getDate() + 1)
+            },
+            isActive: true
+        };
+
+        if (user.branchId) {
+            holidayWhereCondition.OR = [
+                { appliesToAllBranches: true },
+                { applicableBranchIds: { has: user.branchId } }
+            ];
+        }
+
         const isHoliday = await prisma.publicHoliday.findFirst({
-            where: {
-                date: {
-                    gte: new Date(leaveDate.getFullYear(), leaveDate.getMonth(), leaveDate.getDate()),
-                    lt: new Date(leaveDate.getFullYear(), leaveDate.getMonth(), leaveDate.getDate() + 1)
-                },
-                isActive: true
-            }
+            where: holidayWhereCondition
         });
         
         if (isHoliday) {
@@ -521,12 +530,22 @@ export async function createPublicHoliday(data: {
     date: string; // YYYY-MM-DD format
     description?: string;
     isRecurring?: boolean;
+    appliesToAllBranches?: boolean;
+    applicableBranchIds?: string[];
 }) {
     try {
         const holidayDate = new Date(data.date);
+        const appliesToAllBranches = data.appliesToAllBranches !== false;
+        const applicableBranchIds = appliesToAllBranches
+            ? []
+            : [...new Set((data.applicableBranchIds || []).filter(Boolean))];
+
+        if (!appliesToAllBranches && applicableBranchIds.length === 0) {
+            return { success: false, error: "Select at least one branch or choose all branches" };
+        }
         
-        // Check if holiday already exists on this date
-        const existingHoliday = await prisma.publicHoliday.findFirst({
+        // Check conflicting holiday scope on this date
+        const existingHolidays = await prisma.publicHoliday.findMany({
             where: {
                 date: {
                     gte: new Date(holidayDate.getFullYear(), holidayDate.getMonth(), holidayDate.getDate()),
@@ -535,8 +554,16 @@ export async function createPublicHoliday(data: {
             }
         });
         
-        if (existingHoliday) {
-            return { success: false, error: "A holiday already exists on this date" };
+        const hasScopeConflict = existingHolidays.some((holiday) => {
+            if (holiday.appliesToAllBranches || appliesToAllBranches) {
+                return true;
+            }
+
+            return holiday.applicableBranchIds.some((branchId) => applicableBranchIds.includes(branchId));
+        });
+
+        if (hasScopeConflict) {
+            return { success: false, error: "A holiday already exists on this date for one or more selected branches" };
         }
         
         const holiday = await prisma.publicHoliday.create({
@@ -544,7 +571,9 @@ export async function createPublicHoliday(data: {
                 name: data.name,
                 date: holidayDate,
                 description: data.description,
-                isRecurring: data.isRecurring || false
+                isRecurring: data.isRecurring || false,
+                appliesToAllBranches,
+                applicableBranchIds
             }
         });
         
@@ -584,15 +613,56 @@ export async function updatePublicHoliday(id: string, data: {
     description?: string;
     isRecurring?: boolean;
     isActive?: boolean;
+    appliesToAllBranches?: boolean;
+    applicableBranchIds?: string[];
 }) {
     try {
-        const updateData: any = {};
+        const existingHoliday = await prisma.publicHoliday.findUnique({ where: { id } });
+        if (!existingHoliday) {
+            return { success: false, error: "Holiday not found" };
+        }
+
+        const appliesToAllBranches = data.appliesToAllBranches ?? existingHoliday.appliesToAllBranches;
+        const applicableBranchIds = appliesToAllBranches
+            ? []
+            : [...new Set((data.applicableBranchIds ?? existingHoliday.applicableBranchIds).filter(Boolean))];
+
+        if (!appliesToAllBranches && applicableBranchIds.length === 0) {
+            return { success: false, error: "Select at least one branch or choose all branches" };
+        }
+
+        const updateData: Prisma.PublicHolidayUpdateInput = {};
         
         if (data.name) updateData.name = data.name;
         if (data.date) updateData.date = new Date(data.date);
         if (data.description !== undefined) updateData.description = data.description;
         if (data.isRecurring !== undefined) updateData.isRecurring = data.isRecurring;
         if (data.isActive !== undefined) updateData.isActive = data.isActive;
+        updateData.appliesToAllBranches = appliesToAllBranches;
+        updateData.applicableBranchIds = applicableBranchIds;
+
+        const targetDate = data.date ? new Date(data.date) : existingHoliday.date;
+        const existingHolidays = await prisma.publicHoliday.findMany({
+            where: {
+                id: { not: id },
+                date: {
+                    gte: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()),
+                    lt: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1)
+                }
+            }
+        });
+
+        const hasScopeConflict = existingHolidays.some((holiday) => {
+            if (holiday.appliesToAllBranches || appliesToAllBranches) {
+                return true;
+            }
+
+            return holiday.applicableBranchIds.some((branchId) => applicableBranchIds.includes(branchId));
+        });
+
+        if (hasScopeConflict) {
+            return { success: false, error: "A holiday already exists on this date for one or more selected branches" };
+        }
         
         const holiday = await prisma.publicHoliday.update({
             where: { id },
@@ -621,17 +691,26 @@ export async function deletePublicHoliday(id: string) {
     }
 }
 
-export async function checkIfHoliday(date: string) {
+export async function checkIfHoliday(date: string, branchId?: string | null) {
     try {
         const targetDate = new Date(date);
+        const whereClause: Prisma.PublicHolidayWhereInput = {
+            date: {
+                gte: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()),
+                lt: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1)
+            },
+            isActive: true
+        };
+
+        if (branchId) {
+            whereClause.OR = [
+                { appliesToAllBranches: true },
+                { applicableBranchIds: { has: branchId } }
+            ];
+        }
+
         const holiday = await prisma.publicHoliday.findFirst({
-            where: {
-                date: {
-                    gte: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()),
-                    lt: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1)
-                },
-                isActive: true
-            }
+            where: whereClause
         });
         
         return {
@@ -676,8 +755,13 @@ export async function checkIfWeeklyHoliday(userId: string, date: string) {
 
 export async function checkAllHolidays(userId: string, date: string) {
     try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { branchId: true }
+        });
+
         const [publicHolidayResult, weeklyHolidayResult] = await Promise.all([
-            checkIfHoliday(date),
+            checkIfHoliday(date, user?.branchId),
             checkIfWeeklyHoliday(userId, date)
         ]);
         

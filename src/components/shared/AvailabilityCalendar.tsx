@@ -30,6 +30,7 @@ interface Employee {
     personalEmail: string | null;
     phoneNumber: string | null;
     branch: {
+        id: string;
         name: string;
         weeklyOffDays: string[];
     } | null;
@@ -39,6 +40,14 @@ interface LeaveEntry {
     userId: string;
     date: string;
     leaveTypeName: string;
+}
+
+interface HolidayEntry {
+    id: string;
+    name: string;
+    date: string;
+    appliesToAllBranches: boolean;
+    applicableBranchIds: string[];
 }
 
 function toDayKey(date: Date) {
@@ -123,6 +132,7 @@ export default function AvailabilityCalendar() {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [leaves, setLeaves] = useState<LeaveEntry[]>([]);
+    const [holidays, setHolidays] = useState<HolidayEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedBranch, setSelectedBranch] = useState("all");
     const [selectedEmployee, setSelectedEmployee] = useState("all");
@@ -136,6 +146,7 @@ export default function AvailabilityCalendar() {
                 const result = await getAvailabilityData(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
                 setEmployees(result.employees || []);
                 setLeaves(result.leaves || []);
+                setHolidays(result.holidays || []);
             } finally {
                 setLoading(false);
             }
@@ -145,18 +156,18 @@ export default function AvailabilityCalendar() {
     }, [currentMonth]);
 
     const availableBranches = useMemo(() => {
-        const map = new Map<string, string>();
+        const map = new Map<string, { id: string; name: string }>();
         employees.forEach((employee) => {
-            if (employee.branch?.name) {
-                map.set(employee.branch.name, employee.branch.name);
+            if (employee.branch?.id && employee.branch?.name) {
+                map.set(employee.branch.id, { id: employee.branch.id, name: employee.branch.name });
             }
         });
-        return Array.from(map.values()).sort();
+        return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
     }, [employees]);
 
     const filteredEmployees = useMemo(() => {
         return employees.filter((employee) => {
-            if (selectedBranch !== "all" && employee.branch?.name !== selectedBranch) {
+            if (selectedBranch !== "all" && employee.branch?.id !== selectedBranch) {
                 return false;
             }
             if (selectedEmployee !== "all" && employee.id !== selectedEmployee) {
@@ -185,6 +196,41 @@ export default function AvailabilityCalendar() {
         return map;
     }, [filteredLeaves]);
 
+    const activeBranchIds = useMemo(() => {
+        if (selectedEmployee !== "all") {
+            const selected = employees.find((employee) => employee.id === selectedEmployee);
+            return selected?.branch?.id ? [selected.branch.id] : [];
+        }
+
+        if (selectedBranch !== "all") {
+            return [selectedBranch];
+        }
+
+        return Array.from(new Set(filteredEmployees.map((employee) => employee.branch?.id).filter(Boolean) as string[]));
+    }, [selectedEmployee, selectedBranch, employees, filteredEmployees]);
+
+    const filteredHolidays = useMemo(() => {
+        if (activeBranchIds.length === 0) {
+            return holidays.filter((holiday) => holiday.appliesToAllBranches);
+        }
+
+        return holidays.filter((holiday) =>
+            holiday.appliesToAllBranches ||
+            holiday.applicableBranchIds.some((branchId) => activeBranchIds.includes(branchId))
+        );
+    }, [holidays, activeBranchIds]);
+
+    const holidayByDate = useMemo(() => {
+        const map = new Map<string, HolidayEntry[]>();
+        filteredHolidays.forEach((holiday) => {
+            const key = holiday.date.slice(0, 10);
+            const existing = map.get(key) || [];
+            existing.push(holiday);
+            map.set(key, existing);
+        });
+        return map;
+    }, [filteredHolidays]);
+
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(monthStart);
     const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
@@ -207,6 +253,10 @@ export default function AvailabilityCalendar() {
         return leaveByDate.get(selectedKey) || [];
     }, [leaveByDate, selectedKey]);
 
+    const selectedHolidays = useMemo(() => {
+        return holidayByDate.get(selectedKey) || [];
+    }, [holidayByDate, selectedKey]);
+
     const weeklyOffUsers = useMemo(() => {
         return filteredEmployees.filter((employee) =>
             employee.branch?.weeklyOffDays?.includes(selectedDayName)
@@ -215,6 +265,23 @@ export default function AvailabilityCalendar() {
 
     const offUsers = useMemo(() => {
         const result = new Map<string, { employee: Employee; reason: string }>();
+
+        selectedHolidays.forEach((holiday) => {
+            filteredEmployees.forEach((employee) => {
+                if (!employee.branch?.id) {
+                    return;
+                }
+
+                const isApplicable = holiday.appliesToAllBranches || holiday.applicableBranchIds.includes(employee.branch.id);
+                if (isApplicable && !result.has(employee.id)) {
+                    result.set(employee.id, {
+                        employee,
+                        reason: `Holiday (${holiday.name})`
+                    });
+                }
+            });
+        });
+
         selectedLeaves.forEach((leave) => {
             const employee = filteredEmployees.find((emp) => emp.id === leave.userId);
             if (employee) {
@@ -235,7 +302,7 @@ export default function AvailabilityCalendar() {
         });
 
         return Array.from(result.values());
-    }, [filteredEmployees, selectedLeaves, weeklyOffUsers]);
+    }, [filteredEmployees, selectedLeaves, weeklyOffUsers, selectedHolidays]);
 
     const availableEmployees = useMemo(() => {
         const offUserIds = new Set(offUsers.map(item => item.employee.id));
@@ -281,7 +348,7 @@ export default function AvailabilityCalendar() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold">Team Availability Calendar</h1>
-                    <p className="text-muted-foreground">Upcoming leaves and weekly off days for all employees</p>
+                    <p className="text-muted-foreground">Upcoming leaves, holidays and weekly off days for all employees</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={goPrevMonth}>
@@ -312,8 +379,8 @@ export default function AvailabilityCalendar() {
                                     <SelectContent>
                                         <SelectItem value="all">All branches</SelectItem>
                                         {availableBranches.map((branch) => (
-                                            <SelectItem key={branch} value={branch}>
-                                                {branch}
+                                            <SelectItem key={branch.id} value={branch.id}>
+                                                {branch.name}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -352,6 +419,7 @@ export default function AvailabilityCalendar() {
                                 const isPast = isBefore(date, startOfDay(today));
 
                                 const leaveCount = leaveByDate.get(key)?.length || 0;
+                                const holidayCount = holidayByDate.get(key)?.length || 0;
                                 const weeklyOffCount = filteredEmployees.filter((employee) =>
                                     employee.branch?.weeklyOffDays?.includes(dayName)
                                 ).length;
@@ -373,6 +441,7 @@ export default function AvailabilityCalendar() {
                                         </div>
                                         <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                             <div>Leave: <span className="font-medium text-foreground">{leaveCount}</span></div>
+                                            <div>Holiday: <span className="font-medium text-foreground">{holidayCount}</span></div>
                                             <div>Weekly off: <span className="font-medium text-foreground">{weeklyOffCount}</span></div>
                                         </div>
                                     </button>
@@ -381,6 +450,7 @@ export default function AvailabilityCalendar() {
                         </div>
                         <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
                             <Badge variant="secondary">Leave count (approved, upcoming)</Badge>
+                            <Badge variant="secondary">Holiday count</Badge>
                             <Badge variant="secondary">Weekly off count</Badge>
                             <Badge variant="outline">Past</Badge>
                         </div>
@@ -438,19 +508,19 @@ export default function AvailabilityCalendar() {
                                 </Card>
                             </div>
 
-                            {/* On Leave Employees Section */}
+                            {/* Not Available Employees Section */}
                             <div>
                                 <div className="flex items-center gap-2 mb-3">
                                     <UserX className="h-4 w-4 text-red-600" />
                                     <h3 className="font-medium text-red-700">
-                                        On Leave ({searchResults.offUsers.length})
+                                        Not Available ({searchResults.offUsers.length})
                                     </h3>
                                 </div>
                                 <Card className="bg-red-50 border-red-200">
                                     <CardContent className="p-4">
                                         {searchResults.offUsers.length === 0 ? (
                                             <p className="text-sm text-muted-foreground text-center py-4">
-                                                {searchTerm ? "No employees on leave match your search." : "No employees on leave."}
+                                                {searchTerm ? "No unavailable employees match your search." : "No unavailable employees."}
                                             </p>
                                         ) : (
                                             <div className="space-y-3">
@@ -472,7 +542,7 @@ export default function AvailabilityCalendar() {
                             {/* Search Summary */}
                             {searchTerm && (
                                 <div className="text-xs text-muted-foreground text-center pt-2 border-t">
-                                    Showing {searchResults.availableEmployees.length + searchResults.offUsers.length} result(s) for "{searchTerm}"
+                                    Showing {searchResults.availableEmployees.length + searchResults.offUsers.length} result(s) for &quot;{searchTerm}&quot;
                                 </div>
                             )}
                         </div>
