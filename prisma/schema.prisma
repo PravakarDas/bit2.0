@@ -17,7 +17,6 @@ enum EmployeeStatus {
 enum Role {
   SUPERADMIN
   HR
-  MANAGER
   EMPLOYEE
 }
 
@@ -31,13 +30,18 @@ enum LoanStatus {
   APPROVED
   ACTIVE
   CLOSED
-}
+  DECLINED
 
+  MANAGER_VERIFIED
+  MANAGER_REJECTED
+}
 enum PaymentType {
   EMI
   MANUAL
-}
 
+  MANAGER_VERIFIED
+  MANAGER_REJECTED
+}
 enum ValueType {
   FIXED
   PERCENTAGE
@@ -88,6 +92,23 @@ enum OvertimeRequestStatus {
   PENDING
   APPROVED
   DECLINED
+  MANAGER_VERIFIED
+  MANAGER_REJECTED
+}
+
+model PublicHoliday {
+  id          String   @id @default(cuid())
+  name        String   // Holiday name (e.g., "New Year's Day", "Independence Day")
+  date        DateTime // Holiday date
+  description String?  // Optional description
+  isRecurring Boolean  @default(false) // Whether it repeats annually
+  appliesToAllBranches Boolean @default(true)
+  applicableBranchIds  String[] @default([])
+  isActive    Boolean  @default(true)  // Can be disabled
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("public_holidays")
 }
 
 model Department {
@@ -135,6 +156,7 @@ model User {
   lastName      String?
   imageUrl      String?
   role          Role       @default(EMPLOYEE)
+  isManager     Boolean    @default(false)
   status        UserStatus @default(PENDING)
   employeeStatus EmployeeStatus? @default(ACTIVE)
   isArchived    Boolean    @default(false)
@@ -203,6 +225,12 @@ model User {
   githubLink           String?
   linkedinLink         String?
   
+  // Employee Document Links
+  loanPapersLink       String?
+  nomineesPapersLink   String?
+  emergencyContactLink String?
+  personalInfoLink     String?
+  
   loans               Loan[]
   medicalClaims       MedicalClaim[]
   medicalEntitlements MedicalEntitlement[]
@@ -226,6 +254,10 @@ model User {
   
   // Profile Update Requests
   profileUpdateRequests ProfileUpdateRequest[]
+  
+    // Manager verification relations
+    loansVerifiedByManager Loan[] @relation("LoanManagerVerification")
+    overtimeRequestsVerifiedByManager OvertimeRequest[] @relation("OvertimeRequestManagerVerification")
   
   // Employee Notifications
   employeeNotifications EmployeeNotification[]
@@ -420,6 +452,17 @@ model Loan {
   emiStartMonth      Int?
   emiStartYear       Int?
   approvedBy         String?
+  adminComments      String?    // Admin comments during approval
+  declineReason      String?    // Reason for declining the loan
+  declinedBy         String?    // Admin who declined the loan
+
+  managerVerifiedAt   DateTime?
+  managerVerifiedById String?
+  managerVerifiedBy   User?      @relation("LoanManagerVerification", fields: [managerVerifiedById], references: [id])
+  managerRejectionReason String?
+  managerComments     String?
+  adminDeclinedReason String?
+  adminDeclinedAt     DateTime?
 
   auditLogs AuditLog[]
 
@@ -748,6 +791,17 @@ model OvertimeRequest {
   reviewedBy          String?                 // Clerk ID of admin who reviewed
   reviewedAt          DateTime?
   declineReason       String?                 // Reason for declining (if declined)
+    // Manager verification fields
+    managerVerifiedAt   DateTime?
+    managerVerifiedById String?
+    managerVerifiedBy   User?      @relation("OvertimeRequestManagerVerification", fields: [managerVerifiedById], references: [id])
+    managerRejectionReason String?
+    managerComments     String?
+
+    // Admin decline fields (after manager verified)
+    adminDeclinedReason String?
+    adminDeclinedAt     DateTime?
+
   
   // Timestamps
   requestedAt         DateTime                @default(now())

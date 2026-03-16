@@ -24,6 +24,8 @@ import {
     Zap,
     Bell,
     ClipboardList,
+    UserCog,
+    Crown,
 } from "lucide-react";
 
 import {
@@ -39,6 +41,7 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
     SidebarHeader,
+    SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
     Collapsible,
@@ -50,11 +53,15 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import logo from "@/assets/logo.gif";
 import { NotificationWithBadge } from "@/components/NotificationWithBadge";
+import { Button } from "@/components/ui/button";
 
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
+    { title: "Late Check-Ins", url: "/admin/late-checkins", icon: Clock },
     { title: "Notifications", url: "/admin/notifications", icon: Bell },
+    { title: "Role Management", url: "/admin/role-management", icon: UserCog },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
+    { title: "Holiday Management", url: "/admin/holidays", icon: CalendarDays },
     { title: "Loan", url: "/admin/loans", icon: Banknote },
     { title: "Medical", url: "/admin/medical", icon: Stethoscope },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
@@ -80,6 +87,7 @@ const requestSubItems = [
 
 const employeeItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+    { title: "My Late Check-Ins", url: "/late-checkins", icon: Clock },
     { title: "My Profile", url: "/profile", icon: UserCircle },
     { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
@@ -99,10 +107,15 @@ const organizationSubItems = [
     { title: "Leave Types", icon: CalendarDays, hash: "#leave-types" },
 ];
 
-export function AppSidebar({ role }: { role: string }) {
+export function AppSidebar({ role, isManager = false }: { role: string; isManager?: boolean }) {
     const pathname = usePathname();
     const router = useRouter();
-    const items = role === "SUPERADMIN" ? adminItems : employeeItems;
+    
+    // Determine navigation items based on role
+    const items = role === "SUPERADMIN" 
+        ? adminItems 
+        : employeeItems;
+    
     const [isOrganizationOpen, setIsOrganizationOpen] = React.useState(false);
     const [isEmployeeOpen, setIsEmployeeOpen] = React.useState(false);
     const [isPayrollOpen, setIsPayrollOpen] = React.useState(false);
@@ -110,23 +123,29 @@ export function AppSidebar({ role }: { role: string }) {
 
     // Auto-open menus based on current page
     React.useEffect(() => {
-        if (pathname === "/admin/organization") {
+        const orgPaths = ["/admin/organization"];
+        const employeePaths = ["/admin/employees", "/admin/archived-employees"];
+        const payrollPaths = ["/admin/payroll", "/admin/payroll/processed"];
+        const requestPaths = ["/admin/profile-requests", "/admin/leave-applications"];
+        
+        if (orgPaths.some(path => pathname === path)) {
             setIsOrganizationOpen(true);
         }
-        if (pathname === "/admin/employees" || pathname === "/admin/archived-employees") {
+        if (employeePaths.some(path => pathname === path)) {
             setIsEmployeeOpen(true);
         }
-        if (pathname === "/admin/payroll" || pathname === "/admin/payroll/processed") {
+        if (payrollPaths.some(path => pathname === path)) {
             setIsPayrollOpen(true);
         }
-        if (pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications") {
+        if (requestPaths.some(path => pathname === path)) {
             setIsRequestOpen(true);
         }
     }, [pathname]);
 
     const handleSubItemClick = (hash: string) => {
+        const baseUrl = "/admin/organization";
         // Update URL with the hash
-        router.push(`/admin/organization${hash}`, { scroll: false });
+        router.push(`${baseUrl}${hash}`, { scroll: false });
         
         // Scroll to the element
         setTimeout(() => {
@@ -328,6 +347,17 @@ export function AppSidebar({ role }: { role: string }) {
                     </SidebarGroupContent>
                 </SidebarGroup>
             </SidebarContent>
+            {/* Manager Switch Button */}
+            {role === "EMPLOYEE" && isManager && (
+                <SidebarFooter className="p-4">
+                    <Button asChild variant="outline" size="sm" className="w-full">
+                        <Link href="/manager">
+                            <Crown className="h-4 w-4 mr-2" />
+                            Switch to Manager View
+                        </Link>
+                    </Button>
+                </SidebarFooter>
+            )}
         </Sidebar>
     );
 }

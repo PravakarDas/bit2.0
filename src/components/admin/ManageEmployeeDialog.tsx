@@ -281,7 +281,6 @@ export function ManageEmployeeDialog({ user, branches }: { user: User, branches:
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="EMPLOYEE">Employee</SelectItem>
-                                        <SelectItem value="MANAGER">Manager</SelectItem>
                                         <SelectItem value="HR">HR Specialist</SelectItem>
                                         <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
                                     </SelectContent>

@@ -3,10 +3,36 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
+import { logManagerOrganizationAction } from "./manager-organization.actions";
+
+function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
+  return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
+}
+
+async function notifyIfManager(params: {
+  user: NonNullable<Awaited<ReturnType<typeof getDbUser>>>;
+  action: "CREATED" | "UPDATED" | "DELETED" | "ACTIVATED" | "DEACTIVATED";
+  entityId: string;
+  entityName: string;
+  details?: string;
+}) {
+  if (params.user.role === "EMPLOYEE" && params.user.isManager) {
+    const actorName = [params.user.firstName, params.user.lastName].filter(Boolean).join(" ") || params.user.email;
+    await logManagerOrganizationAction({
+      actorId: params.user.id,
+      actorName,
+      action: params.action,
+      entityType: "department",
+      entityId: params.entityId,
+      entityName: params.entityName,
+      details: params.details,
+    });
+  }
+}
 
 export async function getAllDepartments(includeInactive = false) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
+  if (!canManageOrganization(admin)) {
     throw new Error("Unauthorized");
   }
 
@@ -38,7 +64,7 @@ export async function getActiveDepartments() {
 
 export async function getDepartmentById(id: string) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
+  if (!canManageOrganization(admin)) {
     throw new Error("Unauthorized");
   }
 
@@ -65,8 +91,8 @@ export async function createDepartment(data: {
   parentId?: string;
 }) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
-    throw new Error("Unauthorized");
+  if (!canManageOrganization(admin)) {
+    throw new Error("Unauthorized - Only Super Admins can create departments");
   }
 
   try {
@@ -78,7 +104,16 @@ export async function createDepartment(data: {
       }
     });
 
-    revalidatePath("/admin/departments");
+    await notifyIfManager({
+      user: admin!,
+      action: "CREATED",
+      entityId: department.id,
+      entityName: department.name,
+      details: data.parentId ? `parentId=${data.parentId}` : undefined,
+    });
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true, department };
   } catch (error: unknown) {
     if (error instanceof Object && 'code' in error && error.code === "P2002") {
@@ -94,8 +129,8 @@ export async function updateDepartment(id: string, data: {
   parentId?: string | null;
 }) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
-    throw new Error("Unauthorized");
+  if (!canManageOrganization(admin)) {
+    throw new Error("Unauthorized - Only Super Admins can update departments");
   }
 
   try {
@@ -116,7 +151,16 @@ export async function updateDepartment(id: string, data: {
       }
     });
 
-    revalidatePath("/admin/departments");
+    await notifyIfManager({
+      user: admin!,
+      action: "UPDATED",
+      entityId: department.id,
+      entityName: department.name,
+      details: data.parentId !== undefined ? `parentId=${data.parentId ?? "none"}` : undefined,
+    });
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true, department };
   } catch (error: unknown) {
     if (error instanceof Object && 'code' in error && error.code === "P2002") {
@@ -128,8 +172,8 @@ export async function updateDepartment(id: string, data: {
 
 export async function toggleDepartmentStatus(id: string) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
-    throw new Error("Unauthorized");
+  if (!canManageOrganization(admin)) {
+    throw new Error("Unauthorized - Only Super Admins can toggle department status");
   }
 
   try {
@@ -147,7 +191,22 @@ export async function toggleDepartmentStatus(id: string) {
       data: { isActive: !department.isActive }
     });
 
-    revalidatePath("/admin/departments");
+    const updatedDepartment = await prisma.department.findUnique({
+      where: { id },
+      select: { id: true, name: true, isActive: true }
+    });
+
+    if (updatedDepartment) {
+      await notifyIfManager({
+        user: admin!,
+        action: updatedDepartment.isActive ? "ACTIVATED" : "DEACTIVATED",
+        entityId: updatedDepartment.id,
+        entityName: updatedDepartment.name,
+      });
+    }
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true };
   } catch {
     return { success: false, error: "Failed to toggle department status" };
@@ -156,8 +215,8 @@ export async function toggleDepartmentStatus(id: string) {
 
 export async function deleteDepartment(id: string) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
-    throw new Error("Unauthorized");
+  if (!canManageOrganization(admin)) {
+    throw new Error("Unauthorized - Only Super Admins can delete departments");
   }
 
   try {
@@ -195,7 +254,15 @@ export async function deleteDepartment(id: string) {
       where: { id }
     });
 
-    revalidatePath("/admin/departments");
+    await notifyIfManager({
+      user: admin!,
+      action: "DELETED",
+      entityId: department.id,
+      entityName: department.name,
+    });
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true };
   } catch {
     return { success: false, error: "Failed to delete department" };

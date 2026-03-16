@@ -182,6 +182,30 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
               icon={<Building2 className="h-4 w-4" />}
             />
           )}
+          {/* <InfoItem
+            label="Loan Papers Link"
+            value={user.loanPapersLink}
+            isLink
+            icon={<Globe className="h-4 w-4" />}
+          />
+          <InfoItem
+            label="Nominees Papers Link"
+            value={user.nomineesPapersLink}
+            isLink
+            icon={<Globe className="h-4 w-4" />}
+          />
+          <InfoItem
+            label="Emergency Contact Link"
+            value={user.emergencyContactLink}
+            isLink
+            icon={<Globe className="h-4 w-4" />}
+          />
+          <InfoItem
+            label="Personal Info Link"
+            value={user.personalInfoLink}
+            isLink
+            icon={<Globe className="h-4 w-4" />}
+          /> */}
         </CardContent>
       </Card>
 

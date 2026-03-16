@@ -101,8 +101,14 @@ const profileFormSchema = z.object({
   githubLink: z.string().url().optional().or(z.literal("")),
   linkedinLink: z.string().url().optional().or(z.literal("")),
 
+  // Employee Document Links
+  loanPapersLink: z.string().url().optional().or(z.literal("")),
+  nomineesPapersLink: z.string().url().optional().or(z.literal("")),
+  emergencyContactLink: z.string().url().optional().or(z.literal("")),
+  personalInfoLink: z.string().url().optional().or(z.literal("")),
+
   // Employment Details (Admin only)
-  role: z.enum(["EMPLOYEE", "HR", "SUPERADMIN", "MANAGER"]).optional(),
+  role: z.enum(["EMPLOYEE", "HR", "SUPERADMIN"]).optional(),
   branchId: z.string().optional(),
   departmentId: z.string().optional(),
   designationId: z.string().optional(),
@@ -275,6 +281,10 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
       portfolioLink: user.portfolioLink || "",
       githubLink: user.githubLink || "",
       linkedinLink: user.linkedinLink || "",
+      loanPapersLink: user.loanPapersLink || "",
+      nomineesPapersLink: user.nomineesPapersLink || "",
+      emergencyContactLink: user.emergencyContactLink || "",
+      personalInfoLink: user.personalInfoLink || "",
       // Employment details
       role: user.role || "EMPLOYEE",
       branchId: user.branchId || "",
@@ -357,6 +367,10 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
         portfolioLink: data.portfolioLink || null,
         githubLink: data.githubLink || null,
         linkedinLink: data.linkedinLink || null,
+        loanPapersLink: data.loanPapersLink || null,
+        nomineesPapersLink: data.nomineesPapersLink || null,
+        emergencyContactLink: data.emergencyContactLink || null,
+        personalInfoLink: data.personalInfoLink || null,
       };
 
       let result;
@@ -1062,7 +1076,6 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
                               </FormControl>
                               <SelectContent>
                                 <SelectItem value="EMPLOYEE">Employee</SelectItem>
-                                <SelectItem value="MANAGER">Manager</SelectItem>
                                 <SelectItem value="HR">HR</SelectItem>
                                 <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
                               </SelectContent>
@@ -1160,6 +1173,69 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
                             {!selectedDepartmentId && (
                               <FormDescription>Select a department first</FormDescription>
                             )}
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {isAdmin && (
+                  <div className="space-y-4 border-t pt-6">
+                    <h4 className="font-medium">Employee Document Links</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="loanPapersLink"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Loan Papers Link</FormLabel>
+                            <FormControl>
+                              <Input type="url" placeholder="https://..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="nomineesPapersLink"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nominees Papers Link</FormLabel>
+                            <FormControl>
+                              <Input type="url" placeholder="https://..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="emergencyContactLink"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Emergency Contact Link</FormLabel>
+                            <FormControl>
+                              <Input type="url" placeholder="https://..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="personalInfoLink"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Personal Info Link</FormLabel>
+                            <FormControl>
+                              <Input type="url" placeholder="https://..." {...field} />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}

@@ -22,6 +22,15 @@ interface Loan {
     totalMonths: number;
     gracePeriodMonths: number;
     createdAt: Date;
+    managerVerifiedAt?: Date | null;
+    managerVerifiedBy?: {
+        id: string;
+        firstName: string | null;
+        lastName: string | null;
+    } | null;
+    managerRejectionReason?: string | null;
+    managerComments?: string | null;
+    adminDeclinedReason?: string | null;
     emiState?: {
         currentEmi: number;
     } | null;
@@ -37,7 +46,7 @@ export function LoanList({ loans }: { loans: Loan[] }) {
     }
 
     return (
-        <div className="border rounded-lg bg-card bg-white shadow-sm overflow-hidden">
+        <div className="border rounded-lg bg-card shadow-sm overflow-hidden">
             <Table>
                 <TableHeader>
                     <TableRow className="bg-muted/50">
@@ -77,7 +86,24 @@ export function LoanList({ loans }: { loans: Loan[] }) {
                                 )}
                             </TableCell>
                             <TableCell className="text-center">
-                                <LoanStatusBadge status={loan.status} />
+                                <div className="space-y-2">
+                                    <LoanStatusBadge status={loan.status} />
+                                    {loan.managerVerifiedBy && (
+                                        <div className="text-[10px] text-muted-foreground">
+                                            Checked by {loan.managerVerifiedBy.firstName} {loan.managerVerifiedBy.lastName}
+                                        </div>
+                                    )}
+                                    {loan.status === "MANAGER_REJECTED" && loan.managerRejectionReason && (
+                                        <div className="text-[10px] text-red-600 max-w-40 mx-auto">
+                                            {loan.managerRejectionReason}
+                                        </div>
+                                    )}
+                                    {loan.status === "DECLINED" && loan.adminDeclinedReason && (
+                                        <div className="text-[10px] text-red-600 max-w-40 mx-auto">
+                                            {loan.adminDeclinedReason}
+                                        </div>
+                                    )}
+                                </div>
                             </TableCell>
                         </TableRow>
                     ))}
@@ -93,6 +119,9 @@ function LoanStatusBadge({ status }: { status: LoanStatus }) {
         APPROVED: "bg-blue-100 text-blue-800 border-blue-200",
         ACTIVE: "bg-green-100 text-green-800 border-green-200",
         CLOSED: "bg-gray-100 text-gray-800 border-gray-200",
+        DECLINED: "bg-red-100 text-red-800 border-red-200",
+        MANAGER_VERIFIED: "bg-blue-100 text-blue-800 border-blue-200",
+        MANAGER_REJECTED: "bg-orange-100 text-orange-800 border-orange-200",
     };
 
     return (

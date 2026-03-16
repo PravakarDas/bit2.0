@@ -6,6 +6,46 @@ import { getDbUser } from "./user.actions";
 import { getSystemSettings } from "./settings.actions";
 import { ClaimStatus } from "@prisma/client";
 import { validateAndSubmitClaim } from "@/lib/services/medical.service";
+import { createAdminNotification } from "./notification.actions";
+
+async function logManagerMedicalAction(params: {
+    actorId: string;
+    actorName: string;
+    action: "APPROVED" | "REJECTED";
+    claimId: string;
+    claimAmount: number;
+    employeeId: string;
+    employeeName: string;
+}) {
+    try {
+        await prisma.auditLog.create({
+            data: {
+                userId: params.actorId,
+                oldEmi: null,
+                newEmi: null,
+                changeReason: `Manager medical claim ${params.action.toLowerCase()}: claim ${params.claimId} for ${params.employeeName} (${params.employeeId}), amount ${params.claimAmount}`,
+            }
+        });
+
+        await createAdminNotification({
+            type: "SYSTEM_ALERT",
+            title: `Manager Medical Claim ${params.action}`,
+            message: `${params.actorName} ${params.action.toLowerCase()} medical claim of ৳${params.claimAmount} for ${params.employeeName}`,
+            metadata: {
+                actorId: params.actorId,
+                actorName: params.actorName,
+                action: params.action,
+                claimId: params.claimId,
+                claimAmount: params.claimAmount,
+                employeeId: params.employeeId,
+                employeeName: params.employeeName,
+                source: "medical_claim",
+            },
+        });
+    } catch (error) {
+        console.error("Failed to log manager medical action:", error);
+    }
+}
 
 /**
  * Get current year's medical entitlement for the logged-in user.
@@ -90,9 +130,23 @@ export async function getPendingMedicalClaims() {
 }
 
 export async function approveMedicalClaim(claimId: string) {
-    return await prisma.$transaction(async (tx) => {
+    const actor = await getDbUser();
+    if (!actor) {
+        throw new Error("Unauthorized");
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
         const claim = await tx.medicalClaim.findUnique({
             where: { id: claimId },
+            include: {
+                user: {
+                    select: {
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                    },
+                },
+            },
         });
 
         if (!claim || claim.status !== "PENDING") {
@@ -130,19 +184,51 @@ export async function approveMedicalClaim(claimId: string) {
                 changeReason: `Medical Claim Approved: ${claim.amount} for user ${claim.userId} (Year: ${year})`,
                 oldEmi: null,
                 newEmi: null,
+                userId: actor.id,
             }
         });
 
         revalidatePath("/admin/medical-claims");
+        revalidatePath("/manager/medical");
         revalidatePath("/medical");
-        return { success: true };
+        return { success: true, claim };
     });
+
+    if (actor.role === "EMPLOYEE" && actor.isManager) {
+        const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+        const employeeName = [result.claim.user.firstName, result.claim.user.lastName].filter(Boolean).join(" ") || result.claim.user.email;
+        await logManagerMedicalAction({
+            actorId: actor.id,
+            actorName,
+            action: "APPROVED",
+            claimId: result.claim.id,
+            claimAmount: Number(result.claim.amount),
+            employeeId: result.claim.userId,
+            employeeName,
+        });
+    }
+
+    return { success: true };
 }
 
 export async function rejectMedicalClaim(claimId: string) {
+    const actor = await getDbUser();
+    if (!actor) {
+        throw new Error("Unauthorized");
+    }
+
     const claim = await prisma.medicalClaim.update({
         where: { id: claimId },
         data: { status: "REJECTED" },
+        include: {
+            user: {
+                select: {
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                },
+            },
+        },
     });
 
     await prisma.auditLog.create({
@@ -150,10 +236,26 @@ export async function rejectMedicalClaim(claimId: string) {
             changeReason: `Medical Claim Rejected: ${claim.amount} for user ${claim.userId} (Date: ${new Date().toISOString()})`,
             oldEmi: null,
             newEmi: null,
+            userId: actor.id,
         }
     });
 
+    if (actor.role === "EMPLOYEE" && actor.isManager) {
+        const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+        const employeeName = [claim.user.firstName, claim.user.lastName].filter(Boolean).join(" ") || claim.user.email;
+        await logManagerMedicalAction({
+            actorId: actor.id,
+            actorName,
+            action: "REJECTED",
+            claimId: claim.id,
+            claimAmount: Number(claim.amount),
+            employeeId: claim.userId,
+            employeeName,
+        });
+    }
+
     revalidatePath("/admin/medical-claims");
+    revalidatePath("/manager/medical");
     revalidatePath("/medical");
     return { success: true };
 }

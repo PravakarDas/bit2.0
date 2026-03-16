@@ -2,7 +2,72 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { LeaveApplicationStatus } from "@prisma/client";
+import { LeaveApplicationStatus, Prisma } from "@prisma/client";
+import { getDbUser } from "./user.actions";
+import { createAdminNotification } from "./notification.actions";
+import { logManagerOrganizationAction } from "./manager-organization.actions";
+
+function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
+    return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
+}
+
+async function notifyIfManagerLeaveType(params: {
+    user: NonNullable<Awaited<ReturnType<typeof getDbUser>>>;
+    action: "CREATED" | "UPDATED" | "ACTIVATED" | "DEACTIVATED";
+    entityId: string;
+    entityName: string;
+    details?: string;
+}) {
+    if (params.user.role === "EMPLOYEE" && params.user.isManager) {
+        const actorName = [params.user.firstName, params.user.lastName].filter(Boolean).join(" ") || params.user.email;
+        await logManagerOrganizationAction({
+            actorId: params.user.id,
+            actorName,
+            action: params.action,
+            entityType: "leave type",
+            entityId: params.entityId,
+            entityName: params.entityName,
+            details: params.details,
+        });
+    }
+}
+
+async function logManagerHolidayAction(params: {
+    actorId: string;
+    actorName: string;
+    action: "CREATE" | "UPDATE" | "DELETE";
+    holidayName: string;
+    holidayDate: Date;
+    holidayId: string;
+}) {
+    try {
+        await prisma.auditLog.create({
+            data: {
+                userId: params.actorId,
+                oldEmi: null,
+                newEmi: null,
+                changeReason: `Manager holiday ${params.action.toLowerCase()}: ${params.holidayName} on ${params.holidayDate.toISOString().split("T")[0]} (holidayId: ${params.holidayId})`,
+            },
+        });
+
+        await createAdminNotification({
+            type: "SYSTEM_ALERT",
+            title: `Manager Holiday ${params.action}`,
+            message: `${params.actorName} ${params.action.toLowerCase()}d holiday "${params.holidayName}" for ${params.holidayDate.toISOString().split("T")[0]}`,
+            metadata: {
+                actorId: params.actorId,
+                actorName: params.actorName,
+                action: params.action,
+                holidayId: params.holidayId,
+                holidayName: params.holidayName,
+                holidayDate: params.holidayDate.toISOString(),
+                source: "holiday_management",
+            },
+        });
+    } catch (error) {
+        console.error("Failed to log manager holiday action:", error);
+    }
+}
 
 // Leave Types Management
 export async function getActiveLeaveTypes() {
@@ -13,6 +78,11 @@ export async function getActiveLeaveTypes() {
 }
 
 export async function getAllLeaveTypes() {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
     return await prisma.leaveType.findMany({
         orderBy: { name: "asc" }
     });
@@ -25,6 +95,11 @@ export async function createLeaveType(data: {
     leaveResetPolicy: "ROSTER_EVERY_YEAR" | "FIXED";
     applicableBranches: string[]; // Array of branch IDs
 }) {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
     try {
         const leaveType = await prisma.leaveType.create({
             data: {
@@ -36,7 +111,16 @@ export async function createLeaveType(data: {
             }
         });
         
-        revalidatePath("/admin/leave-types");
+        await notifyIfManagerLeaveType({
+            user: user!,
+            action: "CREATED",
+            entityId: leaveType.id,
+            entityName: leaveType.name,
+            details: `allocatedDays=${leaveType.allocatedDays}, requiresApproval=${leaveType.requiresApproval}`,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, leaveType };
     } catch (error) {
         console.error("Error creating leave type:", error);
@@ -52,6 +136,11 @@ export async function updateLeaveType(id: string, data: {
     applicableBranches?: string[];
     isActive?: boolean;
 }) {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
     try {
         const updateData: any = { ...data };
         if (data.applicableBranches) {
@@ -63,7 +152,16 @@ export async function updateLeaveType(id: string, data: {
             data: updateData
         });
         
-        revalidatePath("/admin/leave-types");
+        await notifyIfManagerLeaveType({
+            user: user!,
+            action: "UPDATED",
+            entityId: leaveType.id,
+            entityName: leaveType.name,
+            details: data.allocatedDays !== undefined ? `allocatedDays=${data.allocatedDays}` : undefined,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, leaveType };
     } catch (error) {
         console.error("Error updating leave type:", error);
@@ -72,6 +170,11 @@ export async function updateLeaveType(id: string, data: {
 }
 
 export async function toggleLeaveTypeStatus(id: string) {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
     try {
         const leaveType = await prisma.leaveType.findUnique({ where: { id } });
         if (!leaveType) {
@@ -83,7 +186,15 @@ export async function toggleLeaveTypeStatus(id: string) {
             data: { isActive: !leaveType.isActive }
         });
         
-        revalidatePath("/admin/leave-types");
+        await notifyIfManagerLeaveType({
+            user: user!,
+            action: updated.isActive ? "ACTIVATED" : "DEACTIVATED",
+            entityId: updated.id,
+            entityName: updated.name,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
         return { success: true, leaveType: updated };
     } catch (error) {
         console.error("Error toggling leave type status:", error);
@@ -202,6 +313,32 @@ export async function applyForLeave(data: {
         const leaveDate = new Date(data.leaveDate);
         const currentYear = leaveDate.getFullYear();
         
+        // Get user with branch information
+        const user = await prisma.user.findUnique({
+            where: { id: data.userId },
+            include: { branch: true }
+        });
+        
+        if (!user) {
+            return { success: false, error: "User not found" };
+        }
+        
+        // Check if the selected date is a weekly holiday for this employee's branch
+        if (user.branch) {
+            const dayOfWeek = leaveDate.getDay(); // 0=Sunday, 6=Saturday
+            const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+            const currentDayName = dayNames[dayOfWeek];
+            
+            if (user.branch.weeklyOffDays?.includes(currentDayName)) {
+                return {
+                    success: false,
+                    error: `Cannot apply for leave on ${currentDayName.toLowerCase()}. This is a weekly holiday for your branch.`,
+                    isWeeklyHoliday: true,
+                    weeklyHolidayDay: currentDayName
+                };
+            }
+        }
+        
         // Check if user has entitlement for this leave type
         const entitlement = await prisma.userLeaveEntitlement.findUnique({
             where: {
@@ -223,6 +360,35 @@ export async function applyForLeave(data: {
         const remainingDays = entitlement.allocatedDays - entitlement.usedDays;
         if (remainingDays <= 0) {
             return { success: false, error: "No remaining leave days for this type" };
+        }
+        
+        // Check if the selected date is a public holiday for the employee's branch
+        const holidayWhereCondition: Prisma.PublicHolidayWhereInput = {
+            date: {
+                gte: new Date(leaveDate.getFullYear(), leaveDate.getMonth(), leaveDate.getDate()),
+                lt: new Date(leaveDate.getFullYear(), leaveDate.getMonth(), leaveDate.getDate() + 1)
+            },
+            isActive: true
+        };
+
+        if (user.branchId) {
+            holidayWhereCondition.OR = [
+                { appliesToAllBranches: true },
+                { applicableBranchIds: { has: user.branchId } }
+            ];
+        }
+
+        const isHoliday = await prisma.publicHoliday.findFirst({
+            where: holidayWhereCondition
+        });
+        
+        if (isHoliday) {
+            return { 
+                success: false, 
+                error: `Cannot apply for leave on ${isHoliday.name} (${leaveDate.toLocaleDateString()}). This is a public holiday.`,
+                isHoliday: true,
+                holidayName: isHoliday.name
+            };
         }
         
         // Check if leave already applied for this date and type
@@ -466,5 +632,305 @@ export async function resetLeaveBalancesForNewYear() {
     } catch (error) {
         console.error("Error resetting leave balances:", error);
         return { success: false, error: "Failed to reset leave balances" };
+    }
+}
+
+// Holiday Management Functions
+export async function createPublicHoliday(data: {
+    name: string;
+    date: string; // YYYY-MM-DD format
+    description?: string;
+    isRecurring?: boolean;
+    appliesToAllBranches?: boolean;
+    applicableBranchIds?: string[];
+}) {
+    try {
+        const holidayDate = new Date(data.date);
+        const appliesToAllBranches = data.appliesToAllBranches !== false;
+        const applicableBranchIds = appliesToAllBranches
+            ? []
+            : [...new Set((data.applicableBranchIds || []).filter(Boolean))];
+
+        if (!appliesToAllBranches && applicableBranchIds.length === 0) {
+            return { success: false, error: "Select at least one branch or choose all branches" };
+        }
+        
+        // Check conflicting holiday scope on this date
+        const existingHolidays = await prisma.publicHoliday.findMany({
+            where: {
+                date: {
+                    gte: new Date(holidayDate.getFullYear(), holidayDate.getMonth(), holidayDate.getDate()),
+                    lt: new Date(holidayDate.getFullYear(), holidayDate.getMonth(), holidayDate.getDate() + 1)
+                }
+            }
+        });
+        
+        const hasScopeConflict = existingHolidays.some((holiday) => {
+            if (holiday.appliesToAllBranches || appliesToAllBranches) {
+                return true;
+            }
+
+            return holiday.applicableBranchIds.some((branchId) => applicableBranchIds.includes(branchId));
+        });
+
+        if (hasScopeConflict) {
+            return { success: false, error: "A holiday already exists on this date for one or more selected branches" };
+        }
+        
+        const holiday = await prisma.publicHoliday.create({
+            data: {
+                name: data.name,
+                date: holidayDate,
+                description: data.description,
+                isRecurring: data.isRecurring || false,
+                appliesToAllBranches,
+                applicableBranchIds
+            }
+        });
+
+        const actor = await getDbUser();
+        if (actor?.role === "EMPLOYEE" && actor.isManager) {
+            const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+            await logManagerHolidayAction({
+                actorId: actor.id,
+                actorName,
+                action: "CREATE",
+                holidayName: holiday.name,
+                holidayDate: holiday.date,
+                holidayId: holiday.id,
+            });
+        }
+        
+        revalidatePath("/admin/holidays");
+        return { success: true, holiday };
+    } catch (error) {
+        console.error("Error creating holiday:", error);
+        return { success: false, error: "Failed to create holiday" };
+    }
+}
+
+export async function getPublicHolidays(year?: number) {
+    try {
+        const currentYear = year || new Date().getFullYear();
+        const startDate = new Date(currentYear, 0, 1);
+        const endDate = new Date(currentYear + 1, 0, 1);
+        
+        return await prisma.publicHoliday.findMany({
+            where: {
+                date: {
+                    gte: startDate,
+                    lt: endDate
+                },
+                isActive: true
+            },
+            orderBy: { date: "asc" }
+        });
+    } catch (error) {
+        console.error("Error fetching holidays:", error);
+        return [];
+    }
+}
+
+export async function updatePublicHoliday(id: string, data: {
+    name?: string;
+    date?: string;
+    description?: string;
+    isRecurring?: boolean;
+    isActive?: boolean;
+    appliesToAllBranches?: boolean;
+    applicableBranchIds?: string[];
+}) {
+    try {
+        const existingHoliday = await prisma.publicHoliday.findUnique({ where: { id } });
+        if (!existingHoliday) {
+            return { success: false, error: "Holiday not found" };
+        }
+
+        const appliesToAllBranches = data.appliesToAllBranches ?? existingHoliday.appliesToAllBranches;
+        const applicableBranchIds = appliesToAllBranches
+            ? []
+            : [...new Set((data.applicableBranchIds ?? existingHoliday.applicableBranchIds).filter(Boolean))];
+
+        if (!appliesToAllBranches && applicableBranchIds.length === 0) {
+            return { success: false, error: "Select at least one branch or choose all branches" };
+        }
+
+        const updateData: Prisma.PublicHolidayUpdateInput = {};
+        
+        if (data.name) updateData.name = data.name;
+        if (data.date) updateData.date = new Date(data.date);
+        if (data.description !== undefined) updateData.description = data.description;
+        if (data.isRecurring !== undefined) updateData.isRecurring = data.isRecurring;
+        if (data.isActive !== undefined) updateData.isActive = data.isActive;
+        updateData.appliesToAllBranches = appliesToAllBranches;
+        updateData.applicableBranchIds = applicableBranchIds;
+
+        const targetDate = data.date ? new Date(data.date) : existingHoliday.date;
+        const existingHolidays = await prisma.publicHoliday.findMany({
+            where: {
+                id: { not: id },
+                date: {
+                    gte: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()),
+                    lt: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1)
+                }
+            }
+        });
+
+        const hasScopeConflict = existingHolidays.some((holiday) => {
+            if (holiday.appliesToAllBranches || appliesToAllBranches) {
+                return true;
+            }
+
+            return holiday.applicableBranchIds.some((branchId) => applicableBranchIds.includes(branchId));
+        });
+
+        if (hasScopeConflict) {
+            return { success: false, error: "A holiday already exists on this date for one or more selected branches" };
+        }
+        
+        const holiday = await prisma.publicHoliday.update({
+            where: { id },
+            data: updateData
+        });
+
+        const actor = await getDbUser();
+        if (actor?.role === "EMPLOYEE" && actor.isManager) {
+            const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+            await logManagerHolidayAction({
+                actorId: actor.id,
+                actorName,
+                action: "UPDATE",
+                holidayName: holiday.name,
+                holidayDate: holiday.date,
+                holidayId: holiday.id,
+            });
+        }
+        
+        revalidatePath("/admin/holidays");
+        return { success: true, holiday };
+    } catch (error) {
+        console.error("Error updating holiday:", error);
+        return { success: false, error: "Failed to update holiday" };
+    }
+}
+
+export async function deletePublicHoliday(id: string) {
+    try {
+        const existingHoliday = await prisma.publicHoliday.findUnique({ where: { id } });
+        if (!existingHoliday) {
+            return { success: false, error: "Holiday not found" };
+        }
+
+        await prisma.publicHoliday.delete({
+            where: { id }
+        });
+
+        const actor = await getDbUser();
+        if (actor?.role === "EMPLOYEE" && actor.isManager) {
+            const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+            await logManagerHolidayAction({
+                actorId: actor.id,
+                actorName,
+                action: "DELETE",
+                holidayName: existingHoliday.name,
+                holidayDate: existingHoliday.date,
+                holidayId: existingHoliday.id,
+            });
+        }
+        
+        revalidatePath("/admin/holidays");
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting holiday:", error);
+        return { success: false, error: "Failed to delete holiday" };
+    }
+}
+
+export async function checkIfHoliday(date: string, branchId?: string | null) {
+    try {
+        const targetDate = new Date(date);
+        const whereClause: Prisma.PublicHolidayWhereInput = {
+            date: {
+                gte: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()),
+                lt: new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1)
+            },
+            isActive: true
+        };
+
+        if (branchId) {
+            whereClause.OR = [
+                { appliesToAllBranches: true },
+                { applicableBranchIds: { has: branchId } }
+            ];
+        }
+
+        const holiday = await prisma.publicHoliday.findFirst({
+            where: whereClause
+        });
+        
+        return {
+            isHoliday: !!holiday,
+            holidayName: holiday?.name,
+            holidayDescription: holiday?.description
+        };
+    } catch (error) {
+        console.error("Error checking holiday:", error);
+        return { isHoliday: false };
+    }
+}
+
+export async function checkIfWeeklyHoliday(userId: string, date: string) {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: { branch: true }
+        });
+        
+        if (!user || !user.branch) {
+            return { isWeeklyHoliday: false };
+        }
+        
+        const targetDate = new Date(date);
+        const dayOfWeek = targetDate.getDay(); // 0=Sunday, 6=Saturday
+        const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+        const currentDayName = dayNames[dayOfWeek];
+        
+        const isWeeklyHoliday = user.branch.weeklyOffDays?.includes(currentDayName) || false;
+        
+        return {
+            isWeeklyHoliday,
+            weeklyHolidayDay: isWeeklyHoliday ? currentDayName : undefined,
+            branchName: user.branch.name
+        };
+    } catch (error) {
+        console.error("Error checking weekly holiday:", error);
+        return { isWeeklyHoliday: false };
+    }
+}
+
+export async function checkAllHolidays(userId: string, date: string) {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { branchId: true }
+        });
+
+        const [publicHolidayResult, weeklyHolidayResult] = await Promise.all([
+            checkIfHoliday(date, user?.branchId),
+            checkIfWeeklyHoliday(userId, date)
+        ]);
+        
+        return {
+            isPublicHoliday: publicHolidayResult.isHoliday,
+            publicHolidayName: publicHolidayResult.holidayName,
+            publicHolidayDescription: publicHolidayResult.holidayDescription,
+            isWeeklyHoliday: weeklyHolidayResult.isWeeklyHoliday,
+            weeklyHolidayDay: weeklyHolidayResult.weeklyHolidayDay,
+            branchName: weeklyHolidayResult.branchName,
+            hasAnyHoliday: publicHolidayResult.isHoliday || weeklyHolidayResult.isWeeklyHoliday
+        };
+    } catch (error) {
+        console.error("Error checking all holidays:", error);
+        return { hasAnyHoliday: false, isPublicHoliday: false, isWeeklyHoliday: false };
     }
 }

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { createAdminNotification } from "./notification.actions";
+import { Prisma } from "@prisma/client";
 
 /**
  * Convert time string (HH:MM) to minutes
@@ -132,6 +133,37 @@ async function hasApprovedLeaveForDate(userId: string, date: Date): Promise<bool
   }
 }
 
+async function isPublicHolidayForBranch(date: Date, branchId?: string | null): Promise<boolean> {
+  try {
+    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+
+    const whereCondition: Prisma.PublicHolidayWhereInput = {
+      date: {
+        gte: startOfDay,
+        lt: endOfDay
+      },
+      isActive: true
+    };
+
+    if (branchId) {
+      whereCondition.OR = [
+        { appliesToAllBranches: true },
+        { applicableBranchIds: { has: branchId } }
+      ];
+    }
+
+    const holidayCount = await prisma.publicHoliday.count({
+      where: whereCondition
+    });
+
+    return holidayCount > 0;
+  } catch (error) {
+    console.error('Error checking public holiday for branch:', error);
+    return false;
+  }
+}
+
 /**
  * Generate daily timeline records for all active employees for a specific date
  */
@@ -184,6 +216,12 @@ export async function generateDailyTimeRecords(targetDate: Date = new Date()): P
         const isWeekend = await isWeekendForEmployee(employee.id, normalizedDate);
         if (isWeekend) {
           console.log(`Skipping ${employee.firstName} ${employee.lastName} - weekend`);
+          continue;
+        }
+
+        const isBranchHoliday = await isPublicHolidayForBranch(normalizedDate, employee.branchId);
+        if (isBranchHoliday) {
+          console.log(`Skipping ${employee.firstName} ${employee.lastName} - public holiday`);
           continue;
         }
 

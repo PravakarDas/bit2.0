@@ -20,7 +20,7 @@ export default async function AdminLayout({
         redirect("/pending");
     }
 
-    // Security: Check for SUPERADMIN role
+    // Security: Check for SUPERADMIN role only
     if (user.role !== "SUPERADMIN") {
         redirect("/unauthorized");
     }

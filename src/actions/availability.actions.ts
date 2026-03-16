@@ -12,7 +12,7 @@ export async function getAvailabilityData(year: number, month: number) {
 
     const leaveStart = startDate > today ? startDate : today;
 
-    const [employees, leaveApplications] = await Promise.all([
+    const [employees, leaveApplications, holidays] = await Promise.all([
         prisma.user.findMany({
             where: {
                 status: "APPROVED",
@@ -24,8 +24,11 @@ export async function getAvailabilityData(year: number, month: number) {
                 firstName: true,
                 lastName: true,
                 email: true,
+                personalEmail: true,
+                phoneNumber: true,
                 branch: {
                     select: {
+                        id: true,
                         name: true,
                         weeklyOffDays: true
                     }
@@ -54,6 +57,25 @@ export async function getAvailabilityData(year: number, month: number) {
                     }
                 }
             }
+        }),
+        prisma.publicHoliday.findMany({
+            where: {
+                isActive: true,
+                date: {
+                    gte: startDate,
+                    lte: endDate
+                }
+            },
+            select: {
+                id: true,
+                name: true,
+                date: true,
+                appliesToAllBranches: true,
+                applicableBranchIds: true
+            },
+            orderBy: {
+                date: "asc"
+            }
         })
     ]);
 
@@ -65,6 +87,13 @@ export async function getAvailabilityData(year: number, month: number) {
 
     return {
         employees,
-        leaves
+        leaves,
+        holidays: holidays.map((holiday) => ({
+            id: holiday.id,
+            name: holiday.name,
+            date: holiday.date.toISOString(),
+            appliesToAllBranches: holiday.appliesToAllBranches,
+            applicableBranchIds: holiday.applicableBranchIds
+        }))
     };
 }

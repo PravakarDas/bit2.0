@@ -3,6 +3,44 @@
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { createAdminNotification } from "./notification.actions";
+
+async function logManagerProfileRequestAction(params: {
+  actorId: string;
+  actorName: string;
+  action: "APPROVED" | "REJECTED";
+  requestId: string;
+  employeeId: string;
+  employeeName: string;
+}) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId: params.actorId,
+        oldEmi: null,
+        newEmi: null,
+        changeReason: `Manager profile request ${params.action.toLowerCase()}: request ${params.requestId} for ${params.employeeName} (${params.employeeId})`,
+      },
+    });
+
+    await createAdminNotification({
+      type: "SYSTEM_ALERT",
+      title: `Manager Profile Request ${params.action}`,
+      message: `${params.actorName} ${params.action.toLowerCase()} profile update request for ${params.employeeName}`,
+      metadata: {
+        actorId: params.actorId,
+        actorName: params.actorName,
+        action: params.action,
+        requestId: params.requestId,
+        employeeId: params.employeeId,
+        employeeName: params.employeeName,
+        source: "profile_update_request",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to log manager profile request action:", error);
+  }
+}
 
 // Type for profile data
 export type ProfileData = {
@@ -49,6 +87,12 @@ export type ProfileData = {
   portfolioLink?: string | null;
   githubLink?: string | null;
   linkedinLink?: string | null;
+
+  // Employee Document Links
+  loanPapersLink?: string | null;
+  nomineesPapersLink?: string | null;
+  emergencyContactLink?: string | null;
+  personalInfoLink?: string | null;
 };
 
 const normalizeWorkingDaysInMonth = (value: unknown) => {
@@ -104,7 +148,7 @@ export async function getUserProfileById(userId: string) {
     });
 
     // Check if user is admin
-    if (!currentUserData || !["SUPERADMIN", "HR", "MANAGER"].includes(currentUserData.role)) {
+    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -177,6 +221,10 @@ export async function submitProfileUpdateRequest(data: ProfileData) {
       portfolioLink: user.portfolioLink,
       githubLink: user.githubLink,
       linkedinLink: user.linkedinLink,
+      loanPapersLink: user.loanPapersLink,
+      nomineesPapersLink: user.nomineesPapersLink,
+      emergencyContactLink: user.emergencyContactLink,
+      personalInfoLink: user.personalInfoLink,
     };
 
     // Create update request
@@ -229,7 +277,7 @@ export async function updateUserProfileByAdmin(userId: string, data: ProfileData
     });
 
     // Check if user is admin
-    if (!currentUserData || !["SUPERADMIN", "HR", "MANAGER"].includes(currentUserData.role)) {
+    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -272,10 +320,10 @@ export async function getPendingProfileUpdateRequests() {
 
     const currentUserData = await prisma.user.findUnique({
       where: { clerkId },
-      select: { role: true },
+      select: { id: true, role: true, isManager: true, firstName: true, lastName: true, email: true },
     });
 
-    if (!currentUserData || !["SUPERADMIN", "HR", "MANAGER"].includes(currentUserData.role)) {
+    if (!currentUserData || (!["SUPERADMIN", "HR"].includes(currentUserData.role) && !(currentUserData.role === "EMPLOYEE" && currentUserData.isManager))) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -334,7 +382,7 @@ export async function getMyProfileUpdateRequests() {
 }
 
 /**
- * Approve profile update request (Admin only)
+ * Approve profile update request (Admin and Manager)
  */
 export async function approveProfileUpdateRequest(requestId: string, reviewNotes?: string) {
   try {
@@ -345,10 +393,10 @@ export async function approveProfileUpdateRequest(requestId: string, reviewNotes
 
     const currentUserData = await prisma.user.findUnique({
       where: { clerkId },
-      select: { role: true },
+      select: { id: true, role: true, isManager: true, firstName: true, lastName: true, email: true },
     });
 
-    if (!currentUserData || !["SUPERADMIN", "HR", "MANAGER"].includes(currentUserData.role)) {
+    if (!currentUserData || (!["SUPERADMIN", "HR"].includes(currentUserData.role) && !(currentUserData.role === "EMPLOYEE" && currentUserData.isManager))) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -398,6 +446,19 @@ export async function approveProfileUpdateRequest(requestId: string, reviewNotes
       }),
     ]);
 
+    if (currentUserData.role === "EMPLOYEE" && currentUserData.isManager) {
+      const actorName = [currentUserData.firstName, currentUserData.lastName].filter(Boolean).join(" ") || currentUserData.email;
+      const employeeName = [request.user.firstName, request.user.lastName].filter(Boolean).join(" ") || request.user.email;
+      await logManagerProfileRequestAction({
+        actorId: currentUserData.id,
+        actorName,
+        action: "APPROVED",
+        requestId,
+        employeeId: request.userId,
+        employeeName,
+      });
+    }
+
     revalidatePath("/admin/profile-requests");
     revalidatePath(`/admin/employees/${request.userId}`);
 
@@ -409,7 +470,7 @@ export async function approveProfileUpdateRequest(requestId: string, reviewNotes
 }
 
 /**
- * Reject profile update request (Admin only)
+ * Reject profile update request (Admin and Manager)
  */
 export async function rejectProfileUpdateRequest(requestId: string, reviewNotes: string) {
   try {
@@ -420,15 +481,16 @@ export async function rejectProfileUpdateRequest(requestId: string, reviewNotes:
 
     const currentUserData = await prisma.user.findUnique({
       where: { clerkId },
-      select: { role: true },
+      select: { id: true, role: true, isManager: true, firstName: true, lastName: true, email: true },
     });
 
-    if (!currentUserData || !["SUPERADMIN", "HR", "MANAGER"].includes(currentUserData.role)) {
+    if (!currentUserData || (!["SUPERADMIN", "HR"].includes(currentUserData.role) && !(currentUserData.role === "EMPLOYEE" && currentUserData.isManager))) {
       return { success: false, error: "Unauthorized access" };
     }
 
     const request = await prisma.profileUpdateRequest.findUnique({
       where: { id: requestId },
+      include: { user: true },
     });
 
     if (!request) {
@@ -448,6 +510,19 @@ export async function rejectProfileUpdateRequest(requestId: string, reviewNotes:
         reviewNotes,
       },
     });
+
+    if (currentUserData.role === "EMPLOYEE" && currentUserData.isManager) {
+      const actorName = [currentUserData.firstName, currentUserData.lastName].filter(Boolean).join(" ") || currentUserData.email;
+      const employeeName = [request.user.firstName, request.user.lastName].filter(Boolean).join(" ") || request.user.email;
+      await logManagerProfileRequestAction({
+        actorId: currentUserData.id,
+        actorName,
+        action: "REJECTED",
+        requestId,
+        employeeId: request.userId,
+        employeeName,
+      });
+    }
 
     revalidatePath("/admin/profile-requests");
 

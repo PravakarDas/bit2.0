@@ -3,10 +3,36 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
+import { logManagerOrganizationAction } from "./manager-organization.actions";
+
+function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
+  return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
+}
+
+async function notifyIfManager(params: {
+  user: NonNullable<Awaited<ReturnType<typeof getDbUser>>>;
+  action: "CREATED" | "UPDATED" | "DELETED" | "ACTIVATED" | "DEACTIVATED";
+  entityId: string;
+  entityName: string;
+  details?: string;
+}) {
+  if (params.user.role === "EMPLOYEE" && params.user.isManager) {
+    const actorName = [params.user.firstName, params.user.lastName].filter(Boolean).join(" ") || params.user.email;
+    await logManagerOrganizationAction({
+      actorId: params.user.id,
+      actorName,
+      action: params.action,
+      entityType: "designation",
+      entityId: params.entityId,
+      entityName: params.entityName,
+      details: params.details,
+    });
+  }
+}
 
 export async function getAllDesignations(includeInactive = false) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
+  if (!canManageOrganization(admin)) {
     throw new Error("Unauthorized");
   }
 
@@ -60,7 +86,7 @@ export async function getDesignationsByDepartment(departmentId: string, includeI
 
 export async function getDesignationById(id: string) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
+  if (!canManageOrganization(admin)) {
     throw new Error("Unauthorized");
   }
 
@@ -83,7 +109,7 @@ export async function createDesignation(data: {
   departmentId: string;
 }) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
+  if (!canManageOrganization(admin)) {
     throw new Error("Unauthorized");
   }
 
@@ -99,7 +125,16 @@ export async function createDesignation(data: {
       }
     });
 
-    revalidatePath("/admin/designations");
+    await notifyIfManager({
+      user: admin!,
+      action: "CREATED",
+      entityId: designation.id,
+      entityName: designation.name,
+      details: `department=${designation.department.name}`,
+    });
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true, designation };
   } catch (error: unknown) {
     if (error instanceof Object && 'code' in error && error.code === "P2002") {
@@ -115,7 +150,7 @@ export async function updateDesignation(id: string, data: {
   departmentId?: string;
 }) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
+  if (!canManageOrganization(admin)) {
     throw new Error("Unauthorized");
   }
 
@@ -132,7 +167,16 @@ export async function updateDesignation(id: string, data: {
       }
     });
 
-    revalidatePath("/admin/designations");
+    await notifyIfManager({
+      user: admin!,
+      action: "UPDATED",
+      entityId: designation.id,
+      entityName: designation.name,
+      details: `department=${designation.department.name}`,
+    });
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true, designation };
   } catch (error: unknown) {
     if (error instanceof Object && 'code' in error && error.code === "P2002") {
@@ -144,7 +188,7 @@ export async function updateDesignation(id: string, data: {
 
 export async function toggleDesignationStatus(id: string) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
+  if (!canManageOrganization(admin)) {
     throw new Error("Unauthorized");
   }
 
@@ -163,7 +207,22 @@ export async function toggleDesignationStatus(id: string) {
       data: { isActive: !designation.isActive }
     });
 
-    revalidatePath("/admin/designations");
+    const updatedDesignation = await prisma.designation.findUnique({
+      where: { id },
+      select: { id: true, name: true, isActive: true }
+    });
+
+    if (updatedDesignation) {
+      await notifyIfManager({
+        user: admin!,
+        action: updatedDesignation.isActive ? "ACTIVATED" : "DEACTIVATED",
+        entityId: updatedDesignation.id,
+        entityName: updatedDesignation.name,
+      });
+    }
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true };
   } catch {
     return { success: false, error: "Failed to toggle designation status" };
@@ -172,7 +231,7 @@ export async function toggleDesignationStatus(id: string) {
 
 export async function deleteDesignation(id: string) {
   const admin = await getDbUser();
-  if (!admin || admin.role !== "SUPERADMIN") {
+  if (!canManageOrganization(admin)) {
     throw new Error("Unauthorized");
   }
 
@@ -201,7 +260,15 @@ export async function deleteDesignation(id: string) {
       where: { id }
     });
 
-    revalidatePath("/admin/designations");
+    await notifyIfManager({
+      user: admin!,
+      action: "DELETED",
+      entityId: designation.id,
+      entityName: designation.name,
+    });
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/manager/organization");
     return { success: true };
   } catch {
     return { success: false, error: "Failed to delete designation" };

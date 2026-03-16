@@ -4,12 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, User, Mail, Building, Calendar, Banknote, Phone, AlertCircle } from "lucide-react";
+import { ArrowLeft, User, Mail, Building, Calendar, Banknote, Phone, AlertCircle, Settings } from "lucide-react";
 import Link from "next/link";
 import { AssignBranchSelect } from "@/components/admin/AssignBranchSelect";
 import { EmployeeStatusSelect } from "@/components/admin/EmployeeStatusSelect";
+import { ManagerToggle } from "@/components/admin/ManagerToggle";
 import { getActiveBranches } from "@/actions/branch.actions";
 import { WorkingDaysInput } from "@/components/admin/WorkingDaysInput";
+import { EmployeeDocumentLinksForm } from "@/components/admin/EmployeeDocumentLinksForm";
 
 export default async function EmployeeProfilePage({ params }: { params: { id: string } }) {
     const { id } = await params;
@@ -89,6 +91,15 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
                                 <EmployeeStatusSelect 
                                     employeeId={user.id} 
                                     currentStatus={user.employeeStatus} 
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium text-muted-foreground">Manager Status</label>
+                                <ManagerToggle
+                                    userId={user.id}
+                                    isManager={user.isManager || false}
+                                    userRole={user.role}
+                                    userName={employeeName}
                                 />
                             </div>
                         </div>
@@ -249,6 +260,26 @@ export default async function EmployeeProfilePage({ params }: { params: { id: st
                     </CardContent>
                 </Card>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Settings className="h-5 w-5" />
+                        Employee Document Links
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <EmployeeDocumentLinksForm
+                        employeeId={user.id}
+                        initialValues={{
+                            loanPapersLink: user.loanPapersLink,
+                            nomineesPapersLink: user.nomineesPapersLink,
+                            emergencyContactLink: user.emergencyContactLink,
+                            personalInfoLink: user.personalInfoLink,
+                        }}
+                    />
+                </CardContent>
+            </Card>
 
             {/* Quick Actions */}
             <Card>
