@@ -182,7 +182,7 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
               icon={<Building2 className="h-4 w-4" />}
             />
           )}
-          <InfoItem
+          {/* <InfoItem
             label="Loan Papers Link"
             value={user.loanPapersLink}
             isLink
@@ -205,7 +205,7 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
             value={user.personalInfoLink}
             isLink
             icon={<Globe className="h-4 w-4" />}
-          />
+          /> */}
         </CardContent>
       </Card>
 
