@@ -156,11 +156,13 @@ interface ProfileEditFormProps {
   };
   branches?: Branch[];
   isAdmin?: boolean;
+  allowRoleEdit?: boolean;
+  allowPersonalEdit?: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, onSuccess, onCancel }: ProfileEditFormProps) {
+export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, allowRoleEdit = true, allowPersonalEdit = true, onSuccess, onCancel }: ProfileEditFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState("personal");
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -375,13 +377,26 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
 
       let result;
       if (isAdmin) {
+        const managerRestrictedProfileData = {
+          dateOfJoining: finalFormattedData.dateOfJoining,
+          attendanceId: finalFormattedData.attendanceId,
+          ...(isAdmin ? { workingDaysInMonth: workingDaysValue } : {}),
+          loanPapersLink: finalFormattedData.loanPapersLink,
+          nomineesPapersLink: finalFormattedData.nomineesPapersLink,
+          emergencyContactLink: finalFormattedData.emergencyContactLink,
+          personalInfoLink: finalFormattedData.personalInfoLink,
+        };
+
         // Admin can update profile and employment details
-        const profileResult = await updateUserProfileByAdmin(user.id, finalFormattedData);
+        const profileResult = await updateUserProfileByAdmin(
+          user.id,
+          allowPersonalEdit ? finalFormattedData : managerRestrictedProfileData
+        );
         
         // Update employment details if any have changed
         if (data.role || data.branchId || data.departmentId || data.designationId) {
           const employmentData = {
-            role: data.role as Role,
+            ...(allowRoleEdit ? { role: data.role as Role } : {}),
             branchId: data.branchId || null,
             departmentId: data.departmentId || null,
             designationId: data.designationId || null,
@@ -560,6 +575,17 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
 
           {/* Personal Info Tab */}
           <TabsContent value="personal" className="space-y-6">
+            {!allowPersonalEdit && (
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-sm text-muted-foreground">
+                    Personal information is read-only for managers.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            <fieldset disabled={!allowPersonalEdit} className={!allowPersonalEdit ? "opacity-70" : ""}>
             {/* Personal Information */}
             <Card>
               <CardHeader>
@@ -986,6 +1012,7 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
                 />
               </CardContent>
             </Card>
+            </fieldset>
           </TabsContent>
 
           {/* Employment Details Tab */}
@@ -1059,31 +1086,33 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
                   <div className="space-y-4 border-t pt-6">
                     <h4 className="font-medium">Organizational Assignment</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="role"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Role</FormLabel>
-                            <Select 
-                              onValueChange={field.onChange} 
-                              value={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select role" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="EMPLOYEE">Employee</SelectItem>
-                                <SelectItem value="HR">HR</SelectItem>
-                                <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                      {allowRoleEdit && (
+                        <FormField
+                          control={form.control}
+                          name="role"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Role</FormLabel>
+                              <Select 
+                                onValueChange={field.onChange} 
+                                value={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select role" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="EMPLOYEE">Employee</SelectItem>
+                                  <SelectItem value="HR">HR</SelectItem>
+                                  <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
 
                       <FormField
                         control={form.control}
@@ -1280,121 +1309,125 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, on
               </CardContent>
             </Card>
 
-            {/* Nominee Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Nominee Details</CardTitle>
-                <CardDescription>Person who will receive benefits in case of emergency</CardDescription>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="nomineeName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Nominee name" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            {allowPersonalEdit && (
+              <>
+                {/* Nominee Details */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Nominee Details</CardTitle>
+                    <CardDescription>Person who will receive benefits in case of emergency</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="nomineeName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nominee name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="nomineeRelationship"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Relationship</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. Father, Mother, Spouse, Child" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="nomineeRelationship"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Relationship</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g. Father, Mother, Spouse, Child" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="nomineePhone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone Number</FormLabel>
-                      <FormControl>
-                        <Input placeholder="+1234567890" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="nomineePhone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone Number</FormLabel>
+                          <FormControl>
+                            <Input placeholder="+1234567890" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="nomineeEmail"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email (Optional)</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder="nominee@example.com" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="nomineeEmail"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email (Optional)</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="nominee@example.com" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="nomineeNid"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>NID Number</FormLabel>
-                      <FormControl>
-                        <Input placeholder="National ID number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="nomineeNid"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>NID Number</FormLabel>
+                          <FormControl>
+                            <Input placeholder="National ID number" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="nomineeAddress"
-                  render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>Address</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Nominee's complete address" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
+                    <FormField
+                      control={form.control}
+                      name="nomineeAddress"
+                      render={({ field }) => (
+                        <FormItem className="md:col-span-2">
+                          <FormLabel>Address</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nominee's complete address" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
 
-            {/* Banking Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Banking Information</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <FormField
-                  control={form.control}
-                  name="bankAccountNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bank Account Number</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Account number" {...field} />
-                      </FormControl>
-                      <FormDescription>This information is kept confidential</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
+                {/* Banking Information */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Banking Information</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <FormField
+                      control={form.control}
+                      name="bankAccountNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Bank Account Number</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Account number" {...field} />
+                          </FormControl>
+                          <FormDescription>This information is kept confidential</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </TabsContent>
 
           {/* Leave & Allowance Management Tab */}

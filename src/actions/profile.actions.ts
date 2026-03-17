@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { createAdminNotification } from "./notification.actions";
+import { logManagerEmployeeEditAction } from "./manager-employee-edit.actions";
 
 async function logManagerProfileRequestAction(params: {
   actorId: string;
@@ -144,11 +145,10 @@ export async function getUserProfileById(userId: string) {
 
     const currentUserData = await prisma.user.findUnique({
       where: { clerkId },
-      select: { role: true },
+      select: { role: true, isManager: true },
     });
 
-    // Check if user is admin
-    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
+    if (!currentUserData || (!["SUPERADMIN", "HR"].includes(currentUserData.role) && !(currentUserData.role === "EMPLOYEE" && currentUserData.isManager))) {
       return { success: false, error: "Unauthorized access" };
     }
 
@@ -273,16 +273,37 @@ export async function updateUserProfileByAdmin(userId: string, data: ProfileData
 
     const currentUserData = await prisma.user.findUnique({
       where: { clerkId },
-      select: { role: true },
+      select: { id: true, role: true, isManager: true, firstName: true, lastName: true, email: true },
     });
 
-    // Check if user is admin
-    if (!currentUserData || !["SUPERADMIN", "HR"].includes(currentUserData.role)) {
+    if (!currentUserData || (!["SUPERADMIN", "HR"].includes(currentUserData.role) && !(currentUserData.role === "EMPLOYEE" && currentUserData.isManager))) {
       return { success: false, error: "Unauthorized access" };
     }
 
+    const employee = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+
+    if (!employee) {
+      return { success: false, error: "User not found" };
+    }
+
+    let updateData: ProfileData = { ...data };
+
+    if (currentUserData.role === "EMPLOYEE" && currentUserData.isManager) {
+      updateData = {
+        dateOfJoining: data.dateOfJoining,
+        attendanceId: data.attendanceId,
+        workingDaysInMonth: data.workingDaysInMonth,
+        loanPapersLink: data.loanPapersLink,
+        nomineesPapersLink: data.nomineesPapersLink,
+        emergencyContactLink: data.emergencyContactLink,
+        personalInfoLink: data.personalInfoLink,
+      };
+    }
+
     // Convert dates from strings if needed
-    const updateData = { ...data };
     if (updateData.dateOfBirth && typeof updateData.dateOfBirth === "string") {
       updateData.dateOfBirth = new Date(updateData.dateOfBirth);
     }
@@ -297,6 +318,22 @@ export async function updateUserProfileByAdmin(userId: string, data: ProfileData
       where: { id: userId },
       data: updateData,
     });
+
+    if (currentUserData.role === "EMPLOYEE" && currentUserData.isManager) {
+      const actorName = [currentUserData.firstName, currentUserData.lastName].filter(Boolean).join(" ") || currentUserData.email;
+      const employeeName = [employee.firstName, employee.lastName].filter(Boolean).join(" ") || employee.email;
+      const changedFields = Object.keys(updateData).join(", ");
+
+      await logManagerEmployeeEditAction({
+        actorId: currentUserData.id,
+        actorName,
+        action: "UPDATED",
+        area: "employee_employment",
+        employeeId: employee.id,
+        employeeName,
+        details: changedFields ? `fields=${changedFields}` : undefined,
+      });
+    }
 
     revalidatePath(`/admin/employees/${userId}`);
     revalidatePath("/admin/employees");

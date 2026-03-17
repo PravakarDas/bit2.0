@@ -6,6 +6,7 @@ import { LeaveApplicationStatus, Prisma } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
 import { logManagerOrganizationAction } from "./manager-organization.actions";
+import { logManagerEmployeeEditAction } from "./manager-employee-edit.actions";
 
 function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
     return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
@@ -217,11 +218,20 @@ export async function getUserLeaveEntitlements(userId: string, year: number = ne
 
 export async function assignLeaveToUser(userId: string, leaveTypeId: string, allocatedDays?: number) {
     try {
+        const actor = await getDbUser();
+        const isAuthorized = !!actor && (["SUPERADMIN", "HR"].includes(actor.role) || (actor.role === "EMPLOYEE" && actor.isManager));
+        if (!isAuthorized) {
+            return { success: false, error: "Unauthorized" };
+        }
+
         const currentYear = new Date().getFullYear();
-        const leaveType = await prisma.leaveType.findUnique({ where: { id: leaveTypeId } });
+        const [leaveType, employee] = await Promise.all([
+            prisma.leaveType.findUnique({ where: { id: leaveTypeId } }),
+            prisma.user.findUnique({ where: { id: userId }, select: { id: true, firstName: true, lastName: true, email: true } }),
+        ]);
         
-        if (!leaveType) {
-            return { success: false, error: "Leave type not found" };
+        if (!leaveType || !employee) {
+            return { success: false, error: "Leave type or employee not found" };
         }
         
         const daysToAllocate = allocatedDays || leaveType.allocatedDays;
@@ -243,8 +253,25 @@ export async function assignLeaveToUser(userId: string, leaveTypeId: string, all
                 where: { id: existing.id },
                 data: { allocatedDays: daysToAllocate }
             });
+
+            if (actor.role === "EMPLOYEE" && actor.isManager) {
+                const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+                const employeeName = [employee.firstName, employee.lastName].filter(Boolean).join(" ") || employee.email;
+
+                await logManagerEmployeeEditAction({
+                    actorId: actor.id,
+                    actorName,
+                    action: "UPDATED",
+                    area: "employee_leave",
+                    employeeId: employee.id,
+                    employeeName,
+                    details: `leaveType=${leaveType.name}, allocatedDays=${daysToAllocate}`,
+                });
+            }
             
             revalidatePath("/admin/employees");
+            revalidatePath(`/admin/employees/${userId}`);
+            revalidatePath(`/manager/employees/${userId}`);
             return { success: true, entitlement: updated };
         } else {
             // Create new entitlement
@@ -256,8 +283,25 @@ export async function assignLeaveToUser(userId: string, leaveTypeId: string, all
                     allocatedDays: daysToAllocate
                 }
             });
+
+            if (actor.role === "EMPLOYEE" && actor.isManager) {
+                const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+                const employeeName = [employee.firstName, employee.lastName].filter(Boolean).join(" ") || employee.email;
+
+                await logManagerEmployeeEditAction({
+                    actorId: actor.id,
+                    actorName,
+                    action: "ASSIGNED",
+                    area: "employee_leave",
+                    employeeId: employee.id,
+                    employeeName,
+                    details: `leaveType=${leaveType.name}, allocatedDays=${daysToAllocate}`,
+                });
+            }
             
             revalidatePath("/admin/employees");
+            revalidatePath(`/admin/employees/${userId}`);
+            revalidatePath(`/manager/employees/${userId}`);
             return { success: true, entitlement };
         }
     } catch (error) {
@@ -268,6 +312,21 @@ export async function assignLeaveToUser(userId: string, leaveTypeId: string, all
 
 export async function removeLeaveFromUser(userId: string, leaveTypeId: string, year: number = new Date().getFullYear()) {
     try {
+        const actor = await getDbUser();
+        const isAuthorized = !!actor && (["SUPERADMIN", "HR"].includes(actor.role) || (actor.role === "EMPLOYEE" && actor.isManager));
+        if (!isAuthorized) {
+            return { success: false, error: "Unauthorized" };
+        }
+
+        const [employee, leaveType] = await Promise.all([
+            prisma.user.findUnique({ where: { id: userId }, select: { id: true, firstName: true, lastName: true, email: true } }),
+            prisma.leaveType.findUnique({ where: { id: leaveTypeId }, select: { id: true, name: true } }),
+        ]);
+
+        if (!employee || !leaveType) {
+            return { success: false, error: "Leave type or employee not found" };
+        }
+
         await prisma.userLeaveEntitlement.delete({
             where: {
                 userId_leaveTypeId_year: {
@@ -277,8 +336,25 @@ export async function removeLeaveFromUser(userId: string, leaveTypeId: string, y
                 }
             }
         });
+
+        if (actor.role === "EMPLOYEE" && actor.isManager) {
+            const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+            const employeeName = [employee.firstName, employee.lastName].filter(Boolean).join(" ") || employee.email;
+
+            await logManagerEmployeeEditAction({
+                actorId: actor.id,
+                actorName,
+                action: "REMOVED",
+                area: "employee_leave",
+                employeeId: employee.id,
+                employeeName,
+                details: `leaveType=${leaveType.name}`,
+            });
+        }
         
         revalidatePath("/admin/employees");
+        revalidatePath(`/admin/employees/${userId}`);
+        revalidatePath(`/manager/employees/${userId}`);
         return { success: true };
     } catch (error) {
         console.error("Error removing leave from user:", error);
@@ -288,12 +364,47 @@ export async function removeLeaveFromUser(userId: string, leaveTypeId: string, y
 
 export async function adjustUserLeaveBalance(entitlementId: string, newAllocatedDays: number) {
     try {
+        const actor = await getDbUser();
+        const isAuthorized = !!actor && (["SUPERADMIN", "HR"].includes(actor.role) || (actor.role === "EMPLOYEE" && actor.isManager));
+        if (!isAuthorized) {
+            return { success: false, error: "Unauthorized" };
+        }
+
+        const existingEntitlement = await prisma.userLeaveEntitlement.findUnique({
+            where: { id: entitlementId },
+            include: {
+                user: { select: { id: true, firstName: true, lastName: true, email: true } },
+                leaveType: { select: { id: true, name: true } },
+            }
+        });
+
+        if (!existingEntitlement) {
+            return { success: false, error: "Entitlement not found" };
+        }
+
         const entitlement = await prisma.userLeaveEntitlement.update({
             where: { id: entitlementId },
             data: { allocatedDays: newAllocatedDays }
         });
+
+        if (actor.role === "EMPLOYEE" && actor.isManager) {
+            const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+            const employeeName = [existingEntitlement.user.firstName, existingEntitlement.user.lastName].filter(Boolean).join(" ") || existingEntitlement.user.email;
+
+            await logManagerEmployeeEditAction({
+                actorId: actor.id,
+                actorName,
+                action: "UPDATED",
+                area: "employee_leave",
+                employeeId: existingEntitlement.user.id,
+                employeeName,
+                details: `leaveType=${existingEntitlement.leaveType.name}, allocatedDays=${newAllocatedDays}`,
+            });
+        }
         
         revalidatePath("/admin/employees");
+        revalidatePath(`/admin/employees/${existingEntitlement.user.id}`);
+        revalidatePath(`/manager/employees/${existingEntitlement.user.id}`);
         revalidatePath("/leaves");
         return { success: true, entitlement };
     } catch (error) {
