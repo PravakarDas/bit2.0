@@ -6,6 +6,7 @@ import { UserStatus, EmployeeStatus, SalaryChangeReason } from "@prisma/client";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
+import { logManagerEmployeeEditAction } from "./manager-employee-edit.actions";
 
 async function logManagerEmployeeRejectionAction(params: {
     actorId: string;
@@ -318,11 +319,47 @@ export async function updateEmployeeProfile(userId: string, data: {
     designationId?: string | null;
 }) {
     try {
+        const actor = await getDbUser();
+        const isAuthorized = !!actor && (["SUPERADMIN", "HR"].includes(actor.role) || (actor.role === "EMPLOYEE" && actor.isManager));
+
+        if (!isAuthorized) {
+            return { success: false, error: "Unauthorized" };
+        }
+
+        const employee = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, firstName: true, lastName: true, email: true },
+        });
+
+        if (!employee) {
+            return { success: false, error: "Employee not found" };
+        }
+
         const user = await prisma.user.update({
             where: { id: userId },
             data,
         });
+
+        if (actor.role === "EMPLOYEE" && actor.isManager) {
+            const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
+            const employeeName = [employee.firstName, employee.lastName].filter(Boolean).join(" ") || employee.email;
+            const changeKeys = Object.keys(data).join(", ");
+
+            await logManagerEmployeeEditAction({
+                actorId: actor.id,
+                actorName,
+                action: "UPDATED",
+                area: "employee_employment",
+                employeeId: employee.id,
+                employeeName,
+                details: changeKeys ? `fields=${changeKeys}` : undefined,
+            });
+        }
+
         revalidatePath("/admin/employees");
+        revalidatePath(`/admin/employees/${userId}`);
+        revalidatePath("/manager/employees");
+        revalidatePath(`/manager/employees/${userId}`);
         return { success: true, user };
     } catch (error) {
         console.error("Error updating employee profile:", error);

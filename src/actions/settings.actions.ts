@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { ValueType, AllowanceScope } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 import { logManagerOrganizationAction } from "./manager-organization.actions";
+import { logManagerEmployeeEditAction } from "./manager-employee-edit.actions";
 
 function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
     return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
@@ -243,7 +244,7 @@ export async function deleteAllowanceType(id: string) {
 
 export async function getEmployeeAllowances(userId: string) {
     const user = await getDbUser();
-    if (!user || user.role !== "SUPERADMIN") {
+    if (!user || !(["SUPERADMIN", "HR"].includes(user.role) || (user.role === "EMPLOYEE" && user.isManager))) {
         throw new Error("Unauthorized");
     }
     
@@ -256,9 +257,18 @@ export async function getEmployeeAllowances(userId: string) {
 
 export async function assignEmployeeAllowance(userId: string, allowanceId: string) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
+    if (!user || !(["SUPERADMIN", "HR"].includes(user.role) || (user.role === "EMPLOYEE" && user.isManager))) throw new Error("Unauthorized");
 
     try {
+        const [employee, allowance] = await Promise.all([
+            prisma.user.findUnique({ where: { id: userId }, select: { id: true, firstName: true, lastName: true, email: true } }),
+            prisma.allowanceType.findUnique({ where: { id: allowanceId }, select: { id: true, name: true } }),
+        ]);
+
+        if (!employee || !allowance) {
+            return { success: false, error: "Employee or allowance not found" };
+        }
+
         const employeeAllowance = await prisma.employeeAllowance.upsert({
             where: {
                 userId_allowanceId: { userId, allowanceId }
@@ -270,8 +280,25 @@ export async function assignEmployeeAllowance(userId: string, allowanceId: strin
                 isActive: true,
             },
         });
+
+        if (user.role === "EMPLOYEE" && user.isManager) {
+            const actorName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email;
+            const employeeName = [employee.firstName, employee.lastName].filter(Boolean).join(" ") || employee.email;
+
+            await logManagerEmployeeEditAction({
+                actorId: user.id,
+                actorName,
+                action: "ASSIGNED",
+                area: "employee_allowance",
+                employeeId: employee.id,
+                employeeName,
+                details: `allowance=${allowance.name}`,
+            });
+        }
         
         revalidatePath(`/admin/employee/${userId}`);
+        revalidatePath(`/admin/employees/${userId}`);
+        revalidatePath(`/manager/employees/${userId}`);
         return { success: true, employeeAllowance };
     } catch (error) {
         console.error(error);
@@ -281,17 +308,43 @@ export async function assignEmployeeAllowance(userId: string, allowanceId: strin
 
 export async function removeEmployeeAllowance(userId: string, allowanceId: string) {
     const user = await getDbUser();
-    if (!user || user.role !== 'SUPERADMIN') throw new Error("Unauthorized");
+    if (!user || !(["SUPERADMIN", "HR"].includes(user.role) || (user.role === "EMPLOYEE" && user.isManager))) throw new Error("Unauthorized");
 
     try {
+        const [employee, allowance] = await Promise.all([
+            prisma.user.findUnique({ where: { id: userId }, select: { id: true, firstName: true, lastName: true, email: true } }),
+            prisma.allowanceType.findUnique({ where: { id: allowanceId }, select: { id: true, name: true } }),
+        ]);
+
+        if (!employee || !allowance) {
+            return { success: false, error: "Employee or allowance not found" };
+        }
+
         await prisma.employeeAllowance.update({
             where: {
                 userId_allowanceId: { userId, allowanceId }
             },
             data: { isActive: false },
         });
+
+        if (user.role === "EMPLOYEE" && user.isManager) {
+            const actorName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email;
+            const employeeName = [employee.firstName, employee.lastName].filter(Boolean).join(" ") || employee.email;
+
+            await logManagerEmployeeEditAction({
+                actorId: user.id,
+                actorName,
+                action: "REMOVED",
+                area: "employee_allowance",
+                employeeId: employee.id,
+                employeeName,
+                details: `allowance=${allowance.name}`,
+            });
+        }
         
         revalidatePath(`/admin/employee/${userId}`);
+        revalidatePath(`/admin/employees/${userId}`);
+        revalidatePath(`/manager/employees/${userId}`);
         return { success: true };
     } catch (error) {
         console.error(error);
