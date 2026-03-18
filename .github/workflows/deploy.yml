@@ -46,4 +46,4 @@ jobs:
       - name: Deploy
         run: |
           git remote add production ${{ secrets.REMOTE_SERVER_URL }}
-          git push production HEAD:main
+          git push -f production HEAD:main
