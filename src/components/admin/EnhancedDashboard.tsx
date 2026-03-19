@@ -358,7 +358,10 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
                                 <XAxis dataKey="month" stroke="#6b7280" />
                                 <YAxis stroke="#6b7280" />
                                 <Tooltip 
-                                    formatter={(value: number | undefined) => [`৳${(value || 0).toLocaleString()}`, 'Amount']}
+                                    formatter={(value: string | number | readonly (string | number)[] | undefined) => {
+                                        const numericValue = Array.isArray(value) ? Number(value[0] ?? 0) : Number(value ?? 0);
+                                        return [`৳${numericValue.toLocaleString()}`, 'Amount'];
+                                    }}
                                     labelStyle={{ color: '#1f2937' }}
                                 />
                                 <Line 
@@ -409,8 +412,8 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
                                     <XAxis dataKey="day" stroke="#6b7280" />
                                     <YAxis stroke="#6b7280" />
                                     <Tooltip 
-                                        formatter={(value: number | undefined, name: string | undefined) => [
-                                            `${value || 0} hours`,
+                                        formatter={(value: string | number | readonly (string | number)[] | undefined, name: string | number | undefined) => [
+                                            `${Array.isArray(value) ? Number(value[0] ?? 0) : Number(value ?? 0)} hours`,
                                             name === 'totalHours' ? 'Total Hours' : 
                                             name === 'overtimeHours' ? 'Overtime' : 'Undertime'
                                         ]}
@@ -429,9 +432,9 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
                                     <XAxis dataKey="week" stroke="#6b7280" />
                                     <YAxis stroke="#6b7280" domain={[0, 100]} />
                                     <Tooltip 
-                                        formatter={(value: number | undefined, name: string | undefined) => [
-                                            `${value || 0}%`,
-                                            name === 'attendanceRate' ? 'Attendance Rate' : name
+                                        formatter={(value: string | number | readonly (string | number)[] | undefined, name: string | number | undefined) => [
+                                            `${Array.isArray(value) ? Number(value[0] ?? 0) : Number(value ?? 0)}%`,
+                                            name === 'attendanceRate' ? 'Attendance Rate' : String(name ?? 'Value')
                                         ]}
                                         labelStyle={{ color: '#1f2937' }}
                                     />
@@ -542,7 +545,10 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
                                 />
                                 <YAxis stroke="#6b7280" />
                                 <Tooltip 
-                                    formatter={(value: number | undefined) => [`৳${value || 0}`, 'Penalty']}
+                                    formatter={(value: string | number | readonly (string | number)[] | undefined) => {
+                                        const numericValue = Array.isArray(value) ? Number(value[0] ?? 0) : Number(value ?? 0);
+                                        return [`৳${numericValue}`, 'Penalty'];
+                                    }}
                                 />
                                 <Bar dataKey="totalPenalty" fill="#dc2626" />
                             </BarChart>

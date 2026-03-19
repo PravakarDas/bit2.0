@@ -33,6 +33,12 @@ const currencyFormatter = new Intl.NumberFormat("en-BD", {
 
 const PAGE_SIZE = 20;
 
+type LateCheckinChartPoint = {
+  date: string;
+  lateMinutes: number;
+  lateCheckinCount: number;
+};
+
 export function EmployeeLateCheckinDetail({
   data,
   title,
@@ -57,11 +63,26 @@ export function EmployeeLateCheckinDetail({
       data.records
         .map((record) => ({
           date: record.workDate,
+          lateMinutes: 0,
           lateCheckinCount: 1,
         }))
         .reverse(),
     [data.records]
   );
+
+  const normalizedLateMinutesChartData = useMemo(
+    () =>
+      data.chartData.map((point) => ({
+        date: point.date,
+        lateMinutes: point.lateMinutes,
+        lateCheckinCount: 0,
+      })),
+    [data.chartData]
+  );
+
+  const chartData: LateCheckinChartPoint[] = hideTimeMetrics
+    ? occurrenceChartData
+    : normalizedLateMinutesChartData;
 
   const pagedRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -169,13 +190,13 @@ export function EmployeeLateCheckinDetail({
           </CardTitle>
         </CardHeader>
         <CardContent className="h-80">
-          {(hideTimeMetrics ? occurrenceChartData.length === 0 : data.chartData.length === 0) ? (
+          {chartData.length === 0 ? (
             <div className="flex h-full items-center justify-center text-muted-foreground">
               No late check-in records for selected date range.
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={hideTimeMetrics ? occurrenceChartData : data.chartData}>
+              <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
                 <YAxis />
