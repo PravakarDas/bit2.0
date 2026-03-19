@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowLeft, CalendarDays, Clock3, Wallet } from "lucide-react";
+import { ArrowLeft, CalendarDays, ListChecks, Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,7 @@ interface EmployeeLateCheckinDetailProps {
   description: string;
   basePath: string;
   backHref?: string;
+  hideTimeMetrics?: boolean;
   initialFilters: {
     fromDate: string;
     toDate: string;
@@ -38,6 +39,7 @@ export function EmployeeLateCheckinDetail({
   description,
   basePath,
   backHref,
+  hideTimeMetrics = false,
   initialFilters,
 }: EmployeeLateCheckinDetailProps) {
   const [fromDate, setFromDate] = useState(initialFilters.fromDate);
@@ -46,6 +48,20 @@ export function EmployeeLateCheckinDetail({
   const [page, setPage] = useState(1);
 
   const totalPages = Math.max(1, Math.ceil(data.records.length / PAGE_SIZE));
+  const averagePenaltyPerLateDay = data.summary.totalLateDays
+    ? data.summary.totalPenaltyAmount / data.summary.totalLateDays
+    : 0;
+
+  const occurrenceChartData = useMemo(
+    () =>
+      data.records
+        .map((record) => ({
+          date: record.workDate,
+          lateCheckinCount: 1,
+        }))
+        .reverse(),
+    [data.records]
+  );
 
   const pagedRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -114,10 +130,10 @@ export function EmployeeLateCheckinDetail({
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <Clock3 className="h-4 w-4" />
-              Total Late Minutes
+              <ListChecks className="h-4 w-4" />
+              {hideTimeMetrics ? "Total Late Check-Ins" : "Total Late Minutes"}
             </CardDescription>
-            <CardTitle>{data.summary.totalLateMinutes}</CardTitle>
+            <CardTitle>{hideTimeMetrics ? data.summary.totalLateDays : data.summary.totalLateMinutes}</CardTitle>
           </CardHeader>
         </Card>
 
@@ -135,30 +151,36 @@ export function EmployeeLateCheckinDetail({
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4" />
-              Total Late Days
+              {hideTimeMetrics ? "Average Penalty Per Check-In" : "Total Late Days"}
             </CardDescription>
-            <CardTitle>{data.summary.totalLateDays}</CardTitle>
+            <CardTitle>
+              {hideTimeMetrics
+                ? currencyFormatter.format(averagePenaltyPerLateDay)
+                : data.summary.totalLateDays}
+            </CardTitle>
           </CardHeader>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Late Minutes by Date</CardTitle>
+          <CardTitle className="text-base">
+            {hideTimeMetrics ? "Late Check-In Occurrences by Date" : "Late Minutes by Date"}
+          </CardTitle>
         </CardHeader>
         <CardContent className="h-80">
-          {data.chartData.length === 0 ? (
+          {(hideTimeMetrics ? occurrenceChartData.length === 0 : data.chartData.length === 0) ? (
             <div className="flex h-full items-center justify-center text-muted-foreground">
               No late check-in records for selected date range.
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.chartData}>
+              <BarChart data={hideTimeMetrics ? occurrenceChartData : data.chartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="lateMinutes" fill="var(--chart-1)" />
+                <Bar dataKey={hideTimeMetrics ? "lateCheckinCount" : "lateMinutes"} fill="var(--chart-1)" />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -175,9 +197,9 @@ export function EmployeeLateCheckinDetail({
             <TableHeader>
               <TableRow>
                 <TableHead>Work Date</TableHead>
-                <TableHead>Required Check-In</TableHead>
-                <TableHead>Actual Check-In</TableHead>
-                <TableHead className="text-right">Late Minutes</TableHead>
+                {!hideTimeMetrics ? <TableHead>Required Check-In</TableHead> : null}
+                {!hideTimeMetrics ? <TableHead>Actual Check-In</TableHead> : null}
+                {!hideTimeMetrics ? <TableHead className="text-right">Late Minutes</TableHead> : null}
                 <TableHead className="text-right">Penalty Deduction</TableHead>
               </TableRow>
             </TableHeader>
@@ -185,9 +207,9 @@ export function EmployeeLateCheckinDetail({
               {pagedRows.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell>{row.workDate}</TableCell>
-                  <TableCell>{row.requiredCheckInTime}</TableCell>
-                  <TableCell>{row.actualCheckInTime}</TableCell>
-                  <TableCell className="text-right">{row.lateMinutes}</TableCell>
+                  {!hideTimeMetrics ? <TableCell>{row.requiredCheckInTime}</TableCell> : null}
+                  {!hideTimeMetrics ? <TableCell>{row.actualCheckInTime}</TableCell> : null}
+                  {!hideTimeMetrics ? <TableCell className="text-right">{row.lateMinutes}</TableCell> : null}
                   <TableCell className="text-right">{currencyFormatter.format(row.penaltyAmount)}</TableCell>
                 </TableRow>
               ))}

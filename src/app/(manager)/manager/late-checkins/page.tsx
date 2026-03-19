@@ -26,11 +26,12 @@ export default async function ManagerLateCheckinPage({
   return (
     <LateCheckinDashboard
       title="Late Check-In Monitoring"
-      description="Track team late check-ins, total deductions, and branch trends."
+      description="Track team late check-in counts, affected employees, and branch-level trends."
       initialData={data}
       branches={branches}
       basePath="/manager/late-checkins"
       employeeDetailPath="/manager/late-checkins"
+      hideTimeMetrics
       initialFilters={{
         branchId,
         fromDate,
