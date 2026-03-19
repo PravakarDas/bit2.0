@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProfileView } from "@/components/employee/ProfileView";
 import { ProfileEditFormTabbed as ProfileEditForm } from "@/components/employee/ProfileEditFormTabbed";
@@ -13,6 +12,8 @@ import { User } from "@prisma/client";
 import { Loader2, Clock, CheckCircle, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+
+type ProfileUpdateRequest = NonNullable<Awaited<ReturnType<typeof getMyProfileUpdateRequests>>["data"]>[number];
 
 type UserWithBranch = User & {
   branch?: {
@@ -32,7 +33,7 @@ type UserWithBranch = User & {
 
 export default function ProfilePage() {
   const [user, setUser] = useState<UserWithBranch | null>(null);
-  const [updateRequests, setUpdateRequests] = useState<any[]>([]);
+  const [updateRequests, setUpdateRequests] = useState<ProfileUpdateRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("view");
 

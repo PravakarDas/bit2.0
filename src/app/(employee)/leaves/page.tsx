@@ -2,7 +2,6 @@ import { getUserLeaveEntitlements, getUserLeaveApplications } from "@/actions/le
 import { getDbUser } from "@/actions/user.actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ApplyLeaveDialog } from "@/components/employee/ApplyLeaveDialog";
 import {
     Table,
@@ -14,6 +13,8 @@ import {
 } from "@/components/ui/table";
 import { CalendarDays, Clock, CheckCircle, XCircle, Calendar } from "lucide-react";
 import { redirect } from "next/navigation";
+
+export const dynamic = "force-dynamic";
 
 export default async function EmployeeLeavePage() {
     const user = await getDbUser();
@@ -53,7 +54,7 @@ export default async function EmployeeLeavePage() {
                         </CardContent>
                     </Card>
                 ) : (
-                    entitlements.map((entitlement: any) => {
+                    entitlements.map((entitlement) => {
                         const remainingDays = entitlement.allocatedDays - entitlement.usedDays;
                         const usagePercentage = (entitlement.usedDays / entitlement.allocatedDays) * 100;
                         
@@ -133,7 +134,7 @@ export default async function EmployeeLeavePage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {applications.map((application: any) => (
+                                    {applications.map((application) => (
                                         <TableRow key={application.id}>
                                             <TableCell className="font-medium">
                                                 {application.leaveType.name}

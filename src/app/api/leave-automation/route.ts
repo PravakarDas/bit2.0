@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { processAllUnprocessedDates, processDailyLeaveAutomation, processBackfillLeaveAutomation } from '@/actions/leave-automation.actions';
+import { processAllUnprocessedDates, processBackfillLeaveAutomation } from '@/actions/leave-automation.actions';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request) {

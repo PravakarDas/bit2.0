@@ -3,8 +3,6 @@
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -24,8 +22,8 @@ interface ProfileUpdateRequestWithUser {
   id: string;
   userId: string;
   status: string;
-  requestedChanges: any;
-  previousValues: any;
+  requestedChanges: unknown;
+  previousValues: unknown;
   createdAt: Date;
   updatedAt: Date;
   user: {
@@ -169,9 +167,11 @@ export function ProfileUpdateRequestsList({ requests, onUpdate }: ProfileUpdateR
                 <div>
                   <h4 className="font-semibold mb-2 text-sm">Requested Changes:</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    {Object.entries(request.requestedChanges as Record<string, any>).map(([key, value]) => {
+                    {Object.entries((request.requestedChanges && typeof request.requestedChanges === "object" ? request.requestedChanges : {}) as Record<string, unknown>).map(([key, value]) => {
                       if (!value) return null;
-                      const previousValue = request.previousValues?.[key];
+                      const previousValue = request.previousValues && typeof request.previousValues === "object"
+                        ? (request.previousValues as Record<string, unknown>)[key]
+                        : undefined;
                       
                       return (
                         <div key={key} className="border rounded-lg p-3">
@@ -179,7 +179,7 @@ export function ProfileUpdateRequestsList({ requests, onUpdate }: ProfileUpdateR
                             {key.replace(/([A-Z])/g, " $1").trim()}
                           </p>
                           <div className="space-y-1">
-                            {previousValue && (
+                            {previousValue !== null && previousValue !== undefined && (
                               <p className="text-xs text-muted-foreground line-through">
                                 {formatValue(previousValue)}
                               </p>
@@ -285,7 +285,7 @@ export function ProfileUpdateRequestsList({ requests, onUpdate }: ProfileUpdateR
   );
 }
 
-function formatValue(value: any): string {
+function formatValue(value: unknown): string {
   if (value === null || value === undefined) return "Not provided";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (value instanceof Date || (typeof value === "string" && !isNaN(Date.parse(value)))) {

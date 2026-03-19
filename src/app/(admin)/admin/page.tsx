@@ -20,7 +20,7 @@ export default async function AdminDashboard({
     return (
         <div className="container mx-auto space-y-6 p-6">
             <EnhancedDashboard 
-                initialData={data as any} 
+                initialData={data as unknown as Parameters<typeof EnhancedDashboard>[0]["initialData"]} 
                 branches={branches} 
             />
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
     getEmployeeAllowances, 
     getCustomAllowancesForEmployee, 
@@ -10,7 +10,6 @@ import {
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Plus, X, DollarSign } from "lucide-react";
 import {
     Select,
@@ -51,7 +50,7 @@ export function EmployeeAllowanceManager({ userId, userName }: EmployeeAllowance
     const [loading, setLoading] = useState(false);
     const [adding, setAdding] = useState(false);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
             const [employeeAlloData, customAlloData] = await Promise.all([
@@ -61,16 +60,16 @@ export function EmployeeAllowanceManager({ userId, userName }: EmployeeAllowance
             
             setEmployeeAllowances(employeeAlloData);
             setAvailableAllowances(customAlloData);
-        } catch (error) {
+        } catch {
             toast.error("Failed to load allowance data");
         } finally {
             setLoading(false);
         }
-    };
+    }, [userId]);
 
     useEffect(() => {
-        loadData();
-    }, [userId]);
+        void loadData();
+    }, [loadData]);
 
     const handleAssignAllowance = async () => {
         if (!selectedAllowanceId) {
@@ -88,7 +87,7 @@ export function EmployeeAllowanceManager({ userId, userName }: EmployeeAllowance
             } else {
                 toast.error(res.error || "Failed to assign allowance");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred");
         } finally {
             setAdding(false);
@@ -106,7 +105,7 @@ export function EmployeeAllowanceManager({ userId, userName }: EmployeeAllowance
             } else {
                 toast.error(res.error || "Failed to remove allowance");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred");
         }
     };

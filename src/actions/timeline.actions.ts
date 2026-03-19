@@ -467,7 +467,7 @@ export async function checkAndGenerateToday(): Promise<TimelineGenerationResult>
  */
 export async function getTimelineRecords(userId?: string, startDate?: Date, endDate?: Date) {
   try {
-    const where: any = {};
+    const where: Prisma.DailyTimeRecordWhereInput = {};
     
     if (userId) {
       where.userId = userId;
@@ -538,7 +538,7 @@ export async function updateTimelineRecord(
       return { success: false, error: 'Timeline record not found' };
     }
 
-    const updateData: any = {
+    const updateData: Prisma.DailyTimeRecordUpdateInput = {
       updatedAt: new Date()
     };
 
@@ -577,9 +577,10 @@ export async function updateTimelineRecord(
 
       // Calculate official overtime/undertime (auto-calculated) if we have both required and actual active times
       const requiredActiveTime = updateData.requiredActiveTime || currentRecord.requiredActiveTime;
-      if (requiredActiveTime && updateData.actualActiveTime) {
+      const actualActiveTime = updateData.actualActiveTime;
+      if (typeof requiredActiveTime === 'string' && typeof actualActiveTime === 'string') {
         updateData.officialOvertimeundertime = calculateOvertimeUndertime(
-          updateData.actualActiveTime,
+          actualActiveTime,
           requiredActiveTime
         );
         
@@ -667,7 +668,7 @@ export async function backfillTimelineCalculations() {
     let updatedCount = 0;
     
     for (const record of records) {
-      const updateData: any = {};
+      const updateData: Prisma.DailyTimeRecordUpdateInput = {};
       
       // Calculate required active time if we have required check-in and check-out
       if (record.requiredCheckIn && record.requiredCheckOut && !record.requiredActiveTime) {
@@ -691,7 +692,7 @@ export async function backfillTimelineCalculations() {
       const finalRequiredActiveTime = updateData.requiredActiveTime || record.requiredActiveTime;
       const finalActualActiveTime = updateData.actualActiveTime || record.actualActiveTime;
       
-      if (finalRequiredActiveTime && finalActualActiveTime && !record.officialOvertimeundertime) {
+      if (typeof finalRequiredActiveTime === 'string' && typeof finalActualActiveTime === 'string' && !record.officialOvertimeundertime) {
         updateData.officialOvertimeundertime = calculateOvertimeUndertime(
           finalActualActiveTime,
           finalRequiredActiveTime

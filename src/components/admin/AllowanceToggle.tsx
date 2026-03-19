@@ -23,7 +23,7 @@ export function AllowanceToggle({
                 setIsActive(checked);
                 toast.success(`Allowance ${checked ? "activated" : "deactivated"} successfully`);
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to update status");
         } finally {
             setLoading(false);

@@ -3,6 +3,8 @@ import { getMyWalletRequests, getMyWalletTransactions } from "@/actions/wallet.a
 import { getDbUser } from "@/actions/user.actions";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 export default async function WalletPage() {
     const user = await getDbUser();
     if (!user) {

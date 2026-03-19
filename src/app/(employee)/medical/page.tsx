@@ -24,9 +24,12 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { History } from "lucide-react";
 
+type MedicalEntitlement = Awaited<ReturnType<typeof getMedicalEntitlement>>;
+type MedicalClaim = Awaited<ReturnType<typeof getMyMedicalClaims>>[number];
+
 export default function EmployeeMedicalPage() {
-    const [entitlement, setEntitlement] = useState<any>(null);
-    const [claims, setClaims] = useState<any[]>([]);
+    const [entitlement, setEntitlement] = useState<MedicalEntitlement | null>(null);
+    const [claims, setClaims] = useState<MedicalClaim[]>([]);
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         amount: "",
@@ -48,7 +51,9 @@ export default function EmployeeMedicalPage() {
     };
 
     useEffect(() => {
-        loadData();
+        void (async () => {
+            await loadData();
+        })();
     }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -59,6 +64,10 @@ export default function EmployeeMedicalPage() {
         }
 
         const amount = Number(formData.amount);
+        if (!entitlement) {
+            toast.error("Unable to load medical entitlement");
+            return;
+        }
         if (amount > entitlement.remainingBalance) {
             toast.error(`Amount exceeds remaining balance of ৳${entitlement.remainingBalance}`);
             return;

@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { checkAndGenerateToday } from '@/actions/timeline.actions';
 
 // Manual trigger endpoint for testing timeline generation
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     console.log('Manual timeline generation triggered for today:', new Date().toISOString());
 
@@ -41,6 +41,6 @@ export async function POST(request: NextRequest) {
 }
 
 // GET method for easy browser testing
-export async function GET(request: NextRequest) {
-  return POST(request);
+export async function GET() {
+  return POST();
 }

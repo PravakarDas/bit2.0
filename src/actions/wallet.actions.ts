@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { WalletRequestStatus, TransactionType, Role } from "@prisma/client";
+import { WalletRequestStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
 

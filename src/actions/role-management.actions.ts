@@ -70,7 +70,8 @@ export async function getAllUsersWithDetails() {
 /**
  * Update user role with validation and logging
  */
-export async function updateUserRole(userId: string, newRole: Role, reason?: string) {
+export async function updateUserRole(userId: string, newRole: Role, _reason?: string) {
+    void _reason;
     const admin = await getDbUser();
     if (!admin || admin.role !== "SUPERADMIN") {
         throw new Error("Unauthorized");

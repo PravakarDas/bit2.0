@@ -13,8 +13,8 @@ import {
     TableRow 
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Check, X, Clock, User, Calendar, FileText } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { Check, X, User, Calendar, FileText } from "lucide-react";
+import { format } from "date-fns";
 import { toast } from "sonner";
 
 interface User {
@@ -87,7 +87,7 @@ export function ManagerLeaveRequestsList({
                         : req
                 )
             );
-        } catch (error) {
+        } catch {
             toast.error("Failed to approve leave request");
         } finally {
             setIsLoading(false);
@@ -107,7 +107,7 @@ export function ManagerLeaveRequestsList({
                         : req
                 )
             );
-        } catch (error) {
+        } catch {
             toast.error("Failed to reject leave request");
         } finally {
             setIsLoading(false);

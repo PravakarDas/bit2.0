@@ -40,7 +40,7 @@ export function AdminWalletDashboard({ pendingRequests, users }: AdminWalletDash
                     <Card>
                         <CardHeader>
                             <CardTitle>Manual Wallet Adjustment</CardTitle>
-                            <CardDescription>Add or remove funds from an employee's wallet.</CardDescription>
+                            <CardDescription>Add or remove funds from an employee&#39;s wallet.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <ManualAdjustmentForm users={users} />

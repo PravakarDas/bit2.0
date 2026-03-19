@@ -19,7 +19,7 @@ export default async function ManagerDashboardPage({
 
     return (
         <ManagerDashboard 
-            initialData={data as any} 
+            initialData={data} 
             branches={branches} 
         />
     );

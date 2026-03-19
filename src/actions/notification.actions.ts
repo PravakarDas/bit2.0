@@ -2,16 +2,26 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { EmployeeStatus } from "@prisma/client";
+import { EmployeeStatus, Prisma } from "@prisma/client";
 import type { AdminNotification } from "@prisma/client";
 import { getDbUser } from "./user.actions";
+
+type NotificationMetadata = {
+  requestId?: string;
+  applicationId?: string;
+  processed?: boolean;
+  status?: string;
+  action?: "approve" | "decline";
+  adminNote?: string | null;
+  processedAt?: string;
+};
 
 // Create admin notification
 export async function createAdminNotification(data: {
   type: 'TIMELINE_GENERATION_FAILED' | 'TIMELINE_BACKFILL_COMPLETED' | 'PROFILE_UPDATE_REQUEST' | 'LEAVE_APPLICATION_PENDING' | 'INCREMENT_REMINDER' | 'WALLET_REQUEST_PENDING' | 'LOAN_APPLICATION_PENDING' | 'EMPLOYEE_REGISTRATION_PENDING' | 'PAYROLL_NOTIFICATION' | 'SYSTEM_ALERT' | 'DEADLINE_REMINDER';
   title: string;
   message: string;
-  metadata?: any;
+  metadata?: NotificationMetadata | Record<string, unknown>;
 }) {
   try {
     const notification = await prisma.adminNotification.create({
@@ -19,7 +29,7 @@ export async function createAdminNotification(data: {
         type: data.type,
         title: data.title,
         message: data.message,
-        metadata: data.metadata || null
+        metadata: (data.metadata ?? Prisma.JsonNull) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput
       }
     });
     
@@ -181,16 +191,18 @@ export async function handleNotificationAction(notificationId: string, action: '
     }
 
     let result;
-    const metadata = notification.metadata as any;
+    const metadata = (notification.metadata ?? {}) as NotificationMetadata;
 
     switch (notification.type) {
       case 'PROFILE_UPDATE_REQUEST':
         if (action === 'approve') {
           // Import and use profile actions
           const { approveProfileUpdateRequest } = await import('./profile.actions');
+          if (!metadata.requestId) return { success: false, error: 'Missing profile request ID' };
           result = await approveProfileUpdateRequest(metadata.requestId);
         } else {
           const { rejectProfileUpdateRequest } = await import('./profile.actions');
+          if (!metadata.requestId) return { success: false, error: 'Missing profile request ID' };
           result = await rejectProfileUpdateRequest(metadata.requestId, adminNote ?? '');
         }
         break;
@@ -198,9 +210,11 @@ export async function handleNotificationAction(notificationId: string, action: '
       case 'LEAVE_APPLICATION_PENDING':
         if (action === 'approve') {
           const { approveLeaveApplication } = await import('./leave.actions');
+          if (!metadata.applicationId) return { success: false, error: 'Missing leave application ID' };
           result = await approveLeaveApplication(metadata.applicationId, adminNote);
         } else {
           const { rejectLeaveApplication } = await import('./leave.actions');
+          if (!metadata.applicationId) return { success: false, error: 'Missing leave application ID' };
           result = await rejectLeaveApplication(metadata.applicationId, adminNote);
         }
         break;

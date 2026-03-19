@@ -1,15 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Clock, Users, Filter, Download, RefreshCw, RotateCcw } from "lucide-react";
-import { format } from "date-fns";
+import { CalendarDays, Clock, Users, Download, RefreshCw, RotateCcw } from "lucide-react";
 import TimelineTableView from "@/components/admin/TimelineTableView";
 import TimelineCalendarView from "@/components/admin/TimelineCalendarView";
 import TimelineFilters from "@/components/admin/TimelineFilters";
@@ -53,11 +49,24 @@ interface FilterOptions {
   endDate: string;
 }
 
+interface BranchOption {
+  id: string;
+  name: string;
+}
+
+interface UserOption {
+  id: string;
+  branchId: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+}
+
 export default function TimelineClient() {
   const [activeView, setActiveView] = useState<"table" | "calendar">("table");
   const [timeRecords, setTimeRecords] = useState<TimeRecord[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [leaveBackfillRunning, setLeaveBackfillRunning] = useState(false);
@@ -75,33 +84,7 @@ export default function TimelineClient() {
     endDate: ""
   });
 
-  // Load initial data
-  useEffect(() => {
-    loadInitialData();
-  }, []);
-
-  // Load time records when filters change
-  useEffect(() => {
-    loadTimeRecords();
-  }, [filters, pagination.page]);
-
-  const loadInitialData = async () => {
-    try {
-      const [branchesResult, usersResult] = await Promise.all([
-        getBranches(),
-        getUsers()
-      ]);
-      
-      setBranches(branchesResult || []);
-      setUsers(usersResult || []);
-      
-      loadTimeRecords();
-    } catch (error) {
-      console.error('Error loading initial data:', error);
-    }
-  };
-
-  const loadTimeRecords = async () => {
+  const loadTimeRecords = useCallback(async () => {
     setLoading(true);
     try {
       const result = await getTimelineRecords(
@@ -123,7 +106,33 @@ export default function TimelineClient() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.endDate, filters.startDate, filters.userId]);
+
+  const loadInitialData = useCallback(async () => {
+    try {
+      const [branchesResult, usersResult] = await Promise.all([
+        getBranches(),
+        getUsers()
+      ]);
+      
+      setBranches(branchesResult || []);
+      setUsers(usersResult || []);
+      
+      await loadTimeRecords();
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+    }
+  }, [loadTimeRecords]);
+
+  // Load initial data
+  useEffect(() => {
+    void loadInitialData();
+  }, [loadInitialData]);
+
+  // Load time records when filters change
+  useEffect(() => {
+    void loadTimeRecords();
+  }, [loadTimeRecords, pagination.page]);
 
   const clearFilters = () => {
     setFilters({

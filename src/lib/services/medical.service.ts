@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { ClaimStatus } from "@prisma/client";
 
 export async function checkAndCreateEntitlement(userId: string, year: number) {
     const entitlement = await prisma.medicalEntitlement.findUnique({

@@ -3,11 +3,12 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoanList } from "./LoanList";
+import type { Loan } from "./LoanList";
 import { LoanApplicationForm } from "./LoanApplicationForm";
 import { CreditCard, Landmark, CalendarClock } from "lucide-react";
 
 interface LoanDashboardProps {
-    loans: any[];
+    loans: Loan[];
     maxEligibleAmount: number;
 }
 

@@ -17,6 +17,23 @@ interface Branch {
     name: string;
 }
 
+interface WeeklyAttendanceRecord {
+    date: Date | string;
+    status: string;
+    actualActiveTime?: string | null;
+    overtimeUndertime?: string | null;
+}
+
+interface LoanRepaymentItem {
+    id: string;
+    employee: string;
+    totalAmount: number;
+    remaining: number;
+    progressPercent: number;
+    monthsPassed: number;
+    totalMonths: number;
+}
+
 interface DashboardData {
     totalEmployees: number;
     pendingEmployees: number;
@@ -30,12 +47,12 @@ interface DashboardData {
     totalMedicalClaimsCount: number;
     departmentDistribution: { department: string; count: number }[];
     monthlyPayrollTrends: { month: string; amount: number; count: number }[];
-    medicalClaimsVsEntitlements: any;
-    loanRepaymentData: any[];
-    leaveUtilization: any[];
-    weeklyAttendanceData: any[];
-    lateCheckInPenalties: any[];
-    branchComparison: any[];
+    medicalClaimsVsEntitlements: unknown;
+    loanRepaymentData: LoanRepaymentItem[];
+    leaveUtilization: Array<Record<string, unknown>>;
+    weeklyAttendanceData: WeeklyAttendanceRecord[];
+    lateCheckInPenalties: Array<Record<string, unknown>>;
+    branchComparison: Array<Record<string, unknown>>;
 }
 
 interface EnhancedDashboardProps {
@@ -174,7 +191,7 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
         }
 
         // Group by week
-        const weeklyGroups: Record<string, any[]> = {};
+        const weeklyGroups: Record<string, WeeklyAttendanceRecord[]> = {};
         data.weeklyAttendanceData.forEach(record => {
             const date = new Date(record.date);
             const weekStart = new Date(date);

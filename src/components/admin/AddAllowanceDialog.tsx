@@ -22,7 +22,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Edit2, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { ValueType, AllowanceScope } from "@prisma/client";
 
 interface Branch {
@@ -99,9 +99,9 @@ export function AllowanceDialog({ branches, initialData, trigger }: AllowanceDia
                     targetBranchIds: [] 
                 });
             } else {
-                toast.error((res as any).error || "Failed to save allowance");
+                toast.error(("error" in res && typeof res.error === "string" ? res.error : undefined) || "Failed to save allowance");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred");
         } finally {
             setLoading(false);
@@ -119,7 +119,7 @@ export function AllowanceDialog({ branches, initialData, trigger }: AllowanceDia
                 toast.success("Allowance deleted successfully");
                 setIsOpen(false);
             }
-        } catch (error) {
+        } catch {
             toast.error("Delete failed");
         } finally {
             setLoading(false);

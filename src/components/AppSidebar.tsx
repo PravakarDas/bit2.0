@@ -53,7 +53,6 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import logo from "@/assets/logo.gif";
 import { NotificationWithBadge } from "@/components/NotificationWithBadge";
-import { Button } from "@/components/ui/button";
 
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
@@ -349,13 +348,20 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
             </SidebarContent>
             {/* Manager Switch Button */}
             {role === "EMPLOYEE" && isManager && (
-                <SidebarFooter className="p-4">
-                    <Button asChild variant="outline" size="sm" className="w-full">
-                        <Link href="/manager">
-                            <Crown className="h-4 w-4 mr-2" />
-                            Switch to Manager View
-                        </Link>
-                    </Button>
+                <SidebarFooter className="p-2">
+                    <SidebarMenu>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton 
+                                asChild 
+                                tooltip="Switch to Manager View"
+                            >
+                                <Link href="/manager">
+                                    <Crown className="h-4 w-4" />
+                                    <span>Switch to Manager View</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    </SidebarMenu>
                 </SidebarFooter>
             )}
         </Sidebar>

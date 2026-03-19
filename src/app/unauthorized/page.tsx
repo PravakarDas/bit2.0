@@ -3,6 +3,8 @@ import { getDbUser } from "@/actions/user.actions";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 export default async function UnauthorizedPage() {
     const user = await getDbUser();
     

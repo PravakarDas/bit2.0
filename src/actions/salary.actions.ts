@@ -1,7 +1,6 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
 import { SalaryChangeReason } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 

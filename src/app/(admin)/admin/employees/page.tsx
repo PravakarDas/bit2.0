@@ -1,20 +1,9 @@
 import { getActiveEmployees, getPendingEmployees } from "@/actions/employee.actions";
 import { getActiveBranches } from "@/actions/branch.actions";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { EmployeeActionButtons } from "@/components/admin/EmployeeActionButtons";
-import { AssignBranchSelect } from "@/components/admin/AssignBranchSelect";
 import { EditEmployeeDialog } from "@/components/admin/EditEmployeeDialog";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Users } from "lucide-react";
 import { ApprovalButtons } from "@/components/admin/ApprovalButtons";
 import { EmployeeStatusSelect } from "@/components/admin/EmployeeStatusSelect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProfileUpdateRequestsList } from "@/components/admin/ProfileUpdateRequestsList";
 import { getPendingProfileUpdateRequests } from "@/actions/profile.actions";
 import { Loader2, Bell } from "lucide-react";
 import { toast } from "sonner";
 
+type PendingProfileRequest = NonNullable<
+  Awaited<ReturnType<typeof getPendingProfileUpdateRequests>>["data"]
+>[number];
+
 export default function ProfileRequestsPage() {
-  const [requests, setRequests] = useState<any[]>([]);
+  const [requests, setRequests] = useState<PendingProfileRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchRequests = async () => {

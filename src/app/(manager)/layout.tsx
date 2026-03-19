@@ -4,6 +4,8 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ManagerSidebar } from "@/components/ManagerSidebar";
 import { ManagerHeader } from "@/components/ManagerHeader";
 
+export const dynamic = "force-dynamic";
+
 export default async function ManagerLayout({
     children,
 }: {

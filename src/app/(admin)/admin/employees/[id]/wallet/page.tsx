@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
+import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,9 +24,6 @@ import {
   TrendingDown, 
   Clock, 
   DollarSign,
-  Plus,
-  Minus,
-  CreditCard,
   AlertCircle,
   Loader2
 } from "lucide-react";
@@ -52,7 +49,6 @@ type UserWithWallet = User & {
 
 export default function EmployeeWalletPage() {
   const params = useParams();
-  const router = useRouter();
   const userId = params.id as string;
   
   const [user, setUser] = useState<UserWithWallet | null>(null);
@@ -62,7 +58,7 @@ export default function EmployeeWalletPage() {
   const [isApproving, setIsApproving] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [userResult, transactionsResult, requestsResult] = await Promise.all([
@@ -85,11 +81,11 @@ export default function EmployeeWalletPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
-    fetchData();
-  }, [userId]);
+    void fetchData();
+  }, [fetchData]);
 
   // Calculate monthly totals
   const thisMonthTransactions = transactions.filter(t => {

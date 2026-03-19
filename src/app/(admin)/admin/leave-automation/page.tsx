@@ -87,7 +87,7 @@ export default function LeaveAutomationAdmin() {
                         <div className="flex items-center justify-between p-4 border rounded-lg">
                             <div>
                                 <p className="font-medium">Auto Leave Deduction</p>
-                                <p className="text-sm text-muted-foreground">For "Roster Every Year" leave types only</p>
+                                <p className="text-sm text-muted-foreground">For &quot;Roster Every Year&quot; leave types only</p>
                             </div>
                             <Badge variant="default">Enabled</Badge>
                         </div>
@@ -106,7 +106,7 @@ export default function LeaveAutomationAdmin() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <p className="text-sm text-muted-foreground">
-                            Manually trigger the daily leave automation process for yesterday's records.
+                            Manually trigger the daily leave automation process for yesterday&#39;s records.
                         </p>
                         <Button 
                             onClick={handleDailyProcess}
@@ -127,7 +127,7 @@ export default function LeaveAutomationAdmin() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <p className="text-sm text-muted-foreground">
-                            Process past dates that haven't been processed yet.
+                            Process past dates that haven&#39;t been processed yet.
                         </p>
                         <div className="grid gap-2">
                             <Label htmlFor="backfillDays">Number of days to backfill</Label>
@@ -178,7 +178,7 @@ export default function LeaveAutomationAdmin() {
                     </CardHeader>
                     <CardContent>
                         <p className="text-sm text-muted-foreground">
-                            Automatically deducts from "Roster Every Year" leave types when employee is absent and has available balance.
+                            Automatically deducts from &quot;Roster Every Year&quot; leave types when employee is absent and has available balance.
                         </p>
                     </CardContent>
                 </Card>

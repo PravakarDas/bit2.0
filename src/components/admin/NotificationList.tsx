@@ -10,7 +10,6 @@ import {
     CheckCircle, 
     AlertTriangle, 
     Info, 
-    X,
     Clock,
     User,
     FileText
@@ -23,13 +22,13 @@ interface Notification {
     message: string;
     status: "READ" | "UNREAD";
     createdAt: Date | string;
-    metadata?: any;
+    metadata?: Record<string, unknown> | null;
 }
 
 interface NotificationListProps {
     notifications: Notification[];
-    markAsReadAction: (notificationId: string) => Promise<any>;
-    markAllAsReadAction: () => Promise<any>;
+    markAsReadAction: (notificationId: string) => Promise<unknown>;
+    markAllAsReadAction: () => Promise<unknown>;
 }
 
 export function NotificationList({ 
@@ -167,7 +166,7 @@ export function NotificationList({
                             </div>
                         ) : (
                             <div className="divide-y">
-                                {notifications.map((notification, index) => (
+                                {notifications.map((notification) => (
                                     <div
                                         key={notification.id}
                                         className={`p-4 transition-colors hover:bg-muted/50 ${

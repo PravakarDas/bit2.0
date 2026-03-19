@@ -33,7 +33,7 @@ export function SalaryChart({ data }: { data: { name: string; amount: number }[]
                     <Tooltip
                         cursor={{ fill: '#f1f5f9' }}
                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        formatter={(value: any) => [`৳${(value as number).toLocaleString("en-BD")}`, "Net Pay"]}
+                        formatter={(value) => [`৳${Number(value ?? 0).toLocaleString("en-BD")}`, "Net Pay"]}
                     />
                     <Bar
                         dataKey="amount"

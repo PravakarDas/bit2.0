@@ -125,10 +125,6 @@ export async function getPayrollAggregation(month: number, year: number) {
         },
     });
 
-    const settings = await prisma.systemSettings.findUnique({
-        where: { id: "global" },
-    });
-
     return users.map((user) => {
         // Fetch ALL Approved but Unpaid Claims for this user
         const approvedClaims = user.medicalClaims; // Already filtered by status: "APPROVED" in include
@@ -505,19 +501,20 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
         revalidatePath("/admin/payroll");
         revalidatePath("/profile");
         return result;
-    } catch (error: any) {
+    } catch (error) {
         console.error("Payroll processing failed:", error);
+        const errorMessage = error instanceof Error ? error.message : "Unknown error during payroll execution";
 
         // Log failure in Audit Log if possible (outside transaction or separate)
         await prisma.systemAudit.create({
             data: {
                 action: "PAYROLL_EXECUTION",
                 status: "FAILED",
-                details: error.message || "Unknown error during payroll execution",
+                details: errorMessage,
             }
         });
 
-        throw new Error(error.message || "Payroll processing failed");
+        throw new Error(errorMessage || "Payroll processing failed");
     }
 }
 
@@ -530,7 +527,6 @@ export async function generatePayrollCSVData(data: PayrollAggregation[], selecte
         
         // Check if EMI is disabled for this user
         const emiDisabled = emiDisabledUsers.includes(emp.userId);
-        const adjustedLoanDeduction = emiDisabled ? 0 : emp.totalLoanDeduction;
         const finalNetPay = emp.netPay + totalBonuses + emp.walletBalance + (emiDisabled ? emp.totalLoanDeduction : 0);
         
         const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.email;

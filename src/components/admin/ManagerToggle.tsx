@@ -11,10 +11,10 @@ interface ManagerToggleProps {
     userId: string;
     isManager: boolean;
     userRole: string;
-    userName: string;
+    userName?: string;
 }
 
-export function ManagerToggle({ userId, isManager, userRole, userName }: ManagerToggleProps) {
+export function ManagerToggle({ userId, isManager, userRole }: ManagerToggleProps) {
     const [currentManagerStatus, setCurrentManagerStatus] = useState(isManager);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -33,7 +33,7 @@ export function ManagerToggle({ userId, isManager, userRole, userName }: Manager
             } else {
                 toast.error(result.error || "Failed to update manager status");
             }
-        } catch (error) {
+        } catch {
             toast.error("An unexpected error occurred");
         } finally {
             setIsLoading(false);

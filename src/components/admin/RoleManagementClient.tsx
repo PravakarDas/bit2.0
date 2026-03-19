@@ -128,7 +128,7 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
                 } else {
                     toast.error(result.error || "Failed to change role");
                 }
-            } catch (error) {
+            } catch {
                 toast.error("An unexpected error occurred");
             }
         });
@@ -148,7 +148,7 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
                 toast.success(`${selectedUsers.length} users updated successfully`);
                 setSelectedUsers([]);
                 setBulkRole("");
-            } catch (error) {
+            } catch {
                 toast.error("Failed to update users");
             }
         });
@@ -164,7 +164,7 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
                 } else {
                     toast.error(result.error || "Failed to update user");
                 }
-            } catch (error) {
+            } catch {
                 toast.error("An unexpected error occurred");
             }
         });
@@ -180,7 +180,7 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
                 } else {
                     toast.error(result.error || "Failed to update manager status");
                 }
-            } catch (error) {
+            } catch {
                 toast.error("An unexpected error occurred");
             }
         });
@@ -422,7 +422,7 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
                                             </td>
                                             <td className="p-2">
                                                 <div className="flex items-center space-x-2">
-                                                    <Badge variant={roleDisplay.color as any} className="gap-1">
+                                                    <Badge variant={roleDisplay.color} className="gap-1">
                                                         <RoleIcon className="h-3 w-3" />
                                                         {roleDisplay.label}
                                                     </Badge>

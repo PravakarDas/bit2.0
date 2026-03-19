@@ -1,7 +1,27 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { startOfDay, endOfDay, format, subDays } from "date-fns";
+import { startOfDay, format, subDays } from "date-fns";
+import type { DailyTimeRecord, Prisma } from "@prisma/client";
+
+type ActiveEmployee = Prisma.UserGetPayload<{
+    include: {
+        branch: true;
+        leaveEntitlements: {
+            include: {
+                leaveType: true;
+            };
+        };
+    };
+}>;
+
+type EmployeeLeaveEntitlement = ActiveEmployee["leaveEntitlements"][number];
+
+type DailyProcessResult = {
+    success: boolean;
+    processedEmployees?: number;
+    error?: string;
+};
 
 function getMidnightDate(date: Date) {
     const midnight = new Date(date);
@@ -24,7 +44,7 @@ function timeStringToMinutes(timeStr?: string | null) {
     return (hours * 60) + minutes;
 }
 
-function getRequiredActiveMinutes(existingRecord: any, requiredCheckIn: Date, requiredCheckOut: Date, requiredBreakTime: string) {
+function getRequiredActiveMinutes(existingRecord: DailyTimeRecord | null, requiredCheckIn: Date, requiredCheckOut: Date, requiredBreakTime: string) {
     if (existingRecord?.requiredActiveTime) {
         const minutes = timeStringToMinutes(existingRecord.requiredActiveTime);
         if (minutes > 0) return minutes;
@@ -41,7 +61,7 @@ function isSameDay(a: Date, b: Date) {
         && a.getDate() === b.getDate();
 }
 
-function isWithinRequiredWindow(employee: any, processDate: Date, now: Date) {
+function isWithinRequiredWindow(employee: ActiveEmployee, processDate: Date, now: Date) {
     if (!isSameDay(processDate, now)) return false;
 
     const checkInTime = employee.branch?.checkInTime || "09:00";
@@ -97,7 +117,7 @@ export async function processAllUnprocessedDates() {
         });
 
         let totalProcessed = 0;
-        const results: any[] = [];
+        const results: Array<DailyProcessResult & { date: string }> = [];
 
         // Process each unique date
         for (const dateStr of Array.from(datesToProcess).sort()) {
@@ -183,8 +203,7 @@ export async function processDailyLeaveAutomation(
 /**
  * Process daily record for a single employee
  */
-async function processEmployeeDailyRecord(employee: any, processDate: Date, options?: { skipIfWithinWindow?: boolean; now?: Date }) {
-    const dateStr = format(processDate, 'yyyy-MM-dd');
+async function processEmployeeDailyRecord(employee: ActiveEmployee, processDate: Date, options?: { skipIfWithinWindow?: boolean; now?: Date }) {
     
     // Check if already processed
     const existingRecord = await prisma.dailyTimeRecord.findUnique({
@@ -232,7 +251,7 @@ async function processEmployeeDailyRecord(employee: any, processDate: Date, opti
 /**
  * Handle weekly off day processing
  */
-async function handleWeeklyOffDay(employee: any, processDate: Date, existingRecord: any) {
+async function handleWeeklyOffDay(employee: ActiveEmployee, processDate: Date, existingRecord: DailyTimeRecord | null) {
     const recordData = {
         userId: employee.id,
         date: processDate,
@@ -288,7 +307,7 @@ async function handleWeeklyOffDay(employee: any, processDate: Date, existingReco
 /**
  * Handle work day processing
  */
-async function handleWorkDay(employee: any, processDate: Date, existingRecord: any) {
+async function handleWorkDay(employee: ActiveEmployee, processDate: Date, existingRecord: DailyTimeRecord | null) {
     const hasRequiredFilled = Boolean(
         isNonZeroTime(existingRecord?.requiredCheckIn) &&
         isNonZeroTime(existingRecord?.requiredCheckOut) &&
@@ -361,7 +380,7 @@ async function handleWorkDay(employee: any, processDate: Date, existingRecord: a
     }
 
     // Employee is absent - check for available leaves
-    const availableLeaveEntitlements = employee.leaveEntitlements.filter((entitlement: any) => 
+    const availableLeaveEntitlements = employee.leaveEntitlements.filter((entitlement) => 
         (entitlement.allocatedDays - entitlement.usedDays) > 0
     );
 
@@ -375,7 +394,7 @@ async function handleWorkDay(employee: any, processDate: Date, existingRecord: a
 /**
  * Handle automatic leave deduction
  */
-async function handleAutoLeaveDeduction(employee: any, processDate: Date, existingRecord: any, leaveEntitlement: any) {
+async function handleAutoLeaveDeduction(employee: ActiveEmployee, processDate: Date, existingRecord: DailyTimeRecord | null, leaveEntitlement: EmployeeLeaveEntitlement) {
     // Deduct one day from leave entitlement
     await prisma.userLeaveEntitlement.update({
         where: { id: leaveEntitlement.id },
@@ -447,7 +466,7 @@ async function handleAutoLeaveDeduction(employee: any, processDate: Date, existi
 /**
  * Handle absent without leave
  */
-async function handleAbsentWithoutLeave(employee: any, processDate: Date, existingRecord: any) {
+async function handleAbsentWithoutLeave(employee: ActiveEmployee, processDate: Date, existingRecord: DailyTimeRecord | null) {
     const midnight = getMidnightDate(processDate);
     const recordData = {
         userId: employee.id,

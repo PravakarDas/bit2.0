@@ -148,6 +148,22 @@ interface UserLeaveEntitlement {
   leaveType: LeaveType;
 }
 
+interface AllowanceType {
+  id: string;
+  name: string;
+  valueType: string;
+  scope: string;
+  amount: number;
+  isActive: boolean;
+}
+
+interface UserAllowance {
+  id: string;
+  allowanceId: string;
+  isActive: boolean;
+  allowance: AllowanceType;
+}
+
 interface ProfileEditFormProps {
   user: User & {
     branch?: { id: string; name: string; location: string } | null;
@@ -177,8 +193,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
   const [customLeaveDays, setCustomLeaveDays] = useState<string>("");
   
   // Allowance Management State
-  const [allowanceTypes, setAllowanceTypes] = useState<any[]>([]);
-  const [userAllowances, setUserAllowances] = useState<any[]>([]);
+  const [allowanceTypes, setAllowanceTypes] = useState<AllowanceType[]>([]);
+  const [userAllowances, setUserAllowances] = useState<UserAllowance[]>([]);
   const [isAllowanceDialogOpen, setIsAllowanceDialogOpen] = useState(false);
   const [selectedAllowanceId, setSelectedAllowanceId] = useState<string>("");
 

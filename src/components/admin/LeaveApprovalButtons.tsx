@@ -26,7 +26,7 @@ export function ApprovalButtons({ applicationId }: ApprovalButtonsProps) {
             } else {
                 toast.error(result.error || "Failed to approve application");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred while approving");
         } finally {
             setLoading(false);
@@ -50,7 +50,7 @@ export function ApprovalButtons({ applicationId }: ApprovalButtonsProps) {
             } else {
                 toast.error(result.error || "Failed to reject application");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred while rejecting");
         } finally {
             setLoading(false);

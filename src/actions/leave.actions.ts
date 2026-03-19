@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { LeaveApplicationStatus, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
 import { logManagerOrganizationAction } from "./manager-organization.actions";
@@ -143,10 +143,10 @@ export async function updateLeaveType(id: string, data: {
     }
 
     try {
-        const updateData: any = { ...data };
-        if (data.applicableBranches) {
-            updateData.applicableBranches = JSON.stringify(data.applicableBranches);
-        }
+        const updateData = {
+            ...data,
+            applicableBranches: data.applicableBranches ? JSON.stringify(data.applicableBranches) : undefined,
+        } satisfies Prisma.LeaveTypeUpdateInput;
         
         const leaveType = await prisma.leaveType.update({
             where: { id },
@@ -600,7 +600,8 @@ export async function getUserLeaveApplications(userId: string, year: number = ne
     });
 }
 
-export async function approveLeaveApplication(applicationId: string, approvedBy: string = "SYSTEM", adminNote?: string) {
+export async function approveLeaveApplication(applicationId: string, approvedBy: string = "SYSTEM", _adminNote?: string) {
+    void _adminNote;
     try {
         const application = await prisma.leaveApplication.findUnique({
             where: { id: applicationId },
@@ -664,7 +665,8 @@ export async function approveLeaveApplication(applicationId: string, approvedBy:
     }
 }
 
-export async function rejectLeaveApplication(applicationId: string, approvedBy: string = "SYSTEM", adminNote?: string) {
+export async function rejectLeaveApplication(applicationId: string, approvedBy: string = "SYSTEM", _adminNote?: string) {
+    void _adminNote;
     try {
         const application = await prisma.leaveApplication.findUnique({
             where: { id: applicationId }

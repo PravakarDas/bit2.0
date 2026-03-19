@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { RoleManagementClient } from "@/components/admin/RoleManagementClient";
 import { getAllUsersWithDetails } from "@/actions/role-management.actions";
 
+export const dynamic = "force-dynamic";
+
 export default async function RoleManagementPage() {
     const user = await getDbUser();
 

@@ -57,7 +57,7 @@ export function ApprovalButtons({ employeeId }: ApprovalButtonsProps) {
             } else {
                 toast.error(result.error || "Failed to approve employee");
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to approve employee");
         } finally {
             setApproving(false);
@@ -77,7 +77,7 @@ export function ApprovalButtons({ employeeId }: ApprovalButtonsProps) {
             } else {
                 toast.error(result.error || "Failed to reject employee");
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to reject employee");
         } finally {
             setRejecting(false);

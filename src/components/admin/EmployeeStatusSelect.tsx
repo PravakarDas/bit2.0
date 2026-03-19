@@ -34,7 +34,7 @@ export function EmployeeStatusSelect({ employeeId, currentStatus }: EmployeeStat
             } else {
                 toast.error(result.error || "Failed to update status");
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to update status");
         } finally {
             setIsUpdating(false);

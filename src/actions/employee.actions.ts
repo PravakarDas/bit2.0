@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { UserStatus, EmployeeStatus, SalaryChangeReason } from "@prisma/client";
+import { UserStatus, EmployeeStatus, SalaryChangeReason, Role, Prisma } from "@prisma/client";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
@@ -74,7 +74,7 @@ export async function getPendingEmployees() {
 }
 
 export async function getArchivedEmployees(fromDate?: string, toDate?: string) {
-    const whereClause: any = { 
+    const whereClause: Prisma.UserWhereInput = {
         isArchived: true,
         role: { not: "SUPERADMIN" }
     };
@@ -220,7 +220,7 @@ export async function rejectEmployee(userId: string) {
 
 export async function updateEmployeeStatus(userId: string, employeeStatus: EmployeeStatus) {
     try {
-        const updateData: any = { employeeStatus };
+        const updateData: Prisma.UserUpdateInput = { employeeStatus };
 
         // If status is RESIGNED or TERMINATED, archive the employee
         if (employeeStatus === "RESIGNED" || employeeStatus === "TERMINATED") {
@@ -313,7 +313,7 @@ export async function updateEmployeeDocumentLinks(
 }
 
 export async function updateEmployeeProfile(userId: string, data: {
-    role?: any;
+    role?: Role;
     branchId?: string | null;
     departmentId?: string | null;
     designationId?: string | null;
