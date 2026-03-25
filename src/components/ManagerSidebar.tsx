@@ -5,7 +5,6 @@ import {
     LayoutDashboard,
     Users,
     CalendarDays,
-    Clock,
     FileCheck,
     Archive,
     ChevronRight,
@@ -43,11 +42,6 @@ const managerNavItems = [
         title: "Dashboard", 
         url: "/manager", 
         icon: LayoutDashboard,
-    },
-    {
-        title: "Late Check-Ins",
-        url: "/manager/late-checkins",
-        icon: Clock,
     },
     { 
         title: "Holiday Management", 

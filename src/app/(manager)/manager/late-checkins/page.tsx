@@ -1,11 +1,14 @@
 import { getLateCheckinBranches, getLateCheckinDashboardData } from "@/actions/late-checkin.actions";
 import { LateCheckinDashboard } from "@/components/late-checkin/LateCheckinDashboard";
+import { redirect } from "next/navigation";
 
 export default async function ManagerLateCheckinPage({
   searchParams,
 }: {
   searchParams: { branch?: string; from?: string; to?: string; search?: string };
 }) {
+  redirect("/unauthorized");
+
   const params = await searchParams;
 
   const branchId = params.branch ?? "all";

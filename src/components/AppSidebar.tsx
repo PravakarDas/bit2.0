@@ -111,9 +111,9 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
     const router = useRouter();
     
     // Determine navigation items based on role
-    const items = role === "SUPERADMIN" 
-        ? adminItems 
-        : employeeItems;
+    const items = role === "SUPERADMIN"
+        ? adminItems
+        : employeeItems.filter((item) => !(isManager && item.url === "/late-checkins"));
     
     const [isOrganizationOpen, setIsOrganizationOpen] = React.useState(false);
     const [isEmployeeOpen, setIsEmployeeOpen] = React.useState(false);

@@ -1,5 +1,6 @@
 import { EmployeeLateCheckinDetail } from "@/components/late-checkin/EmployeeLateCheckinDetail";
 import { getEmployeeLateCheckinData } from "@/actions/late-checkin.actions";
+import { redirect } from "next/navigation";
 
 export default async function ManagerEmployeeLateCheckinDetailPage({
   params,
@@ -8,6 +9,8 @@ export default async function ManagerEmployeeLateCheckinDetailPage({
   params: { employeeId: string };
   searchParams: { from?: string; to?: string };
 }) {
+  redirect("/unauthorized");
+
   const routeParams = await params;
   const queryParams = await searchParams;
 
