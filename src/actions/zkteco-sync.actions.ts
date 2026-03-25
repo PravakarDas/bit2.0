@@ -5,6 +5,8 @@ import { zkTecoService } from "@/lib/services/zkteco.service";
 import { subDays, format, startOfDay } from "date-fns";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
+import { getDbUser } from "./user.actions";
+import { createAdminNotification } from "./notification.actions";
 
 export interface SyncResult {
   success: boolean;
@@ -327,6 +329,28 @@ export async function manualSyncEmployee(userId: string): Promise<SyncResult> {
   console.log(`Starting manual sync for user: ${userId}`);
   
   try {
+    const actor = await getDbUser();
+    if (!actor) {
+      return {
+        success: false,
+        message: "Unauthorized",
+        syncedRecords: 0,
+        skippedRecords: 0,
+        errors: ["Unauthorized"]
+      };
+    }
+
+    const canSync = actor.role === "SUPERADMIN" || actor.role === "HR" || (actor.role === "EMPLOYEE" && actor.isManager);
+    if (!canSync) {
+      return {
+        success: false,
+        message: "Unauthorized",
+        syncedRecords: 0,
+        skippedRecords: 0,
+        errors: ["Unauthorized"]
+      };
+    }
+
     const result = await syncEmployeeTimeDataRange(userId, 4); // Today + 3 days back
     
     console.log(`Manual sync completed for user: ${userId}`, {
@@ -339,6 +363,44 @@ export async function manualSyncEmployee(userId: string): Promise<SyncResult> {
     
     // Revalidate the timeline page to show updated data
     revalidatePath("/admin/timeline");
+    revalidatePath("/manager/timeline");
+
+    if (actor.role === "EMPLOYEE" && actor.isManager) {
+      const targetUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+        },
+      });
+
+      await createAdminNotification({
+        type: "SYSTEM_ALERT",
+        title: "Manager Triggered Manual Timeline Sync",
+        message: `Manager ${actor.firstName || ""} ${actor.lastName || ""} triggered manual timeline sync for ${targetUser?.firstName || "Employee"} ${targetUser?.lastName || ""}.`,
+        metadata: {
+          actorId: actor.id,
+          targetUserId: userId,
+          syncedRecords: result.syncedRecords,
+          skippedRecords: result.skippedRecords,
+        },
+      });
+
+      await prisma.timelineModificationActionLog.create({
+        data: {
+          actionType: "MANAGER_TIMELINE_SYNC",
+          actionDetails: `Manager triggered manual timeline sync for employee ${userId}`,
+          actorId: actor.id,
+          targetUserId: userId,
+          metadata: {
+            syncedRecords: result.syncedRecords,
+            skippedRecords: result.skippedRecords,
+            errors: result.errors,
+          },
+        },
+      });
+    }
     
     return result;
   } catch (error) {

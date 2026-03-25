@@ -96,6 +96,12 @@ enum OvertimeRequestStatus {
   MANAGER_REJECTED
 }
 
+enum TimelineModificationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model PublicHoliday {
   id          String   @id @default(cuid())
   name        String   // Holiday name (e.g., "New Year's Day", "Independence Day")
@@ -251,6 +257,12 @@ model User {
   
   // Overtime Request Relations
   overtimeRequests    OvertimeRequest[]
+
+  // Timeline Modification Request Relations
+  timelineModificationRequests TimelineModificationRequest[] @relation("TimelineModificationRequester")
+  timelineModificationReviewed TimelineModificationRequest[] @relation("TimelineModificationReviewer")
+  timelineModificationActionLogs TimelineModificationActionLog[] @relation("TimelineModificationActionActor")
+  timelineModificationTargetLogs TimelineModificationActionLog[] @relation("TimelineModificationActionTarget")
   
   // Profile Update Requests
   profileUpdateRequests ProfileUpdateRequest[]
@@ -809,5 +821,54 @@ model OvertimeRequest {
   
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
+}
+
+model TimelineModificationRequest {
+  id                    String                           @id @default(cuid())
+  userId                String
+  user                  User                             @relation("TimelineModificationRequester", fields: [userId], references: [id])
+
+  requestedDate         DateTime
+  requestedCheckIn      DateTime?
+  requestedCheckOut     DateTime?
+  requestedBreakTime    String?
+  reason                String?
+
+  status                TimelineModificationRequestStatus @default(PENDING)
+  reviewedById          String?
+  reviewedBy            User?                            @relation("TimelineModificationReviewer", fields: [reviewedById], references: [id])
+  reviewerNote          String?
+  reviewedAt            DateTime?
+  appliedAt             DateTime?
+
+  actionLogs            TimelineModificationActionLog[]
+
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
+
+  @@index([userId, requestedDate])
+  @@index([status])
+}
+
+model TimelineModificationActionLog {
+  id                    String                    @id @default(cuid())
+  actionType            String
+  actionDetails         String
+  metadata              Json?
+
+  actorId               String
+  actor                 User                      @relation("TimelineModificationActionActor", fields: [actorId], references: [id])
+  targetUserId          String
+  targetUser            User                      @relation("TimelineModificationActionTarget", fields: [targetUserId], references: [id])
+
+  requestId             String?
+  request               TimelineModificationRequest? @relation(fields: [requestId], references: [id])
+  dailyTimeRecordId     String?
+
+  createdAt             DateTime                  @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([requestId])
 }
 

@@ -82,11 +82,13 @@ const payrollSubItems = [
 const requestSubItems = [
     { title: "Profile Requests", url: "/admin/profile-requests", icon: FileCheck },
     { title: "Leave Applications", url: "/admin/leave-applications", icon: History },
+    { title: "Timeline Modifications", url: "/admin/timeline-modification-requests", icon: Clock },
 ];
 
 const employeeItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Late Check-Ins", url: "/late-checkins", icon: Clock },
+    { title: "Timeline Modification Requests", url: "/timeline-modification-requests", icon: ClipboardList },
     { title: "My Profile", url: "/profile", icon: UserCircle },
     { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
@@ -125,7 +127,7 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
         const orgPaths = ["/admin/organization"];
         const employeePaths = ["/admin/employees", "/admin/archived-employees"];
         const payrollPaths = ["/admin/payroll", "/admin/payroll/processed"];
-        const requestPaths = ["/admin/profile-requests", "/admin/leave-applications"];
+        const requestPaths = ["/admin/profile-requests", "/admin/leave-applications", "/admin/timeline-modification-requests"];
         
         if (orgPaths.some(path => pathname === path)) {
             setIsOrganizationOpen(true);
@@ -313,7 +315,7 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
                                     <SidebarMenuItem>
                                         <CollapsibleTrigger asChild>
                                             <SidebarMenuButton 
-                                                isActive={pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications"}
+                                                isActive={pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications" || pathname === "/admin/timeline-modification-requests"}
                                                 tooltip="Request"
                                             >
                                                 <FileCheck className="h-4 w-4" />

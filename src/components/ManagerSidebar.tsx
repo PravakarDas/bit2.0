@@ -6,6 +6,8 @@ import {
     Users,
     CalendarDays,
     FileCheck,
+    Clock,
+    ClipboardList,
     Archive,
     ChevronRight,
     ArrowLeft,
@@ -67,6 +69,16 @@ const managerNavItems = [
         title: "Overtime Requests",
         url: "/manager/overtime-requests",
         icon: Timer,
+    },
+    {
+        title: "Timeline",
+        url: "/manager/timeline",
+        icon: Clock,
+    },
+    {
+        title: "Timeline Modification Requests",
+        url: "/manager/timeline-modification-requests",
+        icon: ClipboardList,
     },
     {
         title: "Organization Settings",
