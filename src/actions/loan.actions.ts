@@ -147,12 +147,12 @@ export async function getLoanDetailsForApproval(loanId: string) {
         totalIssuedAmount,
         totalRepaidAmount,
         repaymentRatio,
-        salaryCap: loan.user.baseSalary * 0.5,  // 50% of salary (employee-side logic)
-        globalCap: 300000,                      // Hard limit (employee-side logic)
-        remainingSalaryCap: Math.max(0, (loan.user.baseSalary * 0.5) - totalExistingDebt),
+        salaryCap: loan.user.baseSalary * 12 * 0.5,  // 50% of yearly salary (employee-side logic)
+        globalCap: 300000,                           // Hard limit (employee-side logic)
+        remainingSalaryCap: Math.max(0, (loan.user.baseSalary * 12 * 0.5) - totalExistingDebt),
         remainingGlobalCap: Math.max(0, 300000 - totalExistingDebt),
         maxAllowedLoan: Math.min(
-            Math.max(0, (loan.user.baseSalary * 0.5) - totalExistingDebt),
+            Math.max(0, (loan.user.baseSalary * 12 * 0.5) - totalExistingDebt),
             Math.max(0, 300000 - totalExistingDebt)
         ),
         meetsRepaymentRequirement: repaymentRatio >= 0.75

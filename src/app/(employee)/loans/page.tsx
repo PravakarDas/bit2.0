@@ -20,7 +20,7 @@ export default async function LoansPage() {
         .filter(l => l.status === "APPROVED" || l.status === "ACTIVE")
         .reduce((sum, l) => sum + l.remainingPrincipal, 0);
 
-    const salaryCap = user.baseSalary * 0.5;
+    const salaryCap = user.baseSalary * 12 * 0.5;
     const globalCap = 300000;
     const baseCap = Math.min(salaryCap, globalCap);
 
