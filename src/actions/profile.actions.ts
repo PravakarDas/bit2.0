@@ -45,6 +45,10 @@ async function logManagerProfileRequestAction(params: {
 
 // Type for profile data
 export type ProfileData = {
+  // Basic Identity
+  firstName?: string | null;
+  lastName?: string | null;
+
   // Personal Information
   gender?: string | null;
   dateOfBirth?: Date | null;
@@ -193,6 +197,8 @@ export async function submitProfileUpdateRequest(data: ProfileData) {
 
     // Get current values for audit trail
     const currentValues: Partial<ProfileData> = {
+      firstName: user.firstName,
+      lastName: user.lastName,
       gender: user.gender,
       dateOfBirth: user.dateOfBirth,
       bloodGroup: user.bloodGroup,
@@ -293,6 +299,8 @@ export async function updateUserProfileByAdmin(userId: string, data: ProfileData
 
     if (currentUserData.role === "EMPLOYEE" && currentUserData.isManager) {
       updateData = {
+        firstName: data.firstName,
+        lastName: data.lastName,
         dateOfJoining: data.dateOfJoining,
         attendanceId: data.attendanceId,
         workingDaysInMonth: data.workingDaysInMonth,

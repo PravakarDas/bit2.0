@@ -99,7 +99,7 @@ export default function ProfilePage() {
               Pending Update Request
             </CardTitle>
             <CardDescription>
-              You have {pendingRequests.length} pending profile update request(s) awaiting admin approval
+              You have {pendingRequests.length} pending profile update request(s) awaiting manager/admin approval
             </CardDescription>
           </CardHeader>
         </Card>

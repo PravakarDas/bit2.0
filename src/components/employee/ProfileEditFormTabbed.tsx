@@ -48,6 +48,10 @@ import {
 } from "lucide-react";
 
 const profileFormSchema = z.object({
+  // Basic Identity
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+
   // Personal Information
   gender: z.string().optional(),
   dateOfBirth: z.string().optional(),
@@ -264,6 +268,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
       gender: user.gender || "",
       dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth).toISOString().split("T")[0] : "",
       bloodGroup: user.bloodGroup || "",
@@ -333,6 +339,10 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
 
       // Convert date strings to Date objects and construct proper data object
       const finalFormattedData = {
+        // Basic Identity
+        firstName: data.firstName?.trim() || null,
+        lastName: data.lastName?.trim() || null,
+
         // Personal Information
         gender: data.gender || null,
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
@@ -394,6 +404,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
       let result;
       if (isAdmin) {
         const managerRestrictedProfileData = {
+          firstName: finalFormattedData.firstName,
+          lastName: finalFormattedData.lastName,
           dateOfJoining: finalFormattedData.dateOfJoining,
           attendanceId: finalFormattedData.attendanceId,
           ...(isAdmin ? { workingDaysInMonth: workingDaysValue } : {}),
@@ -435,7 +447,7 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
         toast.success(
           isAdmin
             ? "Profile updated successfully"
-            : "Profile update request submitted. Awaiting admin approval."
+            : "Profile update request submitted. Awaiting manager/admin approval."
         );
         if (onSuccess) onSuccess();
       } else {
@@ -591,11 +603,51 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
 
           {/* Personal Info Tab */}
           <TabsContent value="personal" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Name Information</CardTitle>
+                <CardDescription>
+                  {isAdmin
+                    ? "Update employee first and last name directly"
+                    : "Request first and last name update for approval"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="First name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Last name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
             {!allowPersonalEdit && (
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-sm text-muted-foreground">
-                    Personal information is read-only for managers.
+                    Personal information is read-only for managers (except first and last name).
                   </p>
                 </CardContent>
               </Card>
