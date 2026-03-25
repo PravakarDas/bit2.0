@@ -290,6 +290,18 @@ export function ProfileView({ user, onEdit, canEdit = false }: ProfileViewProps)
             isLink
             icon={<Linkedin className="h-4 w-4" />}
           />
+          <InfoItem 
+            label="Fiverr" 
+            value={user.fiverrLink}
+            isLink
+            icon={<Globe className="h-4 w-4" />}
+          />
+          <InfoItem 
+            label="Upwork" 
+            value={user.upworkLink}
+            isLink
+            icon={<Globe className="h-4 w-4" />}
+          />
         </CardContent>
       </Card>
     </div>

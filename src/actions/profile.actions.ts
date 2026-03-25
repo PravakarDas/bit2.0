@@ -92,6 +92,8 @@ export type ProfileData = {
   portfolioLink?: string | null;
   githubLink?: string | null;
   linkedinLink?: string | null;
+  fiverrLink?: string | null;
+  upworkLink?: string | null;
 
   // Employee Document Links
   loanPapersLink?: string | null;
@@ -227,6 +229,8 @@ export async function submitProfileUpdateRequest(data: ProfileData) {
       portfolioLink: user.portfolioLink,
       githubLink: user.githubLink,
       linkedinLink: user.linkedinLink,
+      fiverrLink: user.fiverrLink,
+      upworkLink: user.upworkLink,
       loanPapersLink: user.loanPapersLink,
       nomineesPapersLink: user.nomineesPapersLink,
       emergencyContactLink: user.emergencyContactLink,
@@ -304,6 +308,8 @@ export async function updateUserProfileByAdmin(userId: string, data: ProfileData
         dateOfJoining: data.dateOfJoining,
         attendanceId: data.attendanceId,
         workingDaysInMonth: data.workingDaysInMonth,
+        fiverrLink: data.fiverrLink,
+        upworkLink: data.upworkLink,
         loanPapersLink: data.loanPapersLink,
         nomineesPapersLink: data.nomineesPapersLink,
         emergencyContactLink: data.emergencyContactLink,

@@ -104,6 +104,8 @@ const profileFormSchema = z.object({
   portfolioLink: z.string().url().optional().or(z.literal("")),
   githubLink: z.string().url().optional().or(z.literal("")),
   linkedinLink: z.string().url().optional().or(z.literal("")),
+  fiverrLink: z.string().url().optional().or(z.literal("")),
+  upworkLink: z.string().url().optional().or(z.literal("")),
 
   // Employee Document Links
   loanPapersLink: z.string().url().optional().or(z.literal("")),
@@ -305,6 +307,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
       portfolioLink: user.portfolioLink || "",
       githubLink: user.githubLink || "",
       linkedinLink: user.linkedinLink || "",
+      fiverrLink: user.fiverrLink || "",
+      upworkLink: user.upworkLink || "",
       loanPapersLink: user.loanPapersLink || "",
       nomineesPapersLink: user.nomineesPapersLink || "",
       emergencyContactLink: user.emergencyContactLink || "",
@@ -395,6 +399,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
         portfolioLink: data.portfolioLink || null,
         githubLink: data.githubLink || null,
         linkedinLink: data.linkedinLink || null,
+        fiverrLink: data.fiverrLink || null,
+        upworkLink: data.upworkLink || null,
         loanPapersLink: data.loanPapersLink || null,
         nomineesPapersLink: data.nomineesPapersLink || null,
         emergencyContactLink: data.emergencyContactLink || null,
@@ -409,6 +415,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
           dateOfJoining: finalFormattedData.dateOfJoining,
           attendanceId: finalFormattedData.attendanceId,
           ...(isAdmin ? { workingDaysInMonth: workingDaysValue } : {}),
+          fiverrLink: finalFormattedData.fiverrLink,
+          upworkLink: finalFormattedData.upworkLink,
           loanPapersLink: finalFormattedData.loanPapersLink,
           nomineesPapersLink: finalFormattedData.nomineesPapersLink,
           emergencyContactLink: finalFormattedData.emergencyContactLink,
@@ -1073,6 +1081,34 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
                       <FormLabel>LinkedIn</FormLabel>
                       <FormControl>
                         <Input type="url" placeholder="https://linkedin.com/in/username" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="fiverrLink"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fiverr</FormLabel>
+                      <FormControl>
+                        <Input type="url" placeholder="https://www.fiverr.com/username" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="upworkLink"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Upwork</FormLabel>
+                      <FormControl>
+                        <Input type="url" placeholder="https://www.upwork.com/freelancers/~username" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -230,6 +230,8 @@ model User {
   portfolioLink        String?
   githubLink           String?
   linkedinLink         String?
+  fiverrLink           String?
+  upworkLink           String?
   
   // Employee Document Links
   loanPapersLink       String?
