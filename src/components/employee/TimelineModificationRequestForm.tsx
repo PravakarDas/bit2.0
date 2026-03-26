@@ -23,14 +23,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { CalendarIcon, Clock, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Clock, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { submitTimelineModificationRequest } from "@/actions/timeline-modification-request.actions";
 import { toast } from "sonner";
@@ -129,33 +122,22 @@ export function TimelineModificationRequestForm({ onSuccess }: TimelineModificat
               control={form.control}
               name="requestedDate"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
+                <FormItem>
                   <FormLabel>Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <FormControl>
+                    <Input
+                      type="date"
+                      value={field.value ? field.value.toISOString().split('T')[0] : ''}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const date = new Date(e.target.value);
+                          field.onChange(date);
+                        }
+                      }}
+                      max={new Date().toISOString().split('T')[0]}
+                      min="2000-01-01"
+                    />
+                  </FormControl>
                   <FormDescription>Only today and past dates are allowed</FormDescription>
                   <FormMessage />
                 </FormItem>

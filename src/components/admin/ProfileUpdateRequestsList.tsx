@@ -167,30 +167,40 @@ export function ProfileUpdateRequestsList({ requests, onUpdate }: ProfileUpdateR
                 <div>
                   <h4 className="font-semibold mb-2 text-sm">Requested Changes:</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    {Object.entries((request.requestedChanges && typeof request.requestedChanges === "object" ? request.requestedChanges : {}) as Record<string, unknown>).map(([key, value]) => {
-                      if (!value) return null;
-                      const previousValue = request.previousValues && typeof request.previousValues === "object"
-                        ? (request.previousValues as Record<string, unknown>)[key]
-                        : undefined;
-                      
-                      return (
-                        <div key={key} className="border rounded-lg p-3">
-                          <p className="font-medium text-muted-foreground capitalize mb-1">
-                            {key.replace(/([A-Z])/g, " $1").trim()}
-                          </p>
-                          <div className="space-y-1">
-                            {previousValue !== null && previousValue !== undefined && (
-                              <p className="text-xs text-muted-foreground line-through">
-                                {formatValue(previousValue)}
-                              </p>
-                            )}
-                            <p className="font-medium text-green-600">
-                              {formatValue(value)}
+                    {Object.entries((request.requestedChanges && typeof request.requestedChanges === "object" ? request.requestedChanges : {}) as Record<string, unknown>)
+                      .map(([key, value]) => {
+                        if (!value) return null;
+                        const previousValue = request.previousValues && typeof request.previousValues === "object"
+                          ? (request.previousValues as Record<string, unknown>)[key]
+                          : undefined;
+                        
+                        // Only show fields that have actually changed
+                        if (formatValue(previousValue) === formatValue(value)) {
+                          return null;
+                        }
+                        
+                        return (
+                          <div key={key} className="border rounded-lg p-3">
+                            <p className="font-medium text-muted-foreground capitalize mb-1">
+                              {key.replace(/([A-Z])/g, " $1").trim()}
                             </p>
+                            <div className="space-y-1">
+                              {previousValue !== null && previousValue !== undefined && (
+                                <span>
+                                  <span className="text-xs text-muted-foreground line-through">
+                                    {formatValue(previousValue)}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground mx-2">→</span>
+                                </span>
+                              )}
+                              <p className="font-medium text-green-600">
+                                {formatValue(value)}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                      .filter(Boolean)}
                   </div>
                 </div>
               </div>

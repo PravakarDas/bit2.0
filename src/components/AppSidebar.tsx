@@ -93,7 +93,7 @@ const loanSubItems = [
 const employeeItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Late Check-Ins", url: "/late-checkins", icon: Clock },
-    { title: "Timeline Modification Requests", url: "/timeline-modification-requests", icon: ClipboardList },
+    { title: "Timeline Modify Requests", url: "/timeline-modification-requests", icon: ClipboardList },
     { title: "My Profile", url: "/profile", icon: UserCircle },
     { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },

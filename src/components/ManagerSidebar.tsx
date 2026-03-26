@@ -76,7 +76,7 @@ const managerNavItems = [
         icon: Clock,
     },
     {
-        title: "Timeline Modification Requests",
+        title: "Timeline Modify Requests",
         url: "/manager/timeline-modification-requests",
         icon: ClipboardList,
     },

@@ -217,6 +217,23 @@ export function ProfileEditForm({ user, branches = [], isAdmin = false, onSucces
       };
       void workingDaysInMonth;
 
+      // Check if any field has actually changed (for employees submitting requests)
+      if (!isAdmin) {
+        const hasChanges = Object.entries(formattedData).some(([key, value]) => {
+          const currentValue = user[key as keyof typeof user];
+          // Normalize for comparison
+          const userVal = currentValue === null || currentValue === undefined ? "" : String(currentValue);
+          const formVal = value === null || value === undefined ? "" : String(value);
+          return userVal !== formVal;
+        });
+
+        if (!hasChanges) {
+          toast.error("Nothing changed. Please modify at least one field before submitting.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       let result;
       if (isAdmin) {
         // Admin can update profile and employment details
