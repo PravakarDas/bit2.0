@@ -36,4 +36,4 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 # CMD ["npm", "start"]
-CMD ["sh", "-c", "pnpm prisma migrate deploy && npm start"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
