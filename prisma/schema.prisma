@@ -456,6 +456,7 @@ model Loan {
   gracePeriodMonths  Int
   totalMonths        Int
   status             LoanStatus @default(PENDING)
+  isManuallySeeded   Boolean    @default(false)
 
   userId String
   user   User   @relation(fields: [userId], references: [id])

@@ -26,6 +26,7 @@ import {
     ClipboardList,
     UserCog,
     Crown,
+    Plus,
 } from "lucide-react";
 
 import {
@@ -61,7 +62,6 @@ const adminItems = [
     { title: "Role Management", url: "/admin/role-management", icon: UserCog },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
     { title: "Holiday Management", url: "/admin/holidays", icon: CalendarDays },
-    { title: "Loan", url: "/admin/loans", icon: Banknote },
     { title: "Medical", url: "/admin/medical", icon: Stethoscope },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
     { title: "Overtime Requests", url: "/admin/overtime-requests", icon: ClipboardList },
@@ -83,6 +83,11 @@ const requestSubItems = [
     { title: "Profile Requests", url: "/admin/profile-requests", icon: FileCheck },
     { title: "Leave Applications", url: "/admin/leave-applications", icon: History },
     { title: "Timeline Modifications", url: "/admin/timeline-modification-requests", icon: Clock },
+];
+
+const loanSubItems = [
+    { title: "View All Loans", url: "/admin/loans", icon: Banknote },
+    { title: "Create Manual Loan", url: "/admin/loans/manual-create", icon: Plus },
 ];
 
 const employeeItems = [
@@ -121,6 +126,7 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
     const [isEmployeeOpen, setIsEmployeeOpen] = React.useState(false);
     const [isPayrollOpen, setIsPayrollOpen] = React.useState(false);
     const [isRequestOpen, setIsRequestOpen] = React.useState(false);
+    const [isLoanOpen, setIsLoanOpen] = React.useState(false);
 
     // Auto-open menus based on current page
     React.useEffect(() => {
@@ -128,6 +134,7 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
         const employeePaths = ["/admin/employees", "/admin/archived-employees"];
         const payrollPaths = ["/admin/payroll", "/admin/payroll/processed"];
         const requestPaths = ["/admin/profile-requests", "/admin/leave-applications", "/admin/timeline-modification-requests"];
+        const loanPaths = ["/admin/loans", "/admin/loans/manual-create"];
         
         if (orgPaths.some(path => pathname === path)) {
             setIsOrganizationOpen(true);
@@ -140,6 +147,9 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
         }
         if (requestPaths.some(path => pathname === path)) {
             setIsRequestOpen(true);
+        }
+        if (loanPaths.some(path => pathname === path || pathname.startsWith(path))) {
+            setIsLoanOpen(true);
         }
     }, [pathname]);
 
@@ -330,6 +340,42 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
                                         <CollapsibleContent>
                                             <SidebarMenuSub>
                                                 {requestSubItems.map((subItem) => (
+                                                    <SidebarMenuSubItem key={subItem.title}>
+                                                        <SidebarMenuSubButton asChild isActive={pathname === subItem.url}>
+                                                            <Link href={subItem.url}>
+                                                                <subItem.icon className="h-3.5 w-3.5" />
+                                                                <span className="text-xs">{subItem.title}</span>
+                                                            </Link>
+                                                        </SidebarMenuSubButton>
+                                                    </SidebarMenuSubItem>
+                                                ))}
+                                            </SidebarMenuSub>
+                                        </CollapsibleContent>
+                                    </SidebarMenuItem>
+                                </Collapsible>
+                            )}
+
+                            {/* Loan Collapsible Menu (Admin Only) */}
+                            {role === "SUPERADMIN" && (
+                                <Collapsible open={isLoanOpen} onOpenChange={setIsLoanOpen}>
+                                    <SidebarMenuItem>
+                                        <CollapsibleTrigger asChild>
+                                            <SidebarMenuButton 
+                                                isActive={pathname === "/admin/loans" || pathname === "/admin/loans/manual-create"}
+                                                tooltip="Loan"
+                                            >
+                                                <Banknote className="h-4 w-4" />
+                                                <span>Loan</span>
+                                                {isLoanOpen ? (
+                                                    <ChevronDown className="ml-auto h-4 w-4 transition-transform" />
+                                                ) : (
+                                                    <ChevronRight className="ml-auto h-4 w-4 transition-transform" />
+                                                )}
+                                            </SidebarMenuButton>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                            <SidebarMenuSub>
+                                                {loanSubItems.map((subItem) => (
                                                     <SidebarMenuSubItem key={subItem.title}>
                                                         <SidebarMenuSubButton asChild isActive={pathname === subItem.url}>
                                                             <Link href={subItem.url}>

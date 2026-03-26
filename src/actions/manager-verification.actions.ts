@@ -28,7 +28,6 @@ export async function getPendingLoansForManager() {
           lastName: true,
           email: true,
           phoneNumber: true,
-          baseSalary: true,
           walletBalance: true,
           dateOfJoining: true,
           department: {
