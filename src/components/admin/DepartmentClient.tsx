@@ -78,7 +78,7 @@ export function DepartmentClient({ initialDepartments = [] }: DepartmentClientPr
       // Filter initial data when hiding inactive
       setDepartments(initialDepartments.filter((d: Department) => d.isActive));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [showInactive]);
 
   const loadDepartments = async () => {

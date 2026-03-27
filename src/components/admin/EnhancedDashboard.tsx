@@ -340,8 +340,14 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
                                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                                 <XAxis dataKey="month" stroke="#6b7280" />
                                 <YAxis stroke="#6b7280" />
-                                <Tooltip 
-                                    formatter={(value: number | undefined) => [`৳${(value || 0).toLocaleString()}`, 'Amount']}
+                                <Tooltip
+                                    formatter={(value) => {
+                                        const numericValue = Array.isArray(value)
+                                            ? Number(value[0] ?? 0)
+                                            : Number(value ?? 0);
+                                        const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+                                        return [`৳${safeValue.toLocaleString()}`, 'Amount'];
+                                    }}
                                     labelStyle={{ color: '#1f2937' }}
                                 />
                                 <Line 
@@ -391,12 +397,22 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
                                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                                     <XAxis dataKey="day" stroke="#6b7280" />
                                     <YAxis stroke="#6b7280" />
-                                    <Tooltip 
-                                        formatter={(value: number | undefined, name: string | undefined) => [
-                                            `${value || 0} hours`,
-                                            name === 'totalHours' ? 'Total Hours' : 
-                                            name === 'overtimeHours' ? 'Overtime' : 'Undertime'
-                                        ]}
+                                    <Tooltip
+                                        formatter={(value, name) => {
+                                            const numericValue = Array.isArray(value)
+                                                ? Number(value[0] ?? 0)
+                                                : Number(value ?? 0);
+                                            const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+                                            const seriesName = String(name ?? "");
+                                            return [
+                                                `${safeValue} hours`,
+                                                seriesName === 'totalHours'
+                                                    ? 'Total Hours'
+                                                    : seriesName === 'overtimeHours'
+                                                      ? 'Overtime'
+                                                      : 'Undertime'
+                                            ];
+                                        }}
                                         labelStyle={{ color: '#1f2937' }}
                                     />
                                     <Legend />
@@ -411,11 +427,18 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
                                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                                     <XAxis dataKey="week" stroke="#6b7280" />
                                     <YAxis stroke="#6b7280" domain={[0, 100]} />
-                                    <Tooltip 
-                                        formatter={(value: number | undefined, name: string | undefined) => [
-                                            `${value || 0}%`,
-                                            name === 'attendanceRate' ? 'Attendance Rate' : name
-                                        ]}
+                                    <Tooltip
+                                        formatter={(value, name) => {
+                                            const numericValue = Array.isArray(value)
+                                                ? Number(value[0] ?? 0)
+                                                : Number(value ?? 0);
+                                            const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+                                            const seriesName = String(name ?? "");
+                                            return [
+                                                `${safeValue}%`,
+                                                seriesName === 'attendanceRate' ? 'Attendance Rate' : seriesName
+                                            ];
+                                        }}
                                         labelStyle={{ color: '#1f2937' }}
                                     />
                                     <Legend />
@@ -524,8 +547,14 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
                                     height={80}
                                 />
                                 <YAxis stroke="#6b7280" />
-                                <Tooltip 
-                                    formatter={(value: number | undefined) => [`৳${value || 0}`, 'Penalty']}
+                                <Tooltip
+                                    formatter={(value) => {
+                                        const numericValue = Array.isArray(value)
+                                            ? Number(value[0] ?? 0)
+                                            : Number(value ?? 0);
+                                        const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+                                        return [`৳${safeValue}`, 'Penalty'];
+                                    }}
                                 />
                                 <Bar dataKey="totalPenalty" fill="#dc2626" />
                             </BarChart>
