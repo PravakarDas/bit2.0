@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Filter, X } from "lucide-react";
+import { Filter, Search, X } from "lucide-react";
 
 interface FilterOptions {
   branchId: string;
   userId: string;
   startDate: string;
   endDate: string;
+  employeeName: string;
 }
 
 interface TimelineFiltersProps {
@@ -19,6 +20,7 @@ interface TimelineFiltersProps {
   branches: any[];
   users: any[];
   onFilterChange: (key: keyof FilterOptions, value: string) => void;
+  onApplyFilters: () => void;
   onClearFilters: () => void;
 }
 
@@ -27,6 +29,7 @@ export default function TimelineFilters({
   branches,
   users,
   onFilterChange,
+  onApplyFilters,
   onClearFilters
 }: TimelineFiltersProps) {
   // Filter users based on selected branch
@@ -58,7 +61,7 @@ export default function TimelineFilters({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Branch Filter */}
           <div className="space-y-2">
             <Label htmlFor="branch-filter">Branch</Label>
@@ -126,6 +129,25 @@ export default function TimelineFilters({
               min={filters.startDate} // Ensure end date is not before start date
             />
           </div>
+
+          {/* Name Search */}
+          <div className="space-y-2">
+            <Label htmlFor="employee-name-search">Search By Name</Label>
+            <Input
+              id="employee-name-search"
+              type="text"
+              placeholder="Type employee name"
+              value={filters.employeeName}
+              onChange={(e) => onFilterChange('employeeName', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <Button onClick={onApplyFilters} size="sm">
+            <Search className="h-4 w-4 mr-2" />
+            Search
+          </Button>
         </div>
 
         {/* Active Filters Display */}
@@ -180,6 +202,18 @@ export default function TimelineFilters({
                   To: {filters.endDate}
                   <button
                     onClick={() => onFilterChange('endDate', '')}
+                    className="ml-1 hover:bg-primary/20 rounded"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+
+              {filters.employeeName && (
+                <div className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-md text-sm">
+                  Name: {filters.employeeName}
+                  <button
+                    onClick={() => onFilterChange('employeeName', '')}
                     className="ml-1 hover:bg-primary/20 rounded"
                   >
                     <X className="h-3 w-3" />

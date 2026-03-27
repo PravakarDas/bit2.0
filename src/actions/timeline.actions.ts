@@ -397,7 +397,7 @@ export async function backfillMissingTimeRecords(): Promise<BackfillResult> {
       }
 
       const joiningDate = normalizeToStartOfDay(employee.dateOfJoining);
-      let startDate = joiningDate > TIMELINE_BASELINE_START ? joiningDate : TIMELINE_BASELINE_START;
+      const startDate = joiningDate > TIMELINE_BASELINE_START ? joiningDate : TIMELINE_BASELINE_START;
 
       if (startDate >= today) {
         continue;
@@ -595,7 +595,17 @@ export async function checkAndGenerateToday(): Promise<TimelineGenerationResult>
 /**
  * Get timeline records for a specific user and date range
  */
-export async function getTimelineRecords(userId?: string, startDate?: Date, endDate?: Date) {
+export async function getTimelineRecords(
+  userId?: string,
+  startDate?: Date,
+  endDate?: Date,
+  options?: {
+    branchId?: string;
+    employeeName?: string;
+    page?: number;
+    limit?: number;
+  }
+) {
   try {
     const where: any = {};
     
@@ -608,6 +618,30 @@ export async function getTimelineRecords(userId?: string, startDate?: Date, endD
       if (startDate) where.date.gte = startDate;
       if (endDate) where.date.lte = endDate;
     }
+
+    if (options?.branchId || options?.employeeName) {
+      where.user = {};
+      if (options.branchId) {
+        where.user.branchId = options.branchId;
+      }
+
+      if (options.employeeName) {
+        const searchTerm = options.employeeName.trim();
+        if (searchTerm) {
+          where.user.OR = [
+            { firstName: { contains: searchTerm, mode: 'insensitive' } },
+            { lastName: { contains: searchTerm, mode: 'insensitive' } },
+            { email: { contains: searchTerm, mode: 'insensitive' } }
+          ];
+        }
+      }
+    }
+
+    const page = Math.max(options?.page || 1, 1);
+    const limit = Math.max(options?.limit || 0, 0);
+    const usePagination = limit > 0;
+
+    const total = await prisma.dailyTimeRecord.count({ where });
 
     const records = await prisma.dailyTimeRecord.findMany({
       where,
@@ -632,10 +666,27 @@ export async function getTimelineRecords(userId?: string, startDate?: Date, endD
       orderBy: [
         { date: 'desc' },
         { user: { firstName: 'asc' } }
-      ]
+      ],
+      ...(usePagination
+        ? {
+            skip: (page - 1) * limit,
+            take: limit
+          }
+        : {})
     });
 
-    return { success: true, records };
+    const totalPages = usePagination ? Math.max(Math.ceil(total / limit), 1) : (total > 0 ? 1 : 0);
+
+    return {
+      success: true,
+      records,
+      pagination: {
+        page: usePagination ? page : 1,
+        limit: usePagination ? limit : total,
+        total,
+        totalPages
+      }
+    };
 
   } catch (error) {
     console.error('Error fetching timeline records:', error);

@@ -64,7 +64,7 @@ export async function syncEmployeeTimeData(userId: string, date: Date): Promise<
     console.log(`Found employee: ${user.firstName} ${user.lastName} with attendanceId: ${user.attendanceId}`);
 
     // Get or create daily time record for the date
-    let timeRecord = await prisma.dailyTimeRecord.findUnique({
+    const timeRecord = await prisma.dailyTimeRecord.findUnique({
       where: {
         userId_date: {
           userId: userId,

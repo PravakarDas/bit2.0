@@ -51,6 +51,7 @@ interface FilterOptions {
   userId: string;
   startDate: string;
   endDate: string;
+  employeeName: string;
 }
 
 export default function TimelineClient() {
@@ -63,16 +64,25 @@ export default function TimelineClient() {
   const [leaveBackfillRunning, setLeaveBackfillRunning] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 50,
+    limit: 60,
     total: 0,
     totalPages: 0
   });
-  
+
   const [filters, setFilters] = useState<FilterOptions>({
     branchId: "",
     userId: "",
     startDate: "",
-    endDate: ""
+    endDate: "",
+    employeeName: ""
+  });
+
+  const [appliedFilters, setAppliedFilters] = useState<FilterOptions>({
+    branchId: "",
+    userId: "",
+    startDate: "",
+    endDate: "",
+    employeeName: ""
   });
 
   // Load initial data
@@ -83,7 +93,7 @@ export default function TimelineClient() {
   // Load time records when filters change
   useEffect(() => {
     loadTimeRecords();
-  }, [filters, pagination.page]);
+  }, [appliedFilters, pagination.page]);
 
   const loadInitialData = async () => {
     try {
@@ -105,18 +115,27 @@ export default function TimelineClient() {
     setLoading(true);
     try {
       const result = await getTimelineRecords(
-        filters.userId || undefined,
-        filters.startDate ? new Date(filters.startDate) : undefined,
-        filters.endDate ? new Date(filters.endDate) : undefined
+        appliedFilters.userId || undefined,
+        appliedFilters.startDate ? new Date(appliedFilters.startDate) : undefined,
+        appliedFilters.endDate ? new Date(appliedFilters.endDate) : undefined,
+        {
+          branchId: appliedFilters.branchId || undefined,
+          employeeName: appliedFilters.employeeName || undefined,
+          page: pagination.page,
+          limit: pagination.limit
+        }
       );
 
       if (result.success) {
         setTimeRecords(result.records || []);
-        setPagination(prev => ({
-          ...prev,
-          total: result.records?.length || 0,
-          totalPages: Math.ceil((result.records?.length || 0) / 10)
-        }));
+        setPagination(prev => {
+          const serverPagination = result.pagination;
+          return {
+            ...prev,
+            total: serverPagination?.total || 0,
+            totalPages: serverPagination?.totalPages || 0
+          };
+        });
       }
     } catch (error) {
       console.error('Error loading time records:', error);
@@ -126,12 +145,15 @@ export default function TimelineClient() {
   };
 
   const clearFilters = () => {
-    setFilters({
+    const clearedFilters = {
       branchId: "",
       userId: "",
       startDate: "",
-      endDate: ""
-    });
+      endDate: "",
+      employeeName: ""
+    };
+    setFilters(clearedFilters);
+    setAppliedFilters(clearedFilters);
     setPagination(prev => ({
       ...prev,
       page: 1
@@ -139,13 +161,54 @@ export default function TimelineClient() {
   };
 
   const handleFilterChange = (key: keyof FilterOptions, value: string) => {
+    if (key === "branchId") {
+      const normalizedValue = value === "all-branches" ? "" : value;
+      setFilters(prev => {
+        const nextFilters = {
+          ...prev,
+          branchId: normalizedValue,
+          userId: normalizedValue && prev.userId
+            ? (users.find(user => user.id === prev.userId && user.branchId === normalizedValue) ? prev.userId : "")
+            : prev.userId
+        };
+        setAppliedFilters(nextFilters);
+        return nextFilters;
+      });
+      setPagination(prev => ({
+        ...prev,
+        page: 1
+      }));
+      return;
+    }
+
+    if (key === "userId") {
+      const normalizedValue = value === "all-employees" ? "" : value;
+      setFilters(prev => {
+        const nextFilters = {
+          ...prev,
+          userId: normalizedValue
+        };
+        setAppliedFilters(nextFilters);
+        return nextFilters;
+      });
+      setPagination(prev => ({
+        ...prev,
+        page: 1
+      }));
+      return;
+    }
+
     setFilters(prev => ({
       ...prev,
       [key]: value
     }));
+  };
+
+  const applyFilters = () => {
+    setAppliedFilters(filters);
     setPagination(prev => ({
       ...prev,
-      page: 1 // Reset to first page when filters change
+      page: 1
     }));
   };
   const handleGenerateTimeline = async () => {
@@ -294,6 +357,7 @@ export default function TimelineClient() {
         branches={branches}
         users={users}
         onFilterChange={handleFilterChange}
+        onApplyFilters={applyFilters}
         onClearFilters={clearFilters}
       />
 
