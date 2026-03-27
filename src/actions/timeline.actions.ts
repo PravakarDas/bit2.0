@@ -85,6 +85,112 @@ interface BackfillResult {
   message: string;
 }
 
+const TIMELINE_BASELINE_START = new Date(2026, 0, 1);
+
+function normalizeToStartOfDay(date: Date): Date {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+}
+
+function getDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function getDisplayName(employee: { firstName: string | null; lastName: string | null; email: string }): string {
+  const fullName = `${employee.firstName ?? ''} ${employee.lastName ?? ''}`.trim();
+  return fullName || employee.email;
+}
+
+async function createTimelineRecordForEmployee(
+  employee: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    branchId: string | null;
+    dateOfJoining: Date | null;
+    branch: {
+      checkInTime: string;
+      checkOutTime: string;
+      breakDuration: string;
+      weeklyOffDays: string[];
+    } | null;
+  },
+  targetDate: Date,
+  skipExistingCheck = false
+): Promise<{ created: boolean; skippedReason?: string; error?: string }> {
+  const normalizedDate = normalizeToStartOfDay(targetDate);
+  const employeeName = getDisplayName(employee);
+
+  try {
+    if (employee.dateOfJoining) {
+      const joiningDate = normalizeToStartOfDay(employee.dateOfJoining);
+      if (normalizedDate < joiningDate) {
+        return { created: false, skippedReason: 'before joining date' };
+      }
+    }
+
+    if (!skipExistingCheck) {
+      const existingRecord = await prisma.dailyTimeRecord.findFirst({
+        where: {
+          userId: employee.id,
+          date: normalizedDate
+        }
+      });
+
+      if (existingRecord) {
+        return { created: false, skippedReason: 'already exists' };
+      }
+    }
+
+    const isWeekend = await isWeekendForEmployee(employee.id, normalizedDate);
+    if (isWeekend) {
+      return { created: false, skippedReason: 'weekend' };
+    }
+
+    const isBranchHoliday = await isPublicHolidayForBranch(normalizedDate, employee.branchId);
+    if (isBranchHoliday) {
+      return { created: false, skippedReason: 'public holiday' };
+    }
+
+    const hasLeave = await hasApprovedLeaveForDate(employee.id, normalizedDate);
+    if (hasLeave) {
+      return { created: false, skippedReason: 'on approved leave' };
+    }
+
+    const checkInTime = new Date(normalizedDate);
+    const checkOutTime = new Date(normalizedDate);
+
+    const [checkInHour, checkInMin] = (employee.branch?.checkInTime || '09:00').split(':').map(Number);
+    const [checkOutHour, checkOutMin] = (employee.branch?.checkOutTime || '18:00').split(':').map(Number);
+
+    checkInTime.setHours(checkInHour, checkInMin, 0, 0);
+    checkOutTime.setHours(checkOutHour, checkOutMin, 0, 0);
+
+    const requiredBreakTime = employee.branch?.breakDuration || '01:00';
+    const requiredActiveTime = calculateActiveTime(checkInTime, checkOutTime, requiredBreakTime);
+
+    await prisma.dailyTimeRecord.create({
+      data: {
+        userId: employee.id,
+        date: normalizedDate,
+        requiredCheckIn: checkInTime,
+        requiredCheckOut: checkOutTime,
+        requiredBreakTime,
+        requiredActiveTime
+      }
+    });
+
+    console.log(`Created record for ${employeeName} on ${normalizedDate.toDateString()}`);
+    return { created: true };
+  } catch (error) {
+    const errorMsg = `Failed to create record for ${employeeName} on ${normalizedDate.toDateString()}: ${error}`;
+    console.error(errorMsg);
+    return { created: false, error: errorMsg };
+  }
+}
+
 /**
  * Check if a date is weekend for a specific employee based on their branch
  */
@@ -170,8 +276,7 @@ async function isPublicHolidayForBranch(date: Date, branchId?: string | null): P
 export async function generateDailyTimeRecords(targetDate: Date = new Date()): Promise<TimelineGenerationResult> {
   try {
     // Normalize the date to start of day
-    const normalizedDate = new Date(targetDate);
-    normalizedDate.setHours(0, 0, 0, 0);
+    const normalizedDate = normalizeToStartOfDay(targetDate);
 
     console.log(`Generating timeline records for date: ${normalizedDate.toISOString()}`);
 
@@ -198,72 +303,16 @@ export async function generateDailyTimeRecords(targetDate: Date = new Date()): P
     const errors: string[] = [];
 
     for (const employee of activeEmployees) {
-      try {
-        // Check if record already exists
-        const existingRecord = await prisma.dailyTimeRecord.findFirst({
-          where: {
-            userId: employee.id,
-            date: normalizedDate
-          }
-        });
+      const result = await createTimelineRecordForEmployee(employee, normalizedDate);
+      if (result.error) {
+        errors.push(result.error);
+        continue;
+      }
 
-        if (existingRecord) {
-          console.log(`Record already exists for ${employee.firstName} ${employee.lastName} on ${normalizedDate.toDateString()}`);
-          continue;
-        }
-
-        // Check if it's weekend for this employee
-        const isWeekend = await isWeekendForEmployee(employee.id, normalizedDate);
-        if (isWeekend) {
-          console.log(`Skipping ${employee.firstName} ${employee.lastName} - weekend`);
-          continue;
-        }
-
-        const isBranchHoliday = await isPublicHolidayForBranch(normalizedDate, employee.branchId);
-        if (isBranchHoliday) {
-          console.log(`Skipping ${employee.firstName} ${employee.lastName} - public holiday`);
-          continue;
-        }
-
-        // Check if employee has approved leave
-        const hasLeave = await hasApprovedLeaveForDate(employee.id, normalizedDate);
-        if (hasLeave) {
-          console.log(`Skipping ${employee.firstName} ${employee.lastName} - on approved leave`);
-          continue;
-        }
-
-        // Create timeline record
-        const checkInTime = new Date(normalizedDate);
-        const checkOutTime = new Date(normalizedDate);
-        
-        // Set the check-in and check-out times
-        const [checkInHour, checkInMin] = (employee.branch?.checkInTime || "09:00").split(':').map(Number);
-        const [checkOutHour, checkOutMin] = (employee.branch?.checkOutTime || "18:00").split(':').map(Number);
-        
-        checkInTime.setHours(checkInHour, checkInMin, 0, 0);
-        checkOutTime.setHours(checkOutHour, checkOutMin, 0, 0);
-
-        const requiredBreakTime = employee.branch?.breakDuration || "01:00";
-        const requiredActiveTime = calculateActiveTime(checkInTime, checkOutTime, requiredBreakTime);
-
-        await prisma.dailyTimeRecord.create({
-          data: {
-            userId: employee.id,
-            date: normalizedDate,
-            requiredCheckIn: checkInTime,
-            requiredCheckOut: checkOutTime,
-            requiredBreakTime: requiredBreakTime,
-            requiredActiveTime: requiredActiveTime
-          }
-        });
-
+      if (result.created) {
         recordsCreated++;
-        console.log(`Created record for ${employee.firstName} ${employee.lastName}`);
-
-      } catch (error) {
-        const errorMsg = `Failed to create record for ${employee.firstName} ${employee.lastName}: ${error}`;
-        console.error(errorMsg);
-        errors.push(errorMsg);
+      } else if (result.skippedReason && result.skippedReason !== 'already exists') {
+        console.log(`Skipping ${getDisplayName(employee)} - ${result.skippedReason}`);
       }
     }
 
@@ -313,46 +362,78 @@ export async function generateDailyTimeRecords(targetDate: Date = new Date()): P
  */
 export async function backfillMissingTimeRecords(): Promise<BackfillResult> {
   try {
-    console.log('Starting timeline backfill process...');
+    console.log('Starting timeline backfill process from baseline date...');
 
-    // Find the latest timeline record date
-    const latestRecord = await prisma.dailyTimeRecord.findFirst({
-      orderBy: { date: 'desc' },
-      select: { date: true }
+    const today = normalizeToStartOfDay(new Date());
+
+    const activeEmployees = await prisma.user.findMany({
+      where: {
+        status: 'APPROVED',
+        role: 'EMPLOYEE'
+      },
+      include: {
+        branch: true
+      }
     });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    let startDate: Date;
-    
-    if (!latestRecord) {
-      // If no records exist, start from yesterday
-      startDate = new Date(today);
-      startDate.setDate(startDate.getDate() - 1);
-    } else {
-      // Start from the day after the latest record
-      startDate = new Date(latestRecord.date);
-      startDate.setDate(startDate.getDate() + 1);
+    if (activeEmployees.length === 0) {
+      return {
+        success: true,
+        totalRecordsCreated: 0,
+        missingDates: [],
+        message: 'No active employees found'
+      };
     }
 
     const missingDates: string[] = [];
+    const createdDateSet = new Set<string>();
     let totalRecordsCreated = 0;
+    const errors: string[] = [];
 
-    // Generate records for each missing day
-    const currentDate = new Date(startDate);
-    while (currentDate < today) {
-      console.log(`Backfilling for date: ${currentDate.toDateString()}`);
-      
-      const result = await generateDailyTimeRecords(new Date(currentDate));
-      if (result.success) {
-        totalRecordsCreated += result.recordsCreated || 0;
-        if ((result.recordsCreated || 0) > 0) {
-          missingDates.push(currentDate.toDateString());
-        }
+    for (const employee of activeEmployees) {
+      // If joining date is missing, do not backfill historical dates for this employee.
+      if (!employee.dateOfJoining) {
+        continue;
       }
-      currentDate.setDate(currentDate.getDate() + 1);
+
+      const joiningDate = normalizeToStartOfDay(employee.dateOfJoining);
+      let startDate = joiningDate > TIMELINE_BASELINE_START ? joiningDate : TIMELINE_BASELINE_START;
+
+      if (startDate >= today) {
+        continue;
+      }
+
+      const existingRecords = await prisma.dailyTimeRecord.findMany({
+        where: {
+          userId: employee.id,
+          date: {
+            gte: startDate,
+            lt: today
+          }
+        },
+        select: { date: true }
+      });
+
+      const existingDateKeys = new Set(existingRecords.map((record) => getDateKey(record.date)));
+
+      const currentDate = new Date(startDate);
+      while (currentDate < today) {
+        const dateKey = getDateKey(currentDate);
+        if (!existingDateKeys.has(dateKey)) {
+          const result = await createTimelineRecordForEmployee(employee, currentDate, true);
+          if (result.error) {
+            errors.push(result.error);
+          } else if (result.created) {
+            totalRecordsCreated++;
+            createdDateSet.add(dateKey);
+          }
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
     }
+
+    missingDates.push(...Array.from(createdDateSet).sort());
 
     // Notify admin if we had to backfill missing dates
     if (missingDates.length > 0) {
@@ -360,6 +441,14 @@ export async function backfillMissingTimeRecords(): Promise<BackfillResult> {
         type: 'TIMELINE_BACKFILL_COMPLETED',
         title: 'Timeline Backfill Completed',
         message: `Backfilled ${totalRecordsCreated} timeline records for ${missingDates.length} missing dates: ${missingDates.join(', ')}`
+      });
+    }
+
+    if (errors.length > 0) {
+      await createAdminNotification({
+        type: 'TIMELINE_GENERATION_FAILED',
+        title: 'Timeline Backfill Partial Failure',
+        message: `Backfill created ${totalRecordsCreated} records with ${errors.length} errors. Errors: ${errors.join('; ')}`
       });
     }
 
@@ -401,49 +490,90 @@ export async function backfillMissingTimeRecords(): Promise<BackfillResult> {
  */
 export async function checkAndGenerateToday(): Promise<TimelineGenerationResult> {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Check if records already exist for today
-    const todayRecordsCount = await prisma.dailyTimeRecord.count({
+    const today = normalizeToStartOfDay(new Date());
+    const activeEmployees = await prisma.user.findMany({
       where: {
-        date: today
+        status: 'APPROVED',
+        role: 'EMPLOYEE'
+      },
+      include: {
+        branch: true
       }
     });
 
-    if (todayRecordsCount > 0) {
+    if (activeEmployees.length === 0) {
       return {
         success: true,
         recordsCreated: 0,
-        message: 'Timeline records already exist for today'
+        message: 'No active employees found'
       };
     }
 
-    // First try to backfill any missing dates
-    const backfillResult = await backfillMissingTimeRecords();
-    
-    if (!backfillResult.success) {
-      return {
-        success: false,
-        error: backfillResult.message
-      };
+    let totalCreated = 0;
+    const errors: string[] = [];
+
+    for (const employee of activeEmployees) {
+      // Missing joining date: only maintain today's timeline record.
+      if (!employee.dateOfJoining) {
+        const todayOnlyResult = await createTimelineRecordForEmployee(employee, today);
+        if (todayOnlyResult.error) {
+          errors.push(todayOnlyResult.error);
+        } else if (todayOnlyResult.created) {
+          totalCreated++;
+        }
+        continue;
+      }
+
+      // Joining date exists: create any missing records from max(joining date, 2026-01-01) until today.
+      const joiningDate = normalizeToStartOfDay(employee.dateOfJoining);
+      const startDate = joiningDate > TIMELINE_BASELINE_START ? joiningDate : TIMELINE_BASELINE_START;
+
+      if (startDate > today) {
+        continue;
+      }
+
+      const existingRecords = await prisma.dailyTimeRecord.findMany({
+        where: {
+          userId: employee.id,
+          date: {
+            gte: startDate,
+            lte: today
+          }
+        },
+        select: { date: true }
+      });
+
+      const existingDateKeys = new Set(existingRecords.map((record) => getDateKey(record.date)));
+
+      const currentDate = new Date(startDate);
+      while (currentDate <= today) {
+        const dateKey = getDateKey(currentDate);
+        if (!existingDateKeys.has(dateKey)) {
+          const result = await createTimelineRecordForEmployee(employee, currentDate, true);
+          if (result.error) {
+            errors.push(result.error);
+          } else if (result.created) {
+            totalCreated++;
+          }
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
     }
 
-    // Generate today's records if backfill didn't already do it
-    const todayRecordsCountAfterBackfill = await prisma.dailyTimeRecord.count({
-      where: { date: today }
-    });
-
-    if (todayRecordsCountAfterBackfill > 0) {
-      return {
-        success: true,
-        recordsCreated: backfillResult.totalRecordsCreated,
-        message: `Backfill created today's records. Total created: ${backfillResult.totalRecordsCreated}`
-      };
+    if (errors.length > 0) {
+      await createAdminNotification({
+        type: 'TIMELINE_GENERATION_FAILED',
+        title: 'Timeline Generation Partial Failure',
+        message: `Timeline maintenance created ${totalCreated} records with ${errors.length} errors. Errors: ${errors.join('; ')}`
+      });
     }
 
-    // Generate today's records
-    return await generateDailyTimeRecords(today);
+    return {
+      success: true,
+      recordsCreated: totalCreated,
+      message: `Timeline maintenance completed. Created ${totalCreated} records${errors.length > 0 ? ` with ${errors.length} errors` : ''}`
+    };
 
   } catch (error) {
     const errorMsg = `Failed to check and generate today's timeline: ${error}`;
