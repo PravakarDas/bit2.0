@@ -91,7 +91,7 @@ export function DesignationClient({
       // Filter initial data when hiding inactive
       setDesignations(initialDesignations.filter((d: Designation) => d.isActive));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [showInactive]);
 
   const loadData = async () => {

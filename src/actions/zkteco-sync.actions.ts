@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { zkTecoService } from "@/lib/services/zkteco.service";
-import { subDays, format, startOfDay } from "date-fns";
+import { format } from "date-fns";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { getDbUser } from "./user.actions";
@@ -171,9 +171,10 @@ export async function syncEmployeeTimeData(userId: string, date: Date): Promise<
 }
 
 /**
- * Sync ZKTeco data for a specific employee for the last N days
+ * Sync ZKTeco data for a specific employee for all timeline dates that still have missing actual fields
+ * Dates are processed in descending order (newest -> oldest).
  */
-export async function syncEmployeeTimeDataRange(userId: string, days: number = 4): Promise<SyncResult> {
+export async function syncEmployeeTimeDataRange(userId: string): Promise<SyncResult> {
   const result: SyncResult = {
     success: true,
     message: "",
@@ -183,18 +184,23 @@ export async function syncEmployeeTimeDataRange(userId: string, days: number = 4
   };
 
   try {
-    console.log(`Starting sync range for user ${userId}, ${days} days`);
-    
-    const today = new Date();
-    // Generate dates array using startOfDay to handle Bangladesh timezone correctly
-    const dates = Array.from({ length: days }, (_, i) => {
-      const date = subDays(today, i);  
-      const startOfDayDate = startOfDay(date); // This handles timezone correctly
-      console.log(`Date ${i}: ${date.toISOString()} -> startOfDay: ${startOfDayDate.toISOString()}`);
-      return startOfDayDate;
+    console.log(`Starting full missing-data sync for user ${userId}`);
+
+    const pendingRecords = await prisma.dailyTimeRecord.findMany({
+      where: {
+        userId,
+        OR: [
+          { actualCheckIn: null },
+          { actualCheckOut: null },
+          { actualBreakTime: null },
+        ],
+      },
+      select: { date: true },
+      orderBy: { date: "desc" },
     });
 
-    console.log(`Processing ${dates.length} dates for user ${userId}`);
+    const dates = pendingRecords.map((record) => record.date);
+    console.log(`Found ${dates.length} pending date(s) for user ${userId}`);
 
     for (const date of dates) {
       console.log(`\n=== Processing date: ${date.toISOString()} ===`);
@@ -217,7 +223,7 @@ export async function syncEmployeeTimeDataRange(userId: string, days: number = 4
     }
 
     if (result.syncedRecords === 0 && result.skippedRecords === 0) {
-      result.message = "No records processed";
+      result.message = "No timeline records with missing actual data found";
     } else if (result.syncedRecords > 0) {
       result.message = `Successfully synced ${result.syncedRecords} record(s), skipped ${result.skippedRecords} record(s)`;
     } else {
@@ -242,9 +248,10 @@ export async function syncEmployeeTimeDataRange(userId: string, days: number = 4
 }
 
 /**
- * Sync ZKTeco data for all employees with attendance IDs for the last N days
+ * Sync ZKTeco data for all employees with attendance IDs.
+ * For each employee, process all dates that still have null actual fields, newest first.
  */
-export async function syncAllEmployeesTimeData(days: number = 4): Promise<SyncResult> {
+export async function syncAllEmployeesTimeData(): Promise<SyncResult> {
   const result: SyncResult = {
     success: true,
     message: "",
@@ -285,12 +292,12 @@ export async function syncAllEmployeesTimeData(days: number = 4): Promise<SyncRe
       return result;
     }
 
-    console.log(`Starting ZKTeco sync for ${users.length} employees for last ${days} days`);
+    console.log(`Starting full ZKTeco missing-data sync for ${users.length} employees`);
 
     // Process each employee
     for (const user of users) {
       try {
-        const userResult = await syncEmployeeTimeDataRange(user.id!, days);
+        const userResult = await syncEmployeeTimeDataRange(user.id!);
         
         result.syncedRecords += userResult.syncedRecords;
         result.skippedRecords += userResult.skippedRecords;
@@ -323,7 +330,7 @@ export async function syncAllEmployeesTimeData(days: number = 4): Promise<SyncRe
 }
 
 /**
- * Manual sync function for UI - syncs specific user for today and past 3 days
+ * Manual sync function for UI - syncs all pending missing records for a specific user
  */
 export async function manualSyncEmployee(userId: string): Promise<SyncResult> {
   console.log(`Starting manual sync for user: ${userId}`);
@@ -351,7 +358,7 @@ export async function manualSyncEmployee(userId: string): Promise<SyncResult> {
       };
     }
 
-    const result = await syncEmployeeTimeDataRange(userId, 4); // Today + 3 days back
+    const result = await syncEmployeeTimeDataRange(userId);
     
     console.log(`Manual sync completed for user: ${userId}`, {
       success: result.success,

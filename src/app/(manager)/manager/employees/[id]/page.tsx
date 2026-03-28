@@ -130,6 +130,7 @@ export default function ManagerEmployeeDetailPage() {
             isAdmin={true}
             allowRoleEdit={false}
             allowPersonalEdit={false}
+            allowNameEdit={true}
             onSuccess={() => {
               setActiveTab("view");
               fetchData();

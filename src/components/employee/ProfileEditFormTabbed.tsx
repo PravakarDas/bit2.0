@@ -180,11 +180,12 @@ interface ProfileEditFormProps {
   isAdmin?: boolean;
   allowRoleEdit?: boolean;
   allowPersonalEdit?: boolean;
+  allowNameEdit?: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, allowRoleEdit = true, allowPersonalEdit = true, onSuccess, onCancel }: ProfileEditFormProps) {
+export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, allowRoleEdit = true, allowPersonalEdit = true, allowNameEdit = true, onSuccess, onCancel }: ProfileEditFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState("personal");
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -343,7 +344,6 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
 
       // Convert date strings to Date objects and construct proper data object
       const finalFormattedData = {
-        // Basic Identity
         firstName: data.firstName?.trim() || null,
         lastName: data.lastName?.trim() || null,
 
@@ -660,6 +660,44 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
                 </CardContent>
               </Card>
             )}
+
+            <fieldset disabled={!allowNameEdit} className={!allowNameEdit ? "opacity-70" : ""}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Identity</CardTitle>
+                <CardDescription>Update employee first and last name</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="First name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Last name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+            </fieldset>
 
             <fieldset disabled={!allowPersonalEdit} className={!allowPersonalEdit ? "opacity-70" : ""}>
             {/* Personal Information */}
