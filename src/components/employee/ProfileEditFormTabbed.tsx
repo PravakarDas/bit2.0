@@ -48,6 +48,10 @@ import {
 } from "lucide-react";
 
 const profileFormSchema = z.object({
+  // Identity
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+
   // Personal Information
   gender: z.string().optional(),
   dateOfBirth: z.string().optional(),
@@ -158,11 +162,12 @@ interface ProfileEditFormProps {
   isAdmin?: boolean;
   allowRoleEdit?: boolean;
   allowPersonalEdit?: boolean;
+  allowNameEdit?: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, allowRoleEdit = true, allowPersonalEdit = true, onSuccess, onCancel }: ProfileEditFormProps) {
+export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, allowRoleEdit = true, allowPersonalEdit = true, allowNameEdit = true, onSuccess, onCancel }: ProfileEditFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState("personal");
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -248,6 +253,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
       gender: user.gender || "",
       dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth).toISOString().split("T")[0] : "",
       bloodGroup: user.bloodGroup || "",
@@ -317,6 +324,9 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
 
       // Convert date strings to Date objects and construct proper data object
       const finalFormattedData = {
+        firstName: data.firstName?.trim() || null,
+        lastName: data.lastName?.trim() || null,
+
         // Personal Information
         gender: data.gender || null,
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
@@ -378,6 +388,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
       let result;
       if (isAdmin) {
         const managerRestrictedProfileData = {
+          firstName: finalFormattedData.firstName,
+          lastName: finalFormattedData.lastName,
           dateOfJoining: finalFormattedData.dateOfJoining,
           attendanceId: finalFormattedData.attendanceId,
           ...(isAdmin ? { workingDaysInMonth: workingDaysValue } : {}),
@@ -579,11 +591,49 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-sm text-muted-foreground">
-                    Personal information is read-only for managers.
+                    Personal information is read-only for managers except first and last name.
                   </p>
                 </CardContent>
               </Card>
             )}
+
+            <fieldset disabled={!allowNameEdit} className={!allowNameEdit ? "opacity-70" : ""}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Identity</CardTitle>
+                <CardDescription>Update employee first and last name</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="First name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Last name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+            </fieldset>
 
             <fieldset disabled={!allowPersonalEdit} className={!allowPersonalEdit ? "opacity-70" : ""}>
             {/* Personal Information */}
