@@ -69,6 +69,42 @@ function shouldRunForToday(
   return { shouldRun: true, todayKey };
 }
 
+async function isZKTecoBaseUrlReachable(baseUrl: string): Promise<boolean> {
+  const trimmedBaseUrl = baseUrl.trim();
+  if (!trimmedBaseUrl) {
+    return false;
+  }
+
+  const normalizedBaseUrl = trimmedBaseUrl.endsWith("/")
+    ? trimmedBaseUrl.slice(0, -1)
+    : trimmedBaseUrl;
+  const healthCheckUrl = `${normalizedBaseUrl}/api-token-auth/`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+
+  try {
+    const response = await fetch(healthCheckUrl, {
+      method: "OPTIONS",
+      signal: controller.signal,
+      cache: "no-store",
+    });
+
+    // Any non-5xx response confirms the endpoint is reachable.
+    return response.status < 500;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      console.warn(`ZKTeco availability check timed out after 8s: ${healthCheckUrl}`);
+      return false;
+    }
+
+    console.warn(`ZKTeco availability check failed for ${healthCheckUrl}:`, error);
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function startDailyTimelineCron() {
   const globalAny = global as unknown as Record<string, boolean>;
   if (globalAny[CRON_GLOBAL_FLAG]) {
@@ -110,6 +146,7 @@ function startZKTecoSyncCron() {
   globalAny[ZKTECO_CRON_GLOBAL_FLAG] = true;
 
   const timezone = process.env.APP_TIMEZONE;
+  const zkTecoBaseUrl = process.env.ZKTECO_BASE_URL || "";
   const targetHour = getValidTime(process.env.CRON_ZKTECO_HOUR, 11, 0, 23);
   const targetMinute = getValidTime(process.env.CRON_ZKTECO_MINUTE, 0, 0, 59);
   let lastRunDate = "";
@@ -121,10 +158,16 @@ function startZKTecoSyncCron() {
       return;
     }
 
-    lastRunDate = todayKey;
     try {
+      const isBaseUrlUp = await isZKTecoBaseUrlReachable(zkTecoBaseUrl);
+      if (!isBaseUrlUp) {
+        console.warn(`Skipping ZKTeco sync cron: base URL is down or unreachable (${zkTecoBaseUrl})`);
+        return;
+      }
+
+      lastRunDate = todayKey;
       console.log("Starting ZKTeco sync cron job...");
-      const result = await syncAllEmployeesTimeData(4); // Sync today + past 3 days
+      const result = await syncAllEmployeesTimeData(); // Sync all pending missing dates for every employee
       console.log("ZKTeco sync cron completed:", result.message);
       if (result.errors.length > 0) {
         console.warn("ZKTeco sync cron errors:", result.errors);
