@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertCircle, CalendarDays, Clock3, Filter, Search, Wallet } from "lucide-react";
+import { AlertCircle, CalendarDays, Clock3, Filter, Search, UserRoundCheck, Wallet } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,7 @@ interface LateCheckinDashboardProps {
     toDate: string;
     employeeSearch: string;
   };
+  hideTimeMetrics?: boolean;
 }
 
 const CHART_COLORS = [
@@ -55,6 +56,7 @@ export function LateCheckinDashboard({
   basePath,
   employeeDetailPath,
   initialFilters,
+  hideTimeMetrics = false,
 }: LateCheckinDashboardProps) {
   const [branchId, setBranchId] = useState(initialFilters.branchId || "all");
   const [fromDate, setFromDate] = useState(initialFilters.fromDate);
@@ -68,6 +70,26 @@ export function LateCheckinDashboard({
         Object.keys(row).filter((key) => key !== "month")
       )
     )
+  );
+
+  const lateCheckinCountByBranch = useMemo(() => {
+    const branchMap = new Map<string, number>();
+
+    for (const row of initialData.employeeRows) {
+      branchMap.set(row.branch, (branchMap.get(row.branch) ?? 0) + row.lateCheckinCount);
+    }
+
+    return Array.from(branchMap.entries())
+      .map(([branch, lateCheckinCount]) => ({
+        branch,
+        lateCheckinCount,
+      }))
+      .sort((a, b) => b.lateCheckinCount - a.lateCheckinCount);
+  }, [initialData.employeeRows]);
+
+  const affectedEmployees = useMemo(
+    () => initialData.employeeRows.filter((row) => row.lateCheckinCount > 0).length,
+    [initialData.employeeRows]
   );
 
   const applyFilters = () => {
@@ -157,10 +179,10 @@ export function LateCheckinDashboard({
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <Clock3 className="h-4 w-4" />
-              Total Late Minutes
+              {hideTimeMetrics ? <UserRoundCheck className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
+              {hideTimeMetrics ? "Affected Employees" : "Total Late Minutes"}
             </CardDescription>
-            <CardTitle>{initialData.summary.totalLateMinutes}</CardTitle>
+            <CardTitle>{hideTimeMetrics ? affectedEmployees : initialData.summary.totalLateMinutes}</CardTitle>
           </CardHeader>
         </Card>
 
@@ -188,29 +210,41 @@ export function LateCheckinDashboard({
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Monthly Late Minutes by Branch</CardTitle>
+            <CardTitle className="text-base">
+              {hideTimeMetrics ? "Late Check-In Count by Branch" : "Monthly Late Minutes by Branch"}
+            </CardTitle>
           </CardHeader>
           <CardContent className="h-80">
-            {initialData.monthlyLateByBranch.length === 0 ? (
+            {(hideTimeMetrics ? lateCheckinCountByBranch.length === 0 : initialData.monthlyLateByBranch.length === 0) ? (
               <EmptyState message="No late check-in records for selected filters." />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={initialData.monthlyLateByBranch}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  {monthlySeriesKeys.map((key, index) => (
-                    <Line
-                      key={key}
-                      type="monotone"
-                      dataKey={key}
-                      stroke={CHART_COLORS[index % CHART_COLORS.length]}
-                      strokeWidth={2}
-                    />
-                  ))}
-                </LineChart>
+                {hideTimeMetrics ? (
+                  <BarChart data={lateCheckinCountByBranch}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="branch" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="lateCheckinCount" fill={CHART_COLORS[0]} />
+                  </BarChart>
+                ) : (
+                  <LineChart data={initialData.monthlyLateByBranch}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    {monthlySeriesKeys.map((key, index) => (
+                      <Line
+                        key={key}
+                        type="monotone"
+                        dataKey={key}
+                        stroke={CHART_COLORS[index % CHART_COLORS.length]}
+                        strokeWidth={2}
+                      />
+                    ))}
+                  </LineChart>
+                )}
               </ResponsiveContainer>
             )}
           </CardContent>
@@ -254,7 +288,7 @@ export function LateCheckinDashboard({
                 <TableRow>
                   <TableHead>Employee Name</TableHead>
                   <TableHead>Branch</TableHead>
-                  <TableHead className="text-right">Total Late Minutes</TableHead>
+                  {!hideTimeMetrics ? <TableHead className="text-right">Total Late Minutes</TableHead> : null}
                   <TableHead className="text-right">Total Penalty Amount</TableHead>
                   <TableHead className="text-right">Late Check-In Count</TableHead>
                 </TableRow>
@@ -271,7 +305,7 @@ export function LateCheckinDashboard({
                       </Link>
                     </TableCell>
                     <TableCell>{row.branch}</TableCell>
-                    <TableCell className="text-right">{row.totalLateMinutes}</TableCell>
+                    {!hideTimeMetrics ? <TableCell className="text-right">{row.totalLateMinutes}</TableCell> : null}
                     <TableCell className="text-right">{currencyFormatter.format(row.totalPenaltyAmount)}</TableCell>
                     <TableCell className="text-right">{row.lateCheckinCount}</TableCell>
                   </TableRow>

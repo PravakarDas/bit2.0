@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,11 +28,7 @@ export function NotificationPanel({ userId }: NotificationPanelProps) {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        loadNotifications();
-    }, [userId]);
-
-    const loadNotifications = async () => {
+    const loadNotifications = useCallback(async () => {
         try {
             const data = await getEmployeeNotifications(userId);
             setNotifications(data as Notification[]);
@@ -42,7 +38,11 @@ export function NotificationPanel({ userId }: NotificationPanelProps) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [userId]);
+
+    useEffect(() => {
+        void loadNotifications();
+    }, [loadNotifications]);
 
     const handleMarkAsRead = async (notificationId: string) => {
         try {

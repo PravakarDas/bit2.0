@@ -13,6 +13,7 @@ import { EmployeeStatusSelect } from "@/components/admin/EmployeeStatusSelect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Clock, CheckCircle } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 export default async function ManagerEmployeesPage() {
     const [activeEmployees, pendingEmployees] = await Promise.all([
@@ -104,10 +105,12 @@ export default async function ManagerEmployeesPage() {
                                             <TableCell>
                                                 <div className="flex items-center space-x-2">
                                                     {employee.imageUrl && (
-                                                        <img 
-                                                            src={employee.imageUrl} 
+                                                        <Image
+                                                            src={employee.imageUrl}
                                                             alt={`${employee.firstName} ${employee.lastName}`}
                                                             className="w-8 h-8 rounded-full"
+                                                            width={32}
+                                                            height={32}
                                                         />
                                                     )}
                                                     <div>
@@ -172,10 +175,12 @@ export default async function ManagerEmployeesPage() {
                                         <TableCell>
                                             <div className="flex items-center space-x-2">
                                                 {employee.imageUrl && (
-                                                    <img 
-                                                        src={employee.imageUrl} 
+                                                    <Image
+                                                        src={employee.imageUrl}
                                                         alt={`${employee.firstName} ${employee.lastName}`}
                                                         className="w-8 h-8 rounded-full"
+                                                        width={32}
+                                                        height={32}
                                                     />
                                                 )}
                                                 <div>

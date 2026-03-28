@@ -75,7 +75,7 @@ export default async function EmployeeSalaryHistoryPage({ params }: { params: { 
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    history.map((record: any) => (
+                                    history.map((record) => (
                                         <TableRow key={record.id} className="hover:bg-muted/30 transition-colors">
                                             <TableCell className="font-medium">
                                                 {new Date(record.effectiveFrom).toLocaleDateString(undefined, {

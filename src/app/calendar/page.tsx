@@ -5,6 +5,8 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { Header } from "@/components/Header";
 import AvailabilityCalendar from "@/components/shared/AvailabilityCalendar";
 
+export const dynamic = "force-dynamic";
+
 export default async function CalendarPage() {
     const user = await getDbUser();
 

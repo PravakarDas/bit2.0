@@ -1,4 +1,4 @@
-import { format, startOfDay, endOfDay } from 'date-fns';
+import { format } from 'date-fns';
 
 export interface ZKTecoTransaction {
   id: number;

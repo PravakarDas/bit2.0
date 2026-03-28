@@ -26,6 +26,7 @@ import {
     ClipboardList,
     UserCog,
     Crown,
+    Plus,
 } from "lucide-react";
 
 import {
@@ -53,7 +54,6 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import logo from "@/assets/logo.gif";
 import { NotificationWithBadge } from "@/components/NotificationWithBadge";
-import { Button } from "@/components/ui/button";
 
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
@@ -62,7 +62,6 @@ const adminItems = [
     { title: "Role Management", url: "/admin/role-management", icon: UserCog },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
     { title: "Holiday Management", url: "/admin/holidays", icon: CalendarDays },
-    { title: "Loan", url: "/admin/loans", icon: Banknote },
     { title: "Medical", url: "/admin/medical", icon: Stethoscope },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
     { title: "Overtime Requests", url: "/admin/overtime-requests", icon: ClipboardList },
@@ -83,11 +82,18 @@ const payrollSubItems = [
 const requestSubItems = [
     { title: "Profile Requests", url: "/admin/profile-requests", icon: FileCheck },
     { title: "Leave Applications", url: "/admin/leave-applications", icon: History },
+    { title: "Timeline Modifications", url: "/admin/timeline-modification-requests", icon: Clock },
+];
+
+const loanSubItems = [
+    { title: "View All Loans", url: "/admin/loans", icon: Banknote },
+    { title: "Create Manual Loan", url: "/admin/loans/manual-create", icon: Plus },
 ];
 
 const employeeItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Late Check-Ins", url: "/late-checkins", icon: Clock },
+    { title: "Timeline Modify Requests", url: "/timeline-modification-requests", icon: ClipboardList },
     { title: "My Profile", url: "/profile", icon: UserCircle },
     { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
@@ -112,21 +118,23 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
     const router = useRouter();
     
     // Determine navigation items based on role
-    const items = role === "SUPERADMIN" 
-        ? adminItems 
-        : employeeItems;
+    const items = role === "SUPERADMIN"
+        ? adminItems
+        : employeeItems.filter((item) => !(isManager && item.url === "/late-checkins"));
     
     const [isOrganizationOpen, setIsOrganizationOpen] = React.useState(false);
     const [isEmployeeOpen, setIsEmployeeOpen] = React.useState(false);
     const [isPayrollOpen, setIsPayrollOpen] = React.useState(false);
     const [isRequestOpen, setIsRequestOpen] = React.useState(false);
+    const [isLoanOpen, setIsLoanOpen] = React.useState(false);
 
     // Auto-open menus based on current page
     React.useEffect(() => {
         const orgPaths = ["/admin/organization"];
         const employeePaths = ["/admin/employees", "/admin/archived-employees"];
         const payrollPaths = ["/admin/payroll", "/admin/payroll/processed"];
-        const requestPaths = ["/admin/profile-requests", "/admin/leave-applications"];
+        const requestPaths = ["/admin/profile-requests", "/admin/leave-applications", "/admin/timeline-modification-requests"];
+        const loanPaths = ["/admin/loans", "/admin/loans/manual-create"];
         
         if (orgPaths.some(path => pathname === path)) {
             setIsOrganizationOpen(true);
@@ -139,6 +147,9 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
         }
         if (requestPaths.some(path => pathname === path)) {
             setIsRequestOpen(true);
+        }
+        if (loanPaths.some(path => pathname === path || pathname.startsWith(path))) {
+            setIsLoanOpen(true);
         }
     }, [pathname]);
 
@@ -314,7 +325,7 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
                                     <SidebarMenuItem>
                                         <CollapsibleTrigger asChild>
                                             <SidebarMenuButton 
-                                                isActive={pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications"}
+                                                isActive={pathname === "/admin/profile-requests" || pathname === "/admin/leave-applications" || pathname === "/admin/timeline-modification-requests"}
                                                 tooltip="Request"
                                             >
                                                 <FileCheck className="h-4 w-4" />
@@ -343,19 +354,62 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
                                     </SidebarMenuItem>
                                 </Collapsible>
                             )}
+
+                            {/* Loan Collapsible Menu (Admin Only) */}
+                            {role === "SUPERADMIN" && (
+                                <Collapsible open={isLoanOpen} onOpenChange={setIsLoanOpen}>
+                                    <SidebarMenuItem>
+                                        <CollapsibleTrigger asChild>
+                                            <SidebarMenuButton 
+                                                isActive={pathname === "/admin/loans" || pathname === "/admin/loans/manual-create"}
+                                                tooltip="Loan"
+                                            >
+                                                <Banknote className="h-4 w-4" />
+                                                <span>Loan</span>
+                                                {isLoanOpen ? (
+                                                    <ChevronDown className="ml-auto h-4 w-4 transition-transform" />
+                                                ) : (
+                                                    <ChevronRight className="ml-auto h-4 w-4 transition-transform" />
+                                                )}
+                                            </SidebarMenuButton>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                            <SidebarMenuSub>
+                                                {loanSubItems.map((subItem) => (
+                                                    <SidebarMenuSubItem key={subItem.title}>
+                                                        <SidebarMenuSubButton asChild isActive={pathname === subItem.url}>
+                                                            <Link href={subItem.url}>
+                                                                <subItem.icon className="h-3.5 w-3.5" />
+                                                                <span className="text-xs">{subItem.title}</span>
+                                                            </Link>
+                                                        </SidebarMenuSubButton>
+                                                    </SidebarMenuSubItem>
+                                                ))}
+                                            </SidebarMenuSub>
+                                        </CollapsibleContent>
+                                    </SidebarMenuItem>
+                                </Collapsible>
+                            )}
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
             </SidebarContent>
             {/* Manager Switch Button */}
             {role === "EMPLOYEE" && isManager && (
-                <SidebarFooter className="p-4">
-                    <Button asChild variant="outline" size="sm" className="w-full">
-                        <Link href="/manager">
-                            <Crown className="h-4 w-4 mr-2" />
-                            Switch to Manager View
-                        </Link>
-                    </Button>
+                <SidebarFooter className="p-2">
+                    <SidebarMenu>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton 
+                                asChild 
+                                tooltip="Switch to Manager View"
+                            >
+                                <Link href="/manager">
+                                    <Crown className="h-4 w-4" />
+                                    <span>Switch to Manager View</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    </SidebarMenu>
                 </SidebarFooter>
             )}
         </Sidebar>

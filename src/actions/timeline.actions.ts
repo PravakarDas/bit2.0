@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { createAdminNotification } from "./notification.actions";
 import { Prisma } from "@prisma/client";
+import { getDbUser } from "./user.actions";
 
 /**
  * Convert time string (HH:MM) to minutes
@@ -607,7 +608,17 @@ export async function getTimelineRecords(
   }
 ) {
   try {
-    const where: any = {};
+    const actor = await getDbUser();
+    if (!actor) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const canAccessTimeline = actor.role === "SUPERADMIN" || actor.role === "HR" || (actor.role === "EMPLOYEE" && actor.isManager);
+    if (!canAccessTimeline) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const where: Prisma.DailyTimeRecordWhereInput = {};
     
     if (userId) {
       where.userId = userId;
@@ -710,6 +721,16 @@ export async function updateTimelineRecord(
   }
 ) {
   try {
+    const actor = await getDbUser();
+    if (!actor) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const canUpdateTimeline = actor.role === "SUPERADMIN" || actor.role === "HR" || (actor.role === "EMPLOYEE" && actor.isManager);
+    if (!canUpdateTimeline) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
     // First, get the current record to have all fields for calculations
     const currentRecord = await prisma.dailyTimeRecord.findUnique({
       where: { id: recordId }
@@ -719,7 +740,7 @@ export async function updateTimelineRecord(
       return { success: false, error: 'Timeline record not found' };
     }
 
-    const updateData: any = {
+    const updateData: Prisma.DailyTimeRecordUpdateInput = {
       updatedAt: new Date()
     };
 
@@ -758,9 +779,10 @@ export async function updateTimelineRecord(
 
       // Calculate official overtime/undertime (auto-calculated) if we have both required and actual active times
       const requiredActiveTime = updateData.requiredActiveTime || currentRecord.requiredActiveTime;
-      if (requiredActiveTime && updateData.actualActiveTime) {
+      const actualActiveTime = updateData.actualActiveTime;
+      if (typeof requiredActiveTime === 'string' && typeof actualActiveTime === 'string') {
         updateData.officialOvertimeundertime = calculateOvertimeUndertime(
-          updateData.actualActiveTime,
+          actualActiveTime,
           requiredActiveTime
         );
         
@@ -786,7 +808,42 @@ export async function updateTimelineRecord(
       }
     });
 
+    if (actor.role === "EMPLOYEE" && actor.isManager) {
+      await createAdminNotification({
+        type: 'SYSTEM_ALERT',
+        title: 'Manager Updated Timeline Record',
+        message: `Manager ${actor.firstName || ""} ${actor.lastName || ""} updated timeline for ${record.user.firstName || "Employee"} ${record.user.lastName || ""} on ${new Date(record.date).toLocaleDateString()}.`,
+        metadata: {
+          actorId: actor.id,
+          targetUserId: record.userId,
+          recordId: record.id,
+          action: 'TIMELINE_RECORD_UPDATED'
+        }
+      });
+
+      await prisma.timelineModificationActionLog.create({
+        data: {
+          actionType: "MANAGER_TIMELINE_EDIT",
+          actionDetails: `Manager updated timeline record on ${new Date(record.date).toDateString()}`,
+          actorId: actor.id,
+          targetUserId: record.userId,
+          dailyTimeRecordId: record.id,
+          metadata: {
+            updatedFields: {
+              requiredCheckIn: data.requiredCheckIn !== undefined,
+              requiredCheckOut: data.requiredCheckOut !== undefined,
+              requiredBreakTime: data.requiredBreakTime !== undefined,
+              actualCheckIn: data.actualCheckIn !== undefined,
+              actualCheckOut: data.actualCheckOut !== undefined,
+              actualBreakTime: data.actualBreakTime !== undefined,
+            }
+          }
+        }
+      });
+    }
+
     revalidatePath('/admin/timeline');
+    revalidatePath('/manager/timeline');
     revalidatePath('/dashboard');
 
     return { 
@@ -806,6 +863,16 @@ export async function updateTimelineRecord(
  */
 export async function deleteTimelineRecords(recordIds: string[]) {
   try {
+    const actor = await getDbUser();
+    if (!actor) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const canDeleteTimeline = actor.role === "SUPERADMIN" || actor.role === "HR" || (actor.role === "EMPLOYEE" && actor.isManager);
+    if (!canDeleteTimeline) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
     const deletedCount = await prisma.dailyTimeRecord.deleteMany({
       where: {
         id: { in: recordIds }
@@ -813,6 +880,7 @@ export async function deleteTimelineRecords(recordIds: string[]) {
     });
 
     revalidatePath('/admin/timeline');
+    revalidatePath('/manager/timeline');
 
     return {
       success: true,
@@ -848,7 +916,7 @@ export async function backfillTimelineCalculations() {
     let updatedCount = 0;
     
     for (const record of records) {
-      const updateData: any = {};
+      const updateData: Prisma.DailyTimeRecordUpdateInput = {};
       
       // Calculate required active time if we have required check-in and check-out
       if (record.requiredCheckIn && record.requiredCheckOut && !record.requiredActiveTime) {
@@ -872,7 +940,7 @@ export async function backfillTimelineCalculations() {
       const finalRequiredActiveTime = updateData.requiredActiveTime || record.requiredActiveTime;
       const finalActualActiveTime = updateData.actualActiveTime || record.actualActiveTime;
       
-      if (finalRequiredActiveTime && finalActualActiveTime && !record.officialOvertimeundertime) {
+      if (typeof finalRequiredActiveTime === 'string' && typeof finalActualActiveTime === 'string' && !record.officialOvertimeundertime) {
         updateData.officialOvertimeundertime = calculateOvertimeUndertime(
           finalActualActiveTime,
           finalRequiredActiveTime

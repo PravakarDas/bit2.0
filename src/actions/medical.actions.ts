@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
 import { getSystemSettings } from "./settings.actions";
-import { ClaimStatus } from "@prisma/client";
 import { validateAndSubmitClaim } from "@/lib/services/medical.service";
 import { createAdminNotification } from "./notification.actions";
 

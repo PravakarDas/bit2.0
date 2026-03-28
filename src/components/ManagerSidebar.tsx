@@ -5,12 +5,12 @@ import {
     LayoutDashboard,
     Users,
     CalendarDays,
-    Clock,
     FileCheck,
+    Clock,
+    ClipboardList,
     Archive,
     ChevronRight,
     ArrowLeft,
-    Crown,
     Stethoscope,
     Wallet,
     Timer,
@@ -38,18 +38,12 @@ import {
 } from "@/components/ui/collapsible";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Button } from "@/components/ui/button";
 
 const managerNavItems = [
     { 
         title: "Dashboard", 
         url: "/manager", 
         icon: LayoutDashboard,
-    },
-    {
-        title: "Late Check-Ins",
-        url: "/manager/late-checkins",
-        icon: Clock,
     },
     { 
         title: "Holiday Management", 
@@ -75,6 +69,16 @@ const managerNavItems = [
         title: "Overtime Requests",
         url: "/manager/overtime-requests",
         icon: Timer,
+    },
+    {
+        title: "Timeline",
+        url: "/manager/timeline",
+        icon: Clock,
+    },
+    {
+        title: "Timeline Modify Requests",
+        url: "/manager/timeline-modification-requests",
+        icon: ClipboardList,
     },
     {
         title: "Organization Settings",
@@ -174,13 +178,20 @@ export function ManagerSidebar() {
                 </SidebarGroup>
             </SidebarContent>
             
-            <SidebarFooter>
-                <Button asChild variant="outline" size="sm">
-                    <Link href="/dashboard">
-                        <ArrowLeft />
-                        Switch to Employee View
-                    </Link>
-                </Button>
+            <SidebarFooter className="p-2">
+                <SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton 
+                            asChild 
+                            tooltip="Switch to Employee View"
+                        >
+                            <Link href="/dashboard">
+                                <ArrowLeft className="h-4 w-4" />
+                                <span>Switch to Employee View</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                </SidebarMenu>
             </SidebarFooter>
         </Sidebar>
     );

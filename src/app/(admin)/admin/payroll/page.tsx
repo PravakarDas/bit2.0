@@ -1,12 +1,5 @@
 import { getPayrollAggregation } from "@/actions/payroll.actions";
 import { PayrollClient } from "@/components/admin/PayrollClient";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue
-} from "@/components/ui/select";
 import { PayrollSelectors } from "@/components/admin/PayrollSelectors";
 
 export default async function PayrollPage({
@@ -36,7 +29,7 @@ export default async function PayrollPage({
             </div>
 
             <PayrollClient
-                initialData={payrollData as any}
+                initialData={payrollData as unknown as Parameters<typeof PayrollClient>[0]["initialData"]}
                 month={selectedMonth}
                 year={selectedYear}
             />

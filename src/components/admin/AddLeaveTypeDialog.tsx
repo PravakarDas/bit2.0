@@ -169,7 +169,7 @@ export function AddLeaveTypeDialog({ branches }: AddLeaveTypeDialogProps) {
                                 </SelectContent>
                             </Select>
                             <p className="text-xs text-muted-foreground">
-                                "Reset Every Year" leaves will be auto-deducted for absences. "Fixed" leaves will not be auto-deducted.
+                                &quot;Reset Every Year&quot; leaves will be auto-deducted for absences. &quot;Fixed&quot; leaves will not be auto-deducted.
                             </p>
                         </div>
 

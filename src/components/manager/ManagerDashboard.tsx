@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { CalendarIcon, Filter, TrendingUp, Users, Building, UserCheck, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+    Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell
 } from "recharts";
 

@@ -7,10 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, Settings, AlertCircle, CheckCircle2, XCircle, FileText, Info } from "lucide-react";
+import { Calendar, Clock, Settings, AlertCircle, CheckCircle2, FileText, Info } from "lucide-react";
 import { toggleEmiCollection, skipEmiForMonth, recordManualPayment, getLoanActivityHistory } from "@/actions/loan.actions";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
+
+type LoanActivityHistory = Awaited<ReturnType<typeof getLoanActivityHistory>>;
+type LoanPayment = NonNullable<LoanActivityHistory["payments"]>[number];
+type LoanAuditLog = NonNullable<LoanActivityHistory["auditLogs"]>[number];
 
 interface EmiManageDialogProps {
   loan: {
@@ -44,7 +48,7 @@ export function EmiManageDialog({ loan }: EmiManageDialogProps) {
   const [manualReason, setManualReason] = useState("");
   const [emiEnabled, setEmiEnabled] = useState(true);
   const [disableReason, setDisableReason] = useState("");
-  const [activityHistory, setActivityHistory] = useState<any>(null);
+  const [activityHistory, setActivityHistory] = useState<LoanActivityHistory | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Calculate loan timeline information
@@ -138,7 +142,7 @@ export function EmiManageDialog({ loan }: EmiManageDialogProps) {
     try {
       const history = await getLoanActivityHistory(loan.id);
       setActivityHistory(history);
-    } catch (error) {
+    } catch {
       toast.error("Failed to load activity history");
     } finally {
       setLoading(false);
@@ -468,7 +472,7 @@ export function EmiManageDialog({ loan }: EmiManageDialogProps) {
                     <div>
                       <h4 className="font-medium mb-2">Recent Payments</h4>
                       <div className="space-y-2">
-                        {activityHistory.payments.slice(0, 5).map((payment: any) => (
+                        {activityHistory.payments.slice(0, 5).map((payment: LoanPayment) => (
                           <div key={payment.id} className="flex justify-between p-2 bg-muted rounded">
                             <div>
                               <span className="font-medium">{formatCurrency(payment.amount)}</span>
@@ -488,7 +492,7 @@ export function EmiManageDialog({ loan }: EmiManageDialogProps) {
                     <div>
                       <h4 className="font-medium mb-2">Admin Actions</h4>
                       <div className="space-y-2">
-                        {activityHistory.auditLogs.slice(0, 5).map((log: any) => (
+                        {activityHistory.auditLogs.slice(0, 5).map((log: LoanAuditLog) => (
                           <div key={log.id} className="p-2 bg-muted rounded">
                             <p className="text-sm">{log.changeReason}</p>
                             <span className="text-xs text-muted-foreground">

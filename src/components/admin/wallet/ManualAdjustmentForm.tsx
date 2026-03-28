@@ -40,8 +40,11 @@ const formSchema = z.object({
 export function ManualAdjustmentForm({ users }: ManualAdjustmentFormProps) {
     const [isPending, startTransition] = useTransition();
 
-    const form = useForm<z.infer<typeof formSchema>>({
-        resolver: zodResolver(formSchema) as any,
+    type FormInputValues = z.input<typeof formSchema>;
+    type FormOutputValues = z.output<typeof formSchema>;
+
+    const form = useForm<FormInputValues, unknown, FormOutputValues>({
+        resolver: zodResolver(formSchema),
         defaultValues: {
             userId: "",
             amount: 0,
@@ -49,7 +52,7 @@ export function ManualAdjustmentForm({ users }: ManualAdjustmentFormProps) {
         },
     });
 
-    function onSubmit(values: z.infer<typeof formSchema>) {
+    function onSubmit(values: FormOutputValues) {
         startTransition(async () => {
             try {
                 await adjustWalletBalance(values.userId, values.amount, values.description);
@@ -97,7 +100,15 @@ export function ManualAdjustmentForm({ users }: ManualAdjustmentFormProps) {
                         <FormItem>
                             <FormLabel>Amount (Tk)</FormLabel>
                             <FormControl>
-                                <Input type="number" placeholder="0.00" {...field} />
+                                <Input
+                                    type="number"
+                                    placeholder="0.00"
+                                    name={field.name}
+                                    ref={field.ref}
+                                    value={typeof field.value === "number" || typeof field.value === "string" ? field.value : ""}
+                                    onBlur={field.onBlur}
+                                    onChange={(e) => field.onChange(e.target.value)}
+                                />
                             </FormControl>
                             <FormDescription>
                                 Use negative value for deduction (e.g. -500).

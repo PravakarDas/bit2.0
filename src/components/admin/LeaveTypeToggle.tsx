@@ -24,7 +24,7 @@ export function LeaveTypeToggle({ leaveTypeId, isActive }: LeaveTypeToggleProps)
             } else {
                 toast.error(result.error || "Failed to update leave type status");
             }
-        } catch (error) {
+        } catch {
             toast.error("An error occurred while updating status");
         } finally {
             setLoading(false);

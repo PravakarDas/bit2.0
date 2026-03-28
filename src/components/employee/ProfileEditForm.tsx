@@ -24,7 +24,7 @@ import { submitProfileUpdateRequest, updateUserProfileByAdmin } from "@/actions/
 import { updateEmployeeProfile } from "@/actions/employee.actions";
 import { getActiveDepartments } from "@/actions/department.actions";
 import { getDesignationsByDepartment } from "@/actions/designation.actions";
-import { Loader2, UserCog, CalendarDays, DollarSign, User as UserIcon, Briefcase, Calendar } from "lucide-react";
+import { Loader2, User as UserIcon, Briefcase, Calendar } from "lucide-react";
 
 const profileFormSchema = z.object({
   // Personal Information
@@ -208,13 +208,31 @@ export function ProfileEditForm({ user, branches = [], isAdmin = false, onSucces
       }
 
       // Convert date strings to Date objects
-      const { workingDaysInMonth, role, branchId, departmentId, designationId, ...rest } = data;
+      const { role, branchId, departmentId, designationId, workingDaysInMonth, ...rest } = data;
       const formattedData = {
         ...rest,
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
         dateOfJoining: data.dateOfJoining ? new Date(data.dateOfJoining) : null,
         ...(isAdmin ? { workingDaysInMonth: workingDaysValue } : {}),
       };
+      void workingDaysInMonth;
+
+      // Check if any field has actually changed (for employees submitting requests)
+      if (!isAdmin) {
+        const hasChanges = Object.entries(formattedData).some(([key, value]) => {
+          const currentValue = user[key as keyof typeof user];
+          // Normalize for comparison
+          const userVal = currentValue === null || currentValue === undefined ? "" : String(currentValue);
+          const formVal = value === null || value === undefined ? "" : String(value);
+          return userVal !== formVal;
+        });
+
+        if (!hasChanges) {
+          toast.error("Nothing changed. Please modify at least one field before submitting.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
 
       let result;
       if (isAdmin) {

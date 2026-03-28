@@ -21,7 +21,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Plus, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { SalaryChangeReason } from "@prisma/client";
 
 export function UpdateSalaryDialog({ userId, onUpdate }: { userId: string, onUpdate?: () => void }) {
@@ -41,7 +41,7 @@ export function UpdateSalaryDialog({ userId, onUpdate }: { userId: string, onUpd
 
         setLoading(true);
         try {
-            const res = await updateEmployeeSalary({
+            await updateEmployeeSalary({
                 userId,
                 amount: Number(formData.amount),
                 reason: formData.reason,
@@ -52,8 +52,8 @@ export function UpdateSalaryDialog({ userId, onUpdate }: { userId: string, onUpd
             setIsOpen(false);
             setFormData({ amount: "", reason: "INCREMENT", effectiveFrom: new Date().toISOString().split('T')[0] });
             if (onUpdate) onUpdate();
-        } catch (error: any) {
-            toast.error(error.message || "Failed to update salary");
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to update salary");
         } finally {
             setLoading(false);
         }

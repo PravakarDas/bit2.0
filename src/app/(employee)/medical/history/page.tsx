@@ -16,8 +16,10 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
+type MedicalClaim = Awaited<ReturnType<typeof getMyMedicalClaims>>[number];
+
 export default function MedicalHistoryPage() {
-    const [claims, setClaims] = useState<any[]>([]);
+    const [claims, setClaims] = useState<MedicalClaim[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {

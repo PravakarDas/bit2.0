@@ -3,6 +3,8 @@ import { getDbUser } from "@/actions/user.actions";
 import { LoanDashboard } from "@/components/employee/LoanDashboard";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 export default async function LoansPage() {
     const user = await getDbUser();
     if (!user) redirect("/sign-in");
@@ -18,7 +20,7 @@ export default async function LoansPage() {
         .filter(l => l.status === "APPROVED" || l.status === "ACTIVE")
         .reduce((sum, l) => sum + l.remainingPrincipal, 0);
 
-    const salaryCap = user.baseSalary * 0.5;
+    const salaryCap = user.baseSalary * 12 * 0.5;
     const globalCap = 300000;
     const baseCap = Math.min(salaryCap, globalCap);
 
@@ -32,7 +34,7 @@ export default async function LoansPage() {
             </div>
 
             <LoanDashboard
-                loans={loans as any}
+                loans={loans}
                 maxEligibleAmount={maxEligibleAmount}
             />
         </div>

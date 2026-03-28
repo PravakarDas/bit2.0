@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { format } from "date-fns";
 import {
     Table,
@@ -13,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { LoanStatus } from "@prisma/client";
 
-interface Loan {
+export interface Loan {
     id: string;
     issuedAmount: number;
     remainingPrincipal: number;

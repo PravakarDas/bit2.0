@@ -48,7 +48,7 @@ import {
 } from "lucide-react";
 
 const profileFormSchema = z.object({
-  // Identity
+  // Basic Identity
   firstName: z.string().optional(),
   lastName: z.string().optional(),
 
@@ -104,6 +104,8 @@ const profileFormSchema = z.object({
   portfolioLink: z.string().url().optional().or(z.literal("")),
   githubLink: z.string().url().optional().or(z.literal("")),
   linkedinLink: z.string().url().optional().or(z.literal("")),
+  fiverrLink: z.string().url().optional().or(z.literal("")),
+  upworkLink: z.string().url().optional().or(z.literal("")),
 
   // Employee Document Links
   loanPapersLink: z.string().url().optional().or(z.literal("")),
@@ -152,6 +154,22 @@ interface UserLeaveEntitlement {
   leaveType: LeaveType;
 }
 
+interface AllowanceType {
+  id: string;
+  name: string;
+  valueType: string;
+  scope: string;
+  amount: number;
+  isActive: boolean;
+}
+
+interface UserAllowance {
+  id: string;
+  allowanceId: string;
+  isActive: boolean;
+  allowance: AllowanceType;
+}
+
 interface ProfileEditFormProps {
   user: User & {
     branch?: { id: string; name: string; location: string } | null;
@@ -182,8 +200,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
   const [customLeaveDays, setCustomLeaveDays] = useState<string>("");
   
   // Allowance Management State
-  const [allowanceTypes, setAllowanceTypes] = useState<any[]>([]);
-  const [userAllowances, setUserAllowances] = useState<any[]>([]);
+  const [allowanceTypes, setAllowanceTypes] = useState<AllowanceType[]>([]);
+  const [userAllowances, setUserAllowances] = useState<UserAllowance[]>([]);
   const [isAllowanceDialogOpen, setIsAllowanceDialogOpen] = useState(false);
   const [selectedAllowanceId, setSelectedAllowanceId] = useState<string>("");
 
@@ -290,6 +308,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
       portfolioLink: user.portfolioLink || "",
       githubLink: user.githubLink || "",
       linkedinLink: user.linkedinLink || "",
+      fiverrLink: user.fiverrLink || "",
+      upworkLink: user.upworkLink || "",
       loanPapersLink: user.loanPapersLink || "",
       nomineesPapersLink: user.nomineesPapersLink || "",
       emergencyContactLink: user.emergencyContactLink || "",
@@ -379,6 +399,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
         portfolioLink: data.portfolioLink || null,
         githubLink: data.githubLink || null,
         linkedinLink: data.linkedinLink || null,
+        fiverrLink: data.fiverrLink || null,
+        upworkLink: data.upworkLink || null,
         loanPapersLink: data.loanPapersLink || null,
         nomineesPapersLink: data.nomineesPapersLink || null,
         emergencyContactLink: data.emergencyContactLink || null,
@@ -393,6 +415,8 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
           dateOfJoining: finalFormattedData.dateOfJoining,
           attendanceId: finalFormattedData.attendanceId,
           ...(isAdmin ? { workingDaysInMonth: workingDaysValue } : {}),
+          fiverrLink: finalFormattedData.fiverrLink,
+          upworkLink: finalFormattedData.upworkLink,
           loanPapersLink: finalFormattedData.loanPapersLink,
           nomineesPapersLink: finalFormattedData.nomineesPapersLink,
           emergencyContactLink: finalFormattedData.emergencyContactLink,
@@ -431,7 +455,7 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
         toast.success(
           isAdmin
             ? "Profile updated successfully"
-            : "Profile update request submitted. Awaiting admin approval."
+            : "Profile update request submitted. Awaiting manager/admin approval."
         );
         if (onSuccess) onSuccess();
       } else {
@@ -587,11 +611,51 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
 
           {/* Personal Info Tab */}
           <TabsContent value="personal" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Name Information</CardTitle>
+                <CardDescription>
+                  {isAdmin
+                    ? "Update employee first and last name directly"
+                    : "Request first and last name update for approval"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="First name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Last name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
             {!allowPersonalEdit && (
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-sm text-muted-foreground">
-                    Personal information is read-only for managers except first and last name.
+                    Personal information is read-only for managers (except first and last name).
                   </p>
                 </CardContent>
               </Card>
@@ -1055,6 +1119,34 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
                       <FormLabel>LinkedIn</FormLabel>
                       <FormControl>
                         <Input type="url" placeholder="https://linkedin.com/in/username" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="fiverrLink"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fiverr</FormLabel>
+                      <FormControl>
+                        <Input type="url" placeholder="https://www.fiverr.com/username" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="upworkLink"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Upwork</FormLabel>
+                      <FormControl>
+                        <Input type="url" placeholder="https://www.upwork.com/freelancers/~username" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, Clock, TrendingUp, BarChart3, Calendar, Download } from "lucide-react";
-import { format } from "date-fns";
+import { CalendarDays, Clock, TrendingUp, BarChart3, Download } from "lucide-react";
 import EmployeeTimelineCalendar from "@/components/employee/EmployeeTimelineCalendar";
 import EmployeeTimelineTable from "@/components/employee/EmployeeTimelineTable";
 import EmployeeTimelineCharts from "@/components/employee/EmployeeTimelineCharts";
@@ -126,6 +125,7 @@ interface EmployeeTimelineClientProps {
 }
 
 export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeTimelineClientProps) {
+  void baseSalary;
   const [activeView, setActiveView] = useState<"calendar" | "table" | "charts">("calendar");
   const [timeRecords, setTimeRecords] = useState<TimeRecord[]>([]);
   const [summary, setSummary] = useState<TimelineSummary | null>(null);
@@ -151,11 +151,6 @@ export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeT
     { value: 11, label: "December" }
   ];
 
-  // Load timeline data
-  useEffect(() => {
-    loadTimelineData();
-  }, [selectedYear, selectedMonth]);
-
   // Recalculate summary when records change
   useEffect(() => {
     if (timeRecords.length > 0) {
@@ -174,7 +169,7 @@ export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeT
     }
   }, [timeRecords]);
 
-  const loadTimelineData = async () => {
+  const loadTimelineData = useCallback(async () => {
     setLoading(true);
     try {
       let startDate: Date | undefined;
@@ -207,12 +202,16 @@ export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeT
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedMonth, selectedYear, userId]);
+
+  // Load timeline data
+  useEffect(() => {
+    void loadTimelineData();
+  }, [loadTimelineData]);
 
   const getSummaryCards = () => {
     const isLoading = loading || !summary;
-    const safeValue = (value: any, fallback: any = 0) => isLoading ? fallback : value;
-    
+
     return [
       {
         title: "Working Days",

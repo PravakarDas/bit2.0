@@ -15,9 +15,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Archive, RotateCcw, Search } from "lucide-react";
+import { Archive, RotateCcw } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Archived Employees - Manager Portal",
@@ -55,164 +57,17 @@ interface ArchivedEmployee {
 }
 
 async function ArchivedEmployeesList() {
+  let archivedEmployees: ArchivedEmployee[] = [];
+  let hasError = false;
+
   try {
-    const archivedEmployees = await getArchivedEmployeesForManager();
-
-    if (archivedEmployees.length === 0) {
-      return (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <Archive className="h-16 w-16 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-700 mb-2">
-              No Archived Employees
-            </h3>
-            <p className="text-gray-500">
-              There are no archived employees in the system.
-            </p>
-          </CardContent>
-        </Card>
-      );
-    }
-
-    return (
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-gray-900">
-              <Archive className="h-5 w-5" />
-              Archived Employees ({archivedEmployees.length})
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="Search archived employees..."
-                className="w-64"
-                aria-label="Search archived employees"
-              />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Branch</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Archived Date</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {archivedEmployees.map((employee: ArchivedEmployee) => (
-                  <TableRow key={employee.id} className="hover:bg-gray-50/50">
-                    <TableCell>
-                      <div className="flex items-center space-x-3">
-                        <Avatar className="h-9 w-9">
-                          <AvatarImage src={employee.imageUrl || undefined} />
-                          <AvatarFallback className="bg-gray-100">
-                            {(employee.firstName?.charAt(0) || "?") + (employee.lastName?.charAt(0) || "")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {[employee.firstName, employee.lastName].filter(Boolean).join(" ") || "Unnamed Employee"}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {employee.email}
-                          </p>
-                          {employee.attendanceId && (
-                            <p className="text-xs text-gray-400">
-                              ID: {employee.attendanceId}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <Badge variant="outline">
-                          {employee.role}
-                        </Badge>
-                        {employee.isManager && (
-                          <Badge variant="secondary" className="text-xs">
-                            Manager
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">
-                          {employee.branch?.name || "No Branch"}
-                        </p>
-                        {employee.branch?.location && (
-                          <p className="text-sm text-muted-foreground">
-                            {employee.branch.location}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">
-                          {employee.department?.name || "No Department"}
-                        </p>
-                        {employee.designation?.name && (
-                          <p className="text-sm text-muted-foreground">
-                            {employee.designation.name}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="destructive">
-                        Archived
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="text-sm font-medium">
-                          {formatDate(employee.updatedAt)}
-                        </p>
-                        {employee.dateOfJoining && (
-                          <p className="text-xs text-muted-foreground">
-                            Joined: {formatDate(employee.dateOfJoining)}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/manager/employees/${employee.id}`}
-                          className="text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline"
-                        >
-                          View Details
-                        </Link>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex items-center gap-1"
-                          disabled // Managers cannot restore employees
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                          Restore
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-    );
+    archivedEmployees = await getArchivedEmployeesForManager();
   } catch (error) {
     console.error("Error fetching archived employees:", error);
+    hasError = true;
+  }
+
+  if (hasError) {
     return (
       <Card className="border-red-200 bg-red-50/50">
         <CardContent className="flex flex-col items-center justify-center py-16">
@@ -226,6 +81,160 @@ async function ArchivedEmployeesList() {
       </Card>
     );
   }
+
+  if (archivedEmployees.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-16">
+          <Archive className="h-16 w-16 text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-700 mb-2">
+            No Archived Employees
+          </h3>
+          <p className="text-gray-500">
+            There are no archived employees in the system.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-gray-900">
+            <Archive className="h-5 w-5" />
+            Archived Employees ({archivedEmployees.length})
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Search archived employees..."
+              className="w-64"
+              aria-label="Search archived employees"
+            />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Branch</TableHead>
+                <TableHead>Department</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Archived Date</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {archivedEmployees.map((employee: ArchivedEmployee) => (
+                <TableRow key={employee.id} className="hover:bg-gray-50/50">
+                  <TableCell>
+                    <div className="flex items-center space-x-3">
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={employee.imageUrl || undefined} />
+                        <AvatarFallback className="bg-gray-100">
+                          {(employee.firstName?.charAt(0) || "?") + (employee.lastName?.charAt(0) || "")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {[employee.firstName, employee.lastName].filter(Boolean).join(" ") || "Unnamed Employee"}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {employee.email}
+                        </p>
+                        {employee.attendanceId && (
+                          <p className="text-xs text-gray-400">
+                            ID: {employee.attendanceId}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline">
+                        {employee.role}
+                      </Badge>
+                      {employee.isManager && (
+                        <Badge variant="secondary" className="text-xs">
+                          Manager
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium">
+                        {employee.branch?.name || "No Branch"}
+                      </p>
+                      {employee.branch?.location && (
+                        <p className="text-sm text-muted-foreground">
+                          {employee.branch.location}
+                        </p>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium">
+                        {employee.department?.name || "No Department"}
+                      </p>
+                      {employee.designation?.name && (
+                        <p className="text-sm text-muted-foreground">
+                          {employee.designation.name}
+                        </p>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="destructive">
+                      Archived
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="text-sm font-medium">
+                        {formatDate(employee.updatedAt)}
+                      </p>
+                      {employee.dateOfJoining && (
+                        <p className="text-xs text-muted-foreground">
+                          Joined: {formatDate(employee.dateOfJoining)}
+                        </p>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/manager/employees/${employee.id}`}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline"
+                      >
+                        View Details
+                      </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-1"
+                        disabled
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Restore
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function ArchivedEmployeesLoading() {

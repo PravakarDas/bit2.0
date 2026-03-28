@@ -28,7 +28,6 @@ export async function getPendingLoansForManager() {
           lastName: true,
           email: true,
           phoneNumber: true,
-          baseSalary: true,
           walletBalance: true,
           dateOfJoining: true,
           department: {
@@ -217,12 +216,6 @@ export async function rejectLoanRequest(
       },
     });
 
-    // Create employee notification
-    const employee = await tx.user.findUnique({
-      where: { id: loan.userId },
-      select: { firstName: true, lastName: true },
-    });
-
     await tx.employeeNotification.create({
       data: {
         userId: loan.userId,
@@ -279,7 +272,7 @@ export async function verifyOvertimeRequest(
     const updatedRequest = await tx.overtimeRequest.update({
       where: { id: overtimeId },
       data: {
-        status: "MANAGER_VERIFIED" as any,
+        status: OvertimeRequestStatus.MANAGER_VERIFIED,
         managerVerifiedAt: new Date(),
         managerVerifiedById: user.id,
         managerComments: comments || null,
@@ -351,17 +344,11 @@ export async function rejectOvertimeRequest(
     const updatedRequest = await tx.overtimeRequest.update({
       where: { id: overtimeId },
       data: {
-        status: "MANAGER_REJECTED" as any,
+        status: OvertimeRequestStatus.MANAGER_REJECTED,
         managerVerifiedAt: new Date(),
         managerVerifiedById: user.id,
         managerRejectionReason: rejectionReason,
       },
-    });
-
-    // Create employee notification
-    const employee = await tx.user.findUnique({
-      where: { id: overtimeRequest.userId },
-      select: { firstName: true, lastName: true },
     });
 
     const overtimeDate = new Date(overtimeRequest.overtimeDate).toLocaleDateString();

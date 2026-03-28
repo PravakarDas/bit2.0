@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { LoanStatus, Role, TransactionType } from "@prisma/client";
+import { LoanStatus, TransactionType, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { calculateEMI, checkLoanEligibility, processLoanPayment } from "@/lib/services/loan.service";
 import { getDbUser } from "./user.actions";
@@ -147,12 +147,12 @@ export async function getLoanDetailsForApproval(loanId: string) {
         totalIssuedAmount,
         totalRepaidAmount,
         repaymentRatio,
-        salaryCap: loan.user.baseSalary * 0.5,  // 50% of salary (employee-side logic)
-        globalCap: 300000,                      // Hard limit (employee-side logic)
-        remainingSalaryCap: Math.max(0, (loan.user.baseSalary * 0.5) - totalExistingDebt),
+        salaryCap: loan.user.baseSalary * 12 * 0.5,  // 50% of yearly salary (employee-side logic)
+        globalCap: 300000,                           // Hard limit (employee-side logic)
+        remainingSalaryCap: Math.max(0, (loan.user.baseSalary * 12 * 0.5) - totalExistingDebt),
         remainingGlobalCap: Math.max(0, 300000 - totalExistingDebt),
         maxAllowedLoan: Math.min(
-            Math.max(0, (loan.user.baseSalary * 0.5) - totalExistingDebt),
+            Math.max(0, (loan.user.baseSalary * 12 * 0.5) - totalExistingDebt),
             Math.max(0, 300000 - totalExistingDebt)
         ),
         meetsRepaymentRequirement: repaymentRatio >= 0.75
@@ -526,9 +526,10 @@ export async function applyForLoan(data: {
 
         revalidatePath("/loans");
         return { success: true, loan };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Loan application failed:", error);
-        return { success: false, error: error.message || "Failed to submit application" };
+        const message = error instanceof Error ? error.message : "Failed to submit application";
+        return { success: false, error: message };
     }
 }
 
@@ -586,7 +587,6 @@ export async function processMonthlyEMIs(monthStr: string) {
 
             // Parse the month string to check grace period
             const [year, month] = monthStr.split('-').map(Number);
-            const currentProcessingDate = new Date(year, month - 1, 1);
             
             // Check if we're still in grace period
             if (loan.emiStartMonth && loan.emiStartYear) {
@@ -647,7 +647,7 @@ export async function processMonthlyEMIs(monthStr: string) {
                     data: {
                         userId: loan.userId,
                         amount: -emiAmount,
-                        type: "LOAN_DEDUCTION" as any,
+                        type: TransactionType.LOAN_DEDUCTION,
                         description: `EMI Deduction - ${loan.reason} (${monthStr})`
                     }
                 });
@@ -669,9 +669,10 @@ export async function processMonthlyEMIs(monthStr: string) {
 
             results.processed++;
 
-        } catch (error: any) {
+        } catch (error) {
             results.failed++;
-            results.errors.push(`Loan for ${loan.user.email}: ${error.message}`);
+            const message = error instanceof Error ? error.message : "Unknown error";
+            results.errors.push(`Loan for ${loan.user.email}: ${message}`);
         }
     }
 
@@ -683,7 +684,7 @@ export async function processMonthlyEMIs(monthStr: string) {
 /**
  * Helper function to recalculate and redistribute EMI across remaining months
  */
-async function recalculateEMI(loanId: string, tx: any) {
+async function recalculateEMI(loanId: string, tx: Prisma.TransactionClient) {
     const loan = await tx.loan.findUnique({
         where: { id: loanId },
         include: { emiState: true }

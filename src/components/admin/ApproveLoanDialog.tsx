@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { approveLoan, getLoanDetailsForApproval, declineLoan } from "@/actions/loan.actions";
 import { toast } from "sonner";
 import {
@@ -26,7 +26,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
@@ -68,8 +67,8 @@ interface LoanDetailsData {
             branch: { name: string } | null;
         };
     };
-    existingLoans: any[];
-    recentPayments: any[];
+    existingLoans: unknown[];
+    recentPayments: unknown[];
     financialMetrics: {
         totalExistingDebt: number;
         totalIssuedAmount: number;
@@ -100,7 +99,6 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
     const [loading, setLoading] = useState(false);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [loanDetails, setLoanDetails] = useState<LoanDetailsData | null>(null);
-    const [isDeclineDialogOpen, setIsDeclineDialogOpen] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
     const [formData, setFormData] = useState({
         issuedAmount: loan.issuedAmount,
@@ -110,13 +108,7 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
     });
 
     // Load detailed loan information when dialog opens
-    useEffect(() => {
-        if (isOpen && !loanDetails) {
-            loadLoanDetails();
-        }
-    }, [isOpen]);
-
-    const loadLoanDetails = async () => {
+    const loadLoanDetails = useCallback(async () => {
         setDetailsLoading(true);
         try {
             const details = await getLoanDetailsForApproval(loan.id);
@@ -136,7 +128,13 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
         } finally {
             setDetailsLoading(false);
         }
-    };
+    }, [loan.id]);
+
+    useEffect(() => {
+        if (isOpen && !loanDetails) {
+            void loadLoanDetails();
+        }
+    }, [isOpen, loanDetails, loadLoanDetails]);
 
     const handleApprove = async () => {
         if (!loanDetails) return;
@@ -167,7 +165,6 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
             await declineLoan(loan.id, declineReason);
             toast.success("Loan declined successfully");
             setIsOpen(false);
-            setIsDeclineDialogOpen(false);
             setDeclineReason('');
             onApprovalSuccess?.();
         } catch (error) {
@@ -179,7 +176,7 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
         }
     };
 
-    const getEmployeeName = (user: any) => {
+    const getEmployeeName = (user: LoanDetailsData["loan"]["user"]) => {
         return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
     };
 
@@ -273,7 +270,7 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
                                     <CardHeader>
                                         <CardTitle className="flex items-center gap-2">
                                             <Clock className="h-4 w-4" />
-                                            Employee's Request
+                                            Employee&apos;s Request
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent>
@@ -479,7 +476,7 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
                                                             <li>Amount exceeds maximum allowed limit</li>
                                                         )}
                                                         {!loanDetails.financialMetrics.meetsRepaymentRequirement && (
-                                                            <li>Employee hasn't repaid 75% of existing loans</li>
+                                                            <li>Employee hasn&#39;t repaid 75% of existing loans</li>
                                                         )}
                                                     </ul>
                                                 </div>

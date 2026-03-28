@@ -9,7 +9,6 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AddLeaveTypeDialog } from "@/components/admin/AddLeaveTypeDialog";
 import { EditLeaveTypeDialog } from "@/components/admin/EditLeaveTypeDialog";

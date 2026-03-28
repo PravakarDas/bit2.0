@@ -146,10 +146,10 @@ export async function checkLoanEligibility(userId: string, newLoanAmount: number
     }
 
     // 2. Financial Cap Calculation
-    // Rule: (50% of Salary) - (Current Remaining Debt)
+    // Rule: (50% of Yearly Salary) - (Current Remaining Debt)
     // AND GLOBAL CAP: 300,000 - (Current Remaining Debt)
 
-    const salaryCap = user.baseSalary * 0.5;
+    const salaryCap = user.baseSalary * 12 * 0.5;
     const globalCap = 300000;
 
     const remainingSalaryCap = Math.max(0, salaryCap - totalRemaining);

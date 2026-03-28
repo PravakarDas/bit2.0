@@ -3,6 +3,8 @@ import { getMyOvertimeRequests } from "@/actions/overtime-request.actions";
 import { OvertimeRequestsClient } from "./OvertimeRequestsClient";
 import { Skeleton } from "@/components/ui/skeleton";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Overtime Requests",
   description: "Request and track your overtime approvals",

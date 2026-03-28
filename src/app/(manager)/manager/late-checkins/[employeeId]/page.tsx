@@ -1,5 +1,6 @@
 import { EmployeeLateCheckinDetail } from "@/components/late-checkin/EmployeeLateCheckinDetail";
 import { getEmployeeLateCheckinData } from "@/actions/late-checkin.actions";
+import { redirect } from "next/navigation";
 
 export default async function ManagerEmployeeLateCheckinDetailPage({
   params,
@@ -8,6 +9,8 @@ export default async function ManagerEmployeeLateCheckinDetailPage({
   params: { employeeId: string };
   searchParams: { from?: string; to?: string };
 }) {
+  redirect("/unauthorized");
+
   const routeParams = await params;
   const queryParams = await searchParams;
 
@@ -22,10 +25,11 @@ export default async function ManagerEmployeeLateCheckinDetailPage({
   return (
     <EmployeeLateCheckinDetail
       title="Employee Late Check-In Details"
-      description="Detailed late check-in records with per-day deduction data."
+      description="Review employee late check-in occurrences and deduction summary by date."
       data={data}
       basePath={`/manager/late-checkins/${routeParams.employeeId}`}
       backHref="/manager/late-checkins"
+      hideTimeMetrics
       initialFilters={{
         fromDate,
         toDate,

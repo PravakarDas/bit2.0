@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { toggleEmiCarryForward, processPayroll, generatePayrollCSVData, getFailedEmployees } from "@/actions/payroll.actions";
+import { processPayroll, generatePayrollCSVData, getFailedEmployees } from "@/actions/payroll.actions";
 import {
     Table,
     TableBody,
@@ -50,6 +50,13 @@ interface PayrollAggregation {
     }[];
     totalLoanDeduction: number;
     netPay: number; // Base net pay without bonuses
+}
+
+interface PayrollCsvRow {
+    userId: string;
+    employeeName: string;
+    accountNumber: string;
+    netPayAmount: string;
 }
 
 export function PayrollClient({
@@ -102,7 +109,7 @@ export function PayrollClient({
         return adjustedNetPay + bonusAmount + emp.walletBalance;
     };
 
-    const generateAndDownloadCSV = (csvData: any[], filename: string) => {
+    const generateAndDownloadCSV = (csvData: PayrollCsvRow[], filename: string) => {
         const headers = ['Employee Name', 'Account Number', 'Net Pay Amount'];
         const csvContent = [
             headers.join(','),

@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Bell, Check, X, Eye, EyeOff, Trash2, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area"; 
-import { Separator } from "@/components/ui/separator";
 import type { AdminNotification } from "@prisma/client";
 import { NotificationStatus } from "@prisma/client";
 import {
@@ -37,7 +36,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { 
@@ -62,22 +60,22 @@ export function NotificationBell() {
   const [actionLoading, setActionLoading] = useState(false);
 
   // Fetch unread count
-  const fetchUnreadCount = async () => {
+  const fetchUnreadCount = useCallback(async () => {
     const result = await getUnreadCount();
     if (result.success) {
       setUnreadCount(result.count);
     }
-  };
+  }, []);
 
   // Fetch all notifications
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     setLoading(true);
     const result = await getAllNotifications(1, 50);
     if (result.success) {
       setNotifications(result.notifications);
     }
     setLoading(false);
-  };
+  }, []);
 
   // Handle notification actions
   const handleAction = async (notificationId: string, action: 'approve' | 'decline') => {
@@ -153,17 +151,35 @@ export function NotificationBell() {
 
   // Auto refresh every 30 seconds
   useEffect(() => {
-    fetchUnreadCount();
+    queueMicrotask(() => {
+      void fetchUnreadCount();
+    });
     const interval = setInterval(fetchUnreadCount, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchUnreadCount]);
 
   // Fetch notifications when sheet opens
   useEffect(() => {
-    if (isOpen) {
-      fetchNotifications();
+    if (!isOpen) {
+      return;
     }
-  }, [isOpen]);
+
+    let isActive = true;
+    const loadNotifications = async () => {
+      if (!isActive) {
+        return;
+      }
+      await fetchNotifications();
+    };
+
+    queueMicrotask(() => {
+      void loadNotifications();
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [isOpen, fetchNotifications]);
 
   // Check if notification allows actions
   const allowsActions = (type: NotificationType) => {

@@ -27,8 +27,8 @@ export function GlobalSettingsForm({ initialData }: GlobalSettingsFormProps) {
             if (res.success) {
                 toast.success("Global configurations saved successfully");
             }
-        } catch (error: any) {
-            toast.error(error.message || "Failed to update settings");
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to update settings");
         } finally {
             setSaving(false);
         }

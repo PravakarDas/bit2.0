@@ -1,7 +1,6 @@
 import { getEmployeeDashboardData } from "@/actions/dashboard.actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { SalaryChart } from "@/components/employee/SalaryChart";
-import { Badge } from "@/components/ui/badge";
 import {
     Wallet,
     Banknote,
@@ -19,7 +18,7 @@ export default async function EmployeeDashboardPage() {
         <div className="space-y-8">
             <div>
                 <h1 className="text-3xl font-bold tracking-tight text-indigo-950">Employee Dashboard</h1>
-                <p className="text-muted-foreground">Welcome back! Here's an overview of your financial standing.</p>
+                <p className="text-muted-foreground">Welcome back! Here&#39;s an overview of your financial standing.</p>
             </div>
 
             {/* Quick Stats */}
@@ -89,7 +88,7 @@ export default async function EmployeeDashboardPage() {
                                     No transactions found.
                                 </div>
                             ) : (
-                                data.recentTransactions.map((tx: any) => (
+                                data.recentTransactions.map((tx) => (
                                     <div key={tx.id} className="flex items-center justify-between group">
                                         <div className="flex items-center gap-3">
                                             <div className={`p-2 rounded-full ${tx.type.includes('CREDIT') || tx.type.includes('REIMBURSEMENT')

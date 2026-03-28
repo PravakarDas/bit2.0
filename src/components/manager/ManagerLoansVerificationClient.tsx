@@ -21,7 +21,6 @@ interface LoanRequest {
     lastName: string | null;
     email: string;
     phoneNumber: string | null;
-    baseSalary: number;
     walletBalance: number;
     dateOfJoining: Date | null;
     department: { name: string } | null;
@@ -125,7 +124,6 @@ export default function ManagerLoansVerificationClient() {
                   <p><strong>Amount:</strong> ৳{loan.issuedAmount.toLocaleString("en-BD")}</p>
                   <p><strong>Duration:</strong> {loan.totalMonths} months</p>
                   <p><strong>Grace Period:</strong> {loan.gracePeriodMonths} months</p>
-                  <p><strong>Salary:</strong> ৳{loan.user.baseSalary.toLocaleString("en-BD")}</p>
                 </div>
               </div>
 

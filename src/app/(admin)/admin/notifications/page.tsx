@@ -4,12 +4,10 @@ import { useState, useEffect } from "react";
 import {
   Bell,
   Check,
-  X,
   Eye,
   EyeOff,
   Trash2,
   MoreHorizontal,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,14 +19,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import type { AdminNotification } from "@prisma/client";
 import { NotificationStatus } from "@prisma/client";
@@ -39,7 +29,6 @@ import {
   markNotificationAsRead,
   markNotificationAsUnread,
   markAllNotificationsAsRead,
-  handleNotificationAction,
 } from "@/actions/notification.actions";
 
 /* ===============================
@@ -56,10 +45,6 @@ type NotificationMetadata = {
 export default function NotificationsPage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedNotification, setSelectedNotification] =
-    useState<AdminNotification | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
 
   /* ===============================
      Fetch Functions
@@ -73,7 +58,6 @@ export default function NotificationsPage() {
   };
 
   const fetchNotifications = async () => {
-    setLoading(true);
     const result = await getAllNotifications(1, 50);
     if (result.success) {
       setNotifications(result.notifications);
@@ -83,7 +67,6 @@ export default function NotificationsPage() {
         ).length
       );
     }
-    setLoading(false);
   };
 
   /* ===============================
@@ -136,38 +119,15 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleAction = async (
-    notificationId: string,
-    action: "approve" | "decline",
-    adminNote: string = ""
-  ) => {
-    setActionLoading(true);
-
-    const result = await handleNotificationAction(
-      notificationId,
-      action,
-      adminNote
-    );
-
-    if (result.success) {
-      await fetchNotifications();
-      await fetchUnreadCount();
-      setSelectedNotification(null);
-      toast.success(`Request ${action}d successfully`);
-    } else {
-      toast.error(result.error || `Failed to ${action} request`);
-    }
-
-    setActionLoading(false);
-  };
-
   /* ===============================
      Effects
   ================================ */
 
   useEffect(() => {
-    fetchNotifications();
-    fetchUnreadCount();
+    void (async () => {
+      await fetchNotifications();
+      await fetchUnreadCount();
+    })();
     const interval = setInterval(fetchUnreadCount, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -175,28 +135,6 @@ export default function NotificationsPage() {
   /* ===============================
      Helpers
   ================================ */
-
-  const allowsActions = (notification: AdminNotification) => {
-    const actionableTypes = [
-      "PROFILE_UPDATE_REQUEST",
-      "LEAVE_APPLICATION_PENDING",
-      "LOAN_APPLICATION_PENDING",
-      "WALLET_REQUEST_PENDING",
-    ];
-
-    const metadata =
-      notification.metadata as NotificationMetadata | null;
-
-    if (!actionableTypes.includes(notification.type as string)) return false;
-
-    if (
-      metadata?.processed === true ||
-      metadata?.status === "PROCESSED"
-    )
-      return false;
-
-    return true;
-  };
 
   /* ===============================
      UI

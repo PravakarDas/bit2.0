@@ -2,8 +2,26 @@
 
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { Role, UserStatus } from "@prisma/client";
+import { Prisma, Role, UserStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+
+function isMissingProfessionalLinksColumn(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+        return false;
+    }
+
+    if (error.code !== "P2022") {
+        return false;
+    }
+
+    const column = (error.meta as { column?: string } | undefined)?.column || "";
+    return column.includes("User.fiverrLink") || column.includes("User.upworkLink");
+}
+
+async function ensureProfessionalLinksColumns() {
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "fiverrLink" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "upworkLink" TEXT');
+}
 
 /**
  * syncUserWithDb:
@@ -91,6 +109,18 @@ export async function syncUserWithDb() {
         });
     } catch (error) {
         console.error("Error syncing user with database:", error);
+
+        if (isMissingProfessionalLinksColumn(error)) {
+            try {
+                await ensureProfessionalLinksColumns();
+                return await prisma.user.findUnique({
+                    where: { clerkId: authUser.id },
+                });
+            } catch (repairError) {
+                console.error("Failed to auto-repair professional links columns:", repairError);
+            }
+        }
+
         // Fallback: final attempt to fetch by clerkId
         return await prisma.user.findUnique({
             where: { clerkId: authUser.id },

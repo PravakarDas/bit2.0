@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { updateBranch } from "@/actions/branch.actions";
 import { toast } from "sonner";
 import {
@@ -34,16 +34,18 @@ interface EditBranchDialogProps {
 }
 
 export function EditBranchDialog({ branch }: EditBranchDialogProps) {
+    const getInitialFormData = () => ({
+        name: branch.name,
+        location: branch.location,
+        checkInTime: branch.checkInTime || "09:00",
+        checkOutTime: branch.checkOutTime || "18:00",
+        breakDuration: branch.breakDuration || "01:00",
+        weeklyOffDays: branch.weeklyOffDays || ["SUNDAY"]
+    });
+
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        name: "",
-        location: "",
-        checkInTime: "09:00",
-        checkOutTime: "18:00",
-        breakDuration: "01:00",
-        weeklyOffDays: ["SUNDAY"] as string[]
-    });
+    const [formData, setFormData] = useState(getInitialFormData);
 
     const weekDays = [
         { value: "MONDAY", label: "Monday" },
@@ -55,19 +57,12 @@ export function EditBranchDialog({ branch }: EditBranchDialogProps) {
         { value: "SUNDAY", label: "Sunday" }
     ];
 
-    // Initialize form with branch data when dialog opens
-    useEffect(() => {
-        if (isOpen) {
-            setFormData({
-                name: branch.name,
-                location: branch.location,
-                checkInTime: branch.checkInTime || "09:00",
-                checkOutTime: branch.checkOutTime || "18:00",
-                breakDuration: branch.breakDuration || "01:00",
-                weeklyOffDays: branch.weeklyOffDays || ["SUNDAY"]
-            });
+    const handleOpenChange = (open: boolean) => {
+        setIsOpen(open);
+        if (open) {
+            setFormData(getInitialFormData());
         }
-    }, [isOpen, branch]);
+    };
 
     const handleWeeklyOffChange = (day: string, checked: boolean) => {
         if (checked) {
@@ -101,7 +96,7 @@ export function EditBranchDialog({ branch }: EditBranchDialogProps) {
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
                 <Button variant="ghost" size="sm">
                     <Edit2 className="h-4 w-4" />

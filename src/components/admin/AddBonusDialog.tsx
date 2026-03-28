@@ -62,7 +62,7 @@ export function AddBonusDialog({ branches }: { branches: Branch[] }) {
             setIsOpen(false);
             setFormData({ name: "", type: "FIXED", value: 0, branchIds: [] });
         } else {
-            toast.error((res as any).error || "Failed to create bonus type");
+            toast.error(("error" in res && typeof res.error === "string" ? res.error : undefined) || "Failed to create bonus type");
         }
         setLoading(false);
     };

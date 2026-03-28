@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,17 +30,19 @@ type UserWithBranch = User & {
   } | null;
 };
 
+type BranchItem = Awaited<ReturnType<typeof getActiveBranches>>[number];
+
 export default function AdminEmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const userId = params.id as string;
   
   const [user, setUser] = useState<UserWithBranch | null>(null);
-  const [branches, setBranches] = useState<any[]>([]);
+  const [branches, setBranches] = useState<BranchItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("view");
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [result, branchesResult] = await Promise.all([
@@ -61,11 +63,11 @@ export default function AdminEmployeeDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
-    fetchData();
-  }, [userId]);
+    void fetchData();
+  }, [fetchData]);
 
   if (isLoading) {
     return (

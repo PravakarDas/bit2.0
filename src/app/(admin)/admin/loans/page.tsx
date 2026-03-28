@@ -86,7 +86,7 @@ export default function AdminLoansPage() {
         loadLoans();
     };
 
-    const getEmployeeName = (user: any) => {
+    const getEmployeeName = (user: Loan["user"]) => {
         return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
     };
 
@@ -273,7 +273,11 @@ export default function AdminLoansPage() {
                                             </TableCell>
                                             <TableCell className="text-right pr-6">
                                                 <ApproveLoanDialog 
-                                                    loan={loan as any} 
+                                                    loan={{
+                                                        id: loan.id,
+                                                        issuedAmount: loan.issuedAmount,
+                                                        user: { email: loan.user.email }
+                                                    }}
                                                     onApprovalSuccess={handleApprovalSuccess}
                                                 />
                                             </TableCell>

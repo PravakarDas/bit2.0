@@ -15,10 +15,23 @@ interface FilterOptions {
   employeeName: string;
 }
 
+interface BranchOption {
+  id: string;
+  name: string;
+}
+
+interface UserOption {
+  id: string;
+  branchId: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+}
+
 interface TimelineFiltersProps {
   filters: FilterOptions;
-  branches: any[];
-  users: any[];
+  branches: BranchOption[];
+  users: UserOption[];
   onFilterChange: (key: keyof FilterOptions, value: string) => void;
   onApplyFilters: () => void;
   onClearFilters: () => void;
