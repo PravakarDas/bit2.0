@@ -114,13 +114,41 @@ export async function markNotificationAsUnread(notificationId: string) {
 }
 
 // Get all notifications (with pagination)
-export async function getAllNotifications(page = 1, limit = 20, filter?: 'READ' | 'UNREAD'): Promise<
+export async function getAllNotifications(
+  page = 1,
+  limit = 20,
+  filter?: 'READ' | 'UNREAD',
+  fromDate?: string,
+  toDate?: string
+): Promise<
   | { success: true; notifications: AdminNotification[]; pagination: { current: number; total: number; count: number } }
   | { success: false; error: string }
 > {
   try {
     const skip = (page - 1) * limit;
-    const where = filter ? { status: filter } : {};
+    const where: Prisma.AdminNotificationWhereInput = {};
+
+    if (filter) {
+      where.status = filter;
+    }
+
+    if (fromDate || toDate) {
+      const createdAtFilter: Prisma.DateTimeFilter = {};
+
+      if (fromDate) {
+        const parsedFromDate = new Date(fromDate);
+        parsedFromDate.setHours(0, 0, 0, 0);
+        createdAtFilter.gte = parsedFromDate;
+      }
+
+      if (toDate) {
+        const parsedToDate = new Date(toDate);
+        parsedToDate.setHours(23, 59, 59, 999);
+        createdAtFilter.lte = parsedToDate;
+      }
+
+      where.createdAt = createdAtFilter;
+    }
     
     const [notifications, total] = await Promise.all([
       prisma.adminNotification.findMany({
@@ -137,7 +165,7 @@ export async function getAllNotifications(page = 1, limit = 20, filter?: 'READ' 
       notifications, 
       pagination: {
         current: page,
-        total: Math.ceil(total / limit),
+        total: Math.max(1, Math.ceil(total / limit)),
         count: total
       }
     };
