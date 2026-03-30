@@ -28,6 +28,10 @@ async function ensureProfessionalLinksColumns() {
  * Fetches the current user from Clerk and ensures they exist in our PostgreSQL database.
  * Hardcoded Rule: pravakar459@gmail.com becomes SUPERADMIN / APPROVED.
  * Others become EMPLOYEE / PENDING.
+ * 
+ * IMPORTANT: Names are ONLY fetched from Clerk during initial registration.
+ * Once a user exists in the database, names are never updated from Clerk to preserve
+ * the original data and prevent clearing if Clerk has blank names.
  */
 export async function syncUserWithDb() {
     const authUser = await currentUser();
@@ -42,7 +46,7 @@ export async function syncUserWithDb() {
         const role = isSuperAdmin ? Role.SUPERADMIN : Role.EMPLOYEE;
         const status = isSuperAdmin ? UserStatus.APPROVED : UserStatus.PENDING;
 
-        // Extract name data from Clerk
+        // Extract name data from Clerk (ONLY used for initial creation)
         const firstName = authUser.firstName || null;
         const lastName = authUser.lastName || null;
         const imageUrl = authUser.imageUrl || null;
@@ -53,14 +57,12 @@ export async function syncUserWithDb() {
         });
 
         if (user) {
-            // Update email and name if they changed in Clerk
-            if (user.email !== email || user.firstName !== firstName || user.lastName !== lastName || user.imageUrl !== imageUrl) {
+            // Update only email and imageUrl if they changed (NOT names - they stay as originally set)
+            if (user.email !== email || user.imageUrl !== imageUrl) {
                 user = await prisma.user.update({
                     where: { id: user.id },
                     data: { 
                         email,
-                        firstName,
-                        lastName,
                         imageUrl
                     },
                 });
@@ -78,14 +80,13 @@ export async function syncUserWithDb() {
         });
 
         if (user) {
-            // "Claim" the user with the new clerkId and update name
+            // "Claim" the user with the new clerkId, BUT preserve existing name and only update imageUrl
             const updatedUser = await prisma.user.update({
                 where: { id: user.id },
                 data: { 
                     clerkId: authUser.id,
-                    firstName,
-                    lastName,
                     imageUrl
+                    // NOTE: firstName and lastName are NOT updated here to preserve original data
                 },
             });
             // Revalidate paths to update UI immediately
@@ -100,8 +101,8 @@ export async function syncUserWithDb() {
             data: {
                 clerkId: authUser.id,
                 email: email,
-                firstName,
-                lastName,
+                firstName,   // Only set on initial creation
+                lastName,    // Only set on initial creation
                 imageUrl,
                 role: role,
                 status: status,

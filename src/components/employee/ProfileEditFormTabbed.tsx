@@ -661,7 +661,7 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
               </Card>
             )}
 
-            <fieldset disabled={!allowNameEdit} className={!allowNameEdit ? "opacity-70" : ""}>
+            {/* <fieldset disabled={!allowNameEdit} className={!allowNameEdit ? "opacity-70" : ""}>
             <Card>
               <CardHeader>
                 <CardTitle>Identity</CardTitle>
@@ -697,7 +697,7 @@ export function ProfileEditFormTabbed({ user, branches = [], isAdmin = false, al
                 />
               </CardContent>
             </Card>
-            </fieldset>
+            </fieldset> */}
 
             <fieldset disabled={!allowPersonalEdit} className={!allowPersonalEdit ? "opacity-70" : ""}>
             {/* Personal Information */}
