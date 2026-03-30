@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Calendar, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 
 interface TimeRecord {
   id: string;
@@ -204,9 +205,13 @@ export default function TimelineCalendarView({
                       <div key={record.id} className="border rounded-lg p-3 space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="font-medium text-sm">
-                            {record.user.firstName && record.user.lastName 
-                              ? `${record.user.firstName} ${record.user.lastName}`
-                              : record.user.email}
+                            <EmployeeProfileLink
+                              employeeId={record.user.id}
+                              name={record.user.firstName && record.user.lastName
+                                ? `${record.user.firstName} ${record.user.lastName}`
+                                : undefined}
+                              email={record.user.email}
+                            />
                           </div>
                           {(() => {
                             switch (record.status) {

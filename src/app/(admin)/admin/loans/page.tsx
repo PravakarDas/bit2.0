@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { ProcessEMIButton } from "@/components/admin/loans/ProcessEMIButton";
 import { EmiManageDialog } from "@/components/admin/EmiManageDialog";
+import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 
 interface Loan {
     id: string;
@@ -175,7 +176,11 @@ export default function AdminLoansPage() {
                                         <TableRow key={loan.id} className="hover:bg-muted/30 transition-colors">
                                             <TableCell className="font-medium">
                                                 <div className="flex flex-col">
-                                                    <span>{getEmployeeName(loan.user)}</span>
+                                                    <EmployeeProfileLink
+                                                        employeeId={loan.user.id}
+                                                        name={getEmployeeName(loan.user)}
+                                                        email={loan.user.email}
+                                                    />
                                                     <span className="text-xs text-muted-foreground">{loan.user.email}</span>
                                                 </div>
                                             </TableCell>
@@ -249,7 +254,11 @@ export default function AdminLoansPage() {
                                         <TableRow key={loan.id} className="hover:bg-muted/30 transition-colors">
                                             <TableCell className="font-medium">
                                                 <div className="flex flex-col">
-                                                    <span>{getEmployeeName(loan.user)}</span>
+                                                    <EmployeeProfileLink
+                                                        employeeId={loan.user.id}
+                                                        name={getEmployeeName(loan.user)}
+                                                        email={loan.user.email}
+                                                    />
                                                     <span className="text-xs text-muted-foreground">{loan.user.email}</span>
                                                 </div>
                                             </TableCell>
@@ -315,7 +324,11 @@ export default function AdminLoansPage() {
                                         <TableRow key={loan.id} className="hover:bg-muted/30 transition-colors">
                                             <TableCell className="font-medium">
                                                 <div className="flex flex-col">
-                                                    <span>{getEmployeeName(loan.user)}</span>
+                                                    <EmployeeProfileLink
+                                                        employeeId={loan.user.id}
+                                                        name={getEmployeeName(loan.user)}
+                                                        email={loan.user.email}
+                                                    />
                                                     <span className="text-xs text-muted-foreground">{loan.user.email}</span>
                                                 </div>
                                             </TableCell>
@@ -388,7 +401,12 @@ export default function AdminLoansPage() {
                                         <TableRow key={loan.id} className="hover:bg-muted/30">
                                             <TableCell>
                                                 <div className="flex flex-col">
-                                                    <span className="font-medium">{getEmployeeName(loan.user)}</span>
+                                                    <EmployeeProfileLink
+                                                        employeeId={loan.user.id}
+                                                        name={getEmployeeName(loan.user)}
+                                                        email={loan.user.email}
+                                                        className="font-medium"
+                                                    />
                                                     <span className="text-sm text-muted-foreground">{loan.user.email}</span>
                                                 </div>
                                             </TableCell>

@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { changeUserRole, toggleUserArchiveStatus, toggleManagerStatus } from "@/actions/user.actions";
 import { Role, UserStatus } from "@prisma/client";
+import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 
 interface User {
     id: string;
@@ -416,7 +417,12 @@ export function RoleManagementClient({ users }: RoleManagementClientProps) {
                                             </td>
                                             <td className="p-2">
                                                 <div>
-                                                    <div className="font-medium">{user.name}</div>
+                                                    <EmployeeProfileLink
+                                                        employeeId={user.id}
+                                                        name={user.name}
+                                                        email={user.email}
+                                                        className="font-medium"
+                                                    />
                                                     <div className="text-sm text-gray-500">{user.email}</div>
                                                 </div>
                                             </td>

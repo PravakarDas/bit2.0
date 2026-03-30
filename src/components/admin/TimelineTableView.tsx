@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { updateTimelineRecord } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
+import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 
 interface TimeRecord {
   id: string;
@@ -248,9 +249,13 @@ export default function TimelineTableView({
                       <User className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <div className="font-medium">
-                          {record.user.firstName && record.user.lastName 
-                            ? `${record.user.firstName} ${record.user.lastName}`
-                            : record.user.email}
+                          <EmployeeProfileLink
+                            employeeId={record.user.id}
+                            name={record.user.firstName && record.user.lastName
+                              ? `${record.user.firstName} ${record.user.lastName}`
+                              : undefined}
+                            email={record.user.email}
+                          />
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {record.user.email}
@@ -334,9 +339,13 @@ export default function TimelineTableView({
                         </DialogHeader>
                         <div className="space-y-4">
                           <div className="text-sm text-muted-foreground">
-                            {record.user.firstName && record.user.lastName 
-                              ? `${record.user.firstName} ${record.user.lastName}`
-                              : record.user.email} - {format(new Date(record.date), 'MMM dd, yyyy')}
+                            <EmployeeProfileLink
+                              employeeId={record.user.id}
+                              name={record.user.firstName && record.user.lastName
+                                ? `${record.user.firstName} ${record.user.lastName}`
+                                : undefined}
+                              email={record.user.email}
+                            /> - {format(new Date(record.date), 'MMM dd, yyyy')}
                           </div>
                           
                           <div className="grid gap-4">

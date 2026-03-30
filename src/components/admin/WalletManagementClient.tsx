@@ -46,6 +46,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ExternalLink, Check, X, TrendingUp, Wallet, Clock, DollarSign, Users as UsersIcon, Search, Plus, Minus } from "lucide-react";
 import { format } from "date-fns";
+import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 
 interface WalletRequest {
     id: string;
@@ -364,7 +365,11 @@ export default function WalletManagementClient({
                                     <div key={transaction.id} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
                                         <div className="space-y-1">
                                             <p className="text-sm font-medium">
-                                                {transaction.user.firstName} {transaction.user.lastName}
+                                                <EmployeeProfileLink
+                                                    employeeId={transaction.user.id}
+                                                    name={`${transaction.user.firstName || ""} ${transaction.user.lastName || ""}`}
+                                                    email={transaction.user.email}
+                                                />
                                             </p>
                                             <p className="text-xs text-muted-foreground">{transaction.description}</p>
                                             <p className="text-xs text-muted-foreground">
@@ -419,7 +424,11 @@ export default function WalletManagementClient({
                                                 <TableCell>
                                                     <div className="flex flex-col">
                                                         <span className="font-medium">
-                                                            {request.user.firstName} {request.user.lastName}
+                                                            <EmployeeProfileLink
+                                                                employeeId={request.user.id}
+                                                                name={`${request.user.firstName || ""} ${request.user.lastName || ""}`}
+                                                                email={request.user.email}
+                                                            />
                                                         </span>
                                                         <span className="text-xs text-muted-foreground">{request.user.email}</span>
                                                     </div>
@@ -554,7 +563,11 @@ export default function WalletManagementClient({
                                                 <TableCell>
                                                     <div className="flex flex-col">
                                                         <span className="font-medium">
-                                                            {transaction.user.firstName} {transaction.user.lastName}
+                                                            <EmployeeProfileLink
+                                                                employeeId={transaction.user.id}
+                                                                name={`${transaction.user.firstName || ""} ${transaction.user.lastName || ""}`}
+                                                                email={transaction.user.email}
+                                                            />
                                                         </span>
                                                         <span className="text-xs text-muted-foreground">{transaction.user.email}</span>
                                                     </div>
@@ -624,7 +637,11 @@ export default function WalletManagementClient({
                                                 <TableCell>
                                                     <div className="flex flex-col">
                                                         <span className="font-medium">
-                                                            {employee.firstName} {employee.lastName}
+                                                            <EmployeeProfileLink
+                                                                employeeId={employee.id}
+                                                                name={`${employee.firstName || ""} ${employee.lastName || ""}`}
+                                                                email={employee.email}
+                                                            />
                                                         </span>
                                                         <span className="text-xs text-muted-foreground">
                                                             {employee.email}
@@ -755,7 +772,7 @@ export default function WalletManagementClient({
                             {selectedRequest?.action === "approve" ? "Approve Wallet Request" : "Reject Wallet Request"}
                         </DialogTitle>
                         <DialogDescription>
-                            Are you sure you want to {selectedRequest?.action} this request of <strong>৳{selectedRequest?.amount?.toLocaleString("en-BD")}</strong> from <strong>{selectedRequest?.user?.firstName} {selectedRequest?.user?.lastName}</strong>?
+                            Are you sure you want to {selectedRequest?.action} this request of <strong>৳{selectedRequest?.amount?.toLocaleString("en-BD")}</strong> from <strong><EmployeeProfileLink employeeId={selectedRequest?.user?.id || ""} name={`${selectedRequest?.user?.firstName || ""} ${selectedRequest?.user?.lastName || ""}`} email={selectedRequest?.user?.email} className="font-semibold" /></strong>?
                             {selectedRequest?.action === "approve" && " This will add the amount to their wallet balance."}
                         </DialogDescription>
                     </DialogHeader>

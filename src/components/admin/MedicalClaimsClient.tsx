@@ -47,6 +47,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ExternalLink, Check, X, TrendingUp, FileText, Clock, CheckCircle, XCircle, Search } from "lucide-react";
 import { format } from "date-fns";
+import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 
 interface Entitlement {
     id: string;
@@ -308,7 +309,11 @@ export default function MedicalClaimsClient({ initialPendingClaims, allClaimsDat
                                     <div key={claim.id} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
                                         <div className="space-y-1">
                                             <p className="text-sm font-medium">
-                                                {claim.user.firstName} {claim.user.lastName}
+                                                <EmployeeProfileLink
+                                                    employeeId={claim.user.id}
+                                                    name={`${claim.user.firstName || ""} ${claim.user.lastName || ""}`}
+                                                    email={claim.user.email}
+                                                />
                                             </p>
                                             <p className="text-xs text-muted-foreground">{claim.description}</p>
                                             <p className="text-xs text-muted-foreground">
@@ -363,7 +368,11 @@ export default function MedicalClaimsClient({ initialPendingClaims, allClaimsDat
                                                     <TableCell>
                                                         <div className="flex flex-col">
                                                             <span className="font-medium">
-                                                                {claim.user.firstName} {claim.user.lastName}
+                                                                <EmployeeProfileLink
+                                                                    employeeId={claim.user.id}
+                                                                    name={`${claim.user.firstName || ""} ${claim.user.lastName || ""}`}
+                                                                    email={claim.user.email}
+                                                                />
                                                             </span>
                                                             <span className="text-xs text-muted-foreground">{claim.user.email}</span>
                                                             {claim.user.department && (
@@ -506,7 +515,11 @@ export default function MedicalClaimsClient({ initialPendingClaims, allClaimsDat
                                                 <TableCell>
                                                     <div className="flex flex-col">
                                                         <span className="font-medium">
-                                                            {claim.user.firstName} {claim.user.lastName}
+                                                            <EmployeeProfileLink
+                                                                employeeId={claim.user.id}
+                                                                name={`${claim.user.firstName || ""} ${claim.user.lastName || ""}`}
+                                                                email={claim.user.email}
+                                                            />
                                                         </span>
                                                         <span className="text-xs text-muted-foreground">{claim.user.email}</span>
                                                     </div>
@@ -600,7 +613,11 @@ export default function MedicalClaimsClient({ initialPendingClaims, allClaimsDat
                                                     <TableCell>
                                                         <div className="flex flex-col">
                                                             <span className="font-medium">
-                                                                {entitlement.user.firstName} {entitlement.user.lastName}
+                                                                <EmployeeProfileLink
+                                                                    employeeId={entitlement.user.id}
+                                                                    name={`${entitlement.user.firstName || ""} ${entitlement.user.lastName || ""}`}
+                                                                    email={entitlement.user.email}
+                                                                />
                                                             </span>
                                                             <span className="text-xs text-muted-foreground">
                                                                 {entitlement.user.email}
@@ -671,7 +688,7 @@ export default function MedicalClaimsClient({ initialPendingClaims, allClaimsDat
                             {selectedClaim?.action === "approve" ? "Approve Medical Claim" : "Reject Medical Claim"}
                         </DialogTitle>
                         <DialogDescription>
-                            Are you sure you want to {selectedClaim?.action} this claim of <strong>৳{selectedClaim?.amount?.toLocaleString("en-BD")}</strong> from <strong>{selectedClaim?.user?.firstName} {selectedClaim?.user?.lastName}</strong>?
+                            Are you sure you want to {selectedClaim?.action} this claim of <strong>৳{selectedClaim?.amount?.toLocaleString("en-BD")}</strong> from <strong><EmployeeProfileLink employeeId={selectedClaim?.user?.id || ""} name={`${selectedClaim?.user?.firstName || ""} ${selectedClaim?.user?.lastName || ""}`} email={selectedClaim?.user?.email} className="font-semibold" /></strong>?
                             {selectedClaim?.action === "approve" && " This will automatically deduct the amount from their annual medical entitlement."}
                         </DialogDescription>
                     </DialogHeader>
