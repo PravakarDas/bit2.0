@@ -9,9 +9,33 @@ function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
     return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
 }
 
+const HH_MM_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function normalizeHHMM(value: string | undefined, fallback: string): string {
+    if (typeof value !== "string") {
+        return fallback;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return fallback;
+    }
+
+    if (HH_MM_REGEX.test(trimmed)) {
+        return trimmed;
+    }
+
+    const longFormatMatch = trimmed.match(/^([01]\d|2[0-3]):([0-5]\d):[0-5]\d(?:\.\d+)?$/);
+    if (longFormatMatch) {
+        return `${longFormatMatch[1]}:${longFormatMatch[2]}`;
+    }
+
+    throw new Error(`Invalid time format: ${trimmed}. Expected HH:mm`);
+}
+
 async function notifyIfManager(params: {
     user: NonNullable<Awaited<ReturnType<typeof getDbUser>>>;
-    action: "CREATED" | "UPDATED" | "ACTIVATED" | "DEACTIVATED";
+    action: "CREATED" | "UPDATED" | "DELETED" | "ACTIVATED" | "DEACTIVATED";
     entityId: string;
     entityName: string;
     details?: string;
@@ -57,13 +81,17 @@ export async function createBranch(data: {
     }
 
     try {
+        const checkInTime = normalizeHHMM(data.checkInTime, "09:00");
+        const checkOutTime = normalizeHHMM(data.checkOutTime, "18:00");
+        const breakDuration = normalizeHHMM(data.breakDuration, "01:00");
+
         const branch = await prisma.branch.create({
             data: {
                 name: data.name,
                 location: data.location,
-                checkInTime: data.checkInTime || "09:00",
-                checkOutTime: data.checkOutTime || "18:00",
-                breakDuration: data.breakDuration || "01:00",
+                checkInTime,
+                checkOutTime,
+                breakDuration,
                 weeklyOffDays: data.weeklyOffDays || ["SUNDAY"]
             },
         });
@@ -81,7 +109,10 @@ export async function createBranch(data: {
         return { success: true, branch };
     } catch (error) {
         console.error("Error creating branch:", error);
-        return { success: false, error: "Failed to create branch" };
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to create branch",
+        };
     }
 }
 
@@ -110,6 +141,57 @@ export async function toggleBranchStatus(id: string, isActive: boolean) {
     } catch (error) {
         console.error("Error toggling branch status:", error);
         return { success: false, error: "Failed to toggle status" };
+    }
+}
+
+export async function deleteBranch(id: string) {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
+    try {
+        const branch = await prisma.branch.findUnique({
+            where: { id },
+            select: {
+                id: true,
+                name: true,
+                _count: {
+                    select: {
+                        users: true,
+                    },
+                },
+            },
+        });
+
+        if (!branch) {
+            return { success: false, error: "Branch not found" };
+        }
+
+        if (branch._count.users > 0) {
+            return { success: false, error: "Cannot delete branch with assigned employees" };
+        }
+
+        await prisma.branch.delete({
+            where: { id },
+        });
+
+        await notifyIfManager({
+            user: user!,
+            action: "DELETED",
+            entityId: branch.id,
+            entityName: branch.name,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting branch:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to delete branch",
+        };
     }
 }
 
@@ -152,12 +234,16 @@ export async function updateBranchTimelineSettings(branchId: string, data: {
     }
 
     try {
+        const checkInTime = normalizeHHMM(data.checkInTime, "09:00");
+        const checkOutTime = normalizeHHMM(data.checkOutTime, "18:00");
+        const breakDuration = normalizeHHMM(data.breakDuration, "01:00");
+
         const branch = await prisma.branch.update({
             where: { id: branchId },
             data: {
-                checkInTime: data.checkInTime,
-                checkOutTime: data.checkOutTime,
-                breakDuration: data.breakDuration,
+                checkInTime,
+                checkOutTime,
+                breakDuration,
                 weeklyOffDays: data.weeklyOffDays
             }
         });
@@ -175,7 +261,10 @@ export async function updateBranchTimelineSettings(branchId: string, data: {
         return { success: true, branch };
     } catch (error) {
         console.error("Error updating branch timeline settings:", error);
-        return { success: false, error: "Failed to update branch timeline settings" };
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update branch timeline settings",
+        };
     }
 }
 
@@ -193,14 +282,18 @@ export async function updateBranch(id: string, data: {
     }
 
     try {
+        const checkInTime = normalizeHHMM(data.checkInTime, "09:00");
+        const checkOutTime = normalizeHHMM(data.checkOutTime, "18:00");
+        const breakDuration = normalizeHHMM(data.breakDuration, "01:00");
+
         const branch = await prisma.branch.update({
             where: { id },
             data: {
                 name: data.name,
                 location: data.location,
-                checkInTime: data.checkInTime || "09:00",
-                checkOutTime: data.checkOutTime || "18:00",
-                breakDuration: data.breakDuration || "01:00",
+                checkInTime,
+                checkOutTime,
+                breakDuration,
                 weeklyOffDays: data.weeklyOffDays || ["SUNDAY"]
             },
         });
@@ -218,6 +311,9 @@ export async function updateBranch(id: string, data: {
         return { success: true, branch };
     } catch (error) {
         console.error("Error updating branch:", error);
-        return { success: false, error: "Failed to update branch" };
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update branch",
+        };
     }
 }

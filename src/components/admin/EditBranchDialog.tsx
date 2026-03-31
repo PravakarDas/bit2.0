@@ -34,6 +34,8 @@ interface EditBranchDialogProps {
 }
 
 export function EditBranchDialog({ branch }: EditBranchDialogProps) {
+    const durationRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+
     const getInitialFormData = () => ({
         name: branch.name,
         location: branch.location,
@@ -81,6 +83,11 @@ export function EditBranchDialog({ branch }: EditBranchDialogProps) {
     const handleSubmit = async () => {
         if (!formData.name || !formData.location) {
             toast.error("Please fill in all fields");
+            return;
+        }
+
+        if (!durationRegex.test(formData.breakDuration.trim())) {
+            toast.error("Break duration must be in HH:mm format");
             return;
         }
 
@@ -171,7 +178,10 @@ export function EditBranchDialog({ branch }: EditBranchDialogProps) {
                                 <Label htmlFor="edit-breakDuration">Break Duration (HH:MM)</Label>
                                 <Input
                                     id="edit-breakDuration"
-                                    type="time"
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="00:00"
+                                    pattern="^([01]\\d|2[0-3]):[0-5]\\d$"
                                     value={formData.breakDuration}
                                     onChange={(e) => setFormData({ ...formData, breakDuration: e.target.value })}
                                 />

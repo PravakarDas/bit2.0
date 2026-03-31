@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Building2, Briefcase, DollarSign, Gift, CalendarDays } from "lucide-react";
 import { AddBranchDialog } from "./AddBranchDialog";
 import { EditBranchDialog } from "./EditBranchDialog";
+import { DeleteBranchButton } from "./DeleteBranchButton";
 import { BranchToggle } from "./BranchToggle";
 import { DepartmentClient } from "./DepartmentClient";
 import { DesignationClient } from "./DesignationClient";
@@ -173,6 +174,7 @@ export function UnifiedOrganizationClient({
                                                 <TableCell className="text-right pr-6">
                                                     <div className="flex items-center justify-end gap-2">
                                                         <EditBranchDialog branch={branch} />
+                                                        <DeleteBranchButton branchId={branch.id} branchName={branch.name} />
                                                         <BranchToggle branchId={branch.id} initialStatus={branch.isActive} />
                                                     </div>
                                                 </TableCell>
