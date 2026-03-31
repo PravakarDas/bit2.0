@@ -16,6 +16,53 @@ export interface SyncResult {
   errors: string[];
 }
 
+function timeStringToMinutes(timeStr: string): number {
+  if (!timeStr) return 0;
+  const isNegative = timeStr.startsWith('-');
+  const cleanStr = timeStr.replace('-', '');
+  const [hours, minutes] = cleanStr.split(':').map(Number);
+  const totalMinutes = (hours * 60) + minutes;
+  return isNegative ? -totalMinutes : totalMinutes;
+}
+
+function minutesToTimeString(minutes: number): string {
+  if (minutes === 0) return '00:00';
+
+  const absMinutes = Math.abs(minutes);
+  const hours = Math.floor(absMinutes / 60);
+  const mins = absMinutes % 60;
+
+  const sign = minutes < 0 ? '-' : '';
+  return `${sign}${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+}
+
+function calculateActiveTime(checkIn: Date, checkOut: Date, breakTime: string): string {
+  const diffMs = checkOut.getTime() - checkIn.getTime();
+  const totalMinutes = Math.floor(diffMs / (1000 * 60));
+  const breakMinutes = timeStringToMinutes(breakTime || '00:00');
+  const activeMinutes = totalMinutes - breakMinutes;
+
+  return minutesToTimeString(Math.max(0, activeMinutes));
+}
+
+function calculateOvertimeUndertime(actualActiveTime: string, requiredActiveTime: string): string {
+  const actualMinutes = timeStringToMinutes(actualActiveTime);
+  const requiredMinutes = timeStringToMinutes(requiredActiveTime);
+  const diffMinutes = actualMinutes - requiredMinutes;
+
+  return minutesToTimeString(diffMinutes);
+}
+
+function addTimeStrings(time1?: string | null, time2?: string | null): string {
+  if (!time1 && !time2) return '00:00';
+  if (!time1) return time2 || '00:00';
+  if (!time2) return time1 || '00:00';
+
+  const minutes1 = timeStringToMinutes(time1);
+  const minutes2 = timeStringToMinutes(time2);
+  return minutesToTimeString(minutes1 + minutes2);
+}
+
 /**
  * Sync ZKTeco data for a specific employee on a specific date
  */
@@ -131,10 +178,57 @@ export async function syncEmployeeTimeData(userId: string, date: Date): Promise<
       console.log(`Will update checkOut: ${timeData.actualCheckOut.toISOString()}`);
     }
 
-    if (!timeRecord.actualBreakTime && timeData.actualBreakTime) {
-      updateData.actualBreakTime = timeData.actualBreakTime;
+    if (!timeRecord.actualBreakTime) {
+      updateData.actualBreakTime = timeData.actualBreakTime || "00:00";
       hasUpdates = true;
-      console.log(`Will update breakTime: ${timeData.actualBreakTime}`);
+      console.log(`Will update breakTime: ${updateData.actualBreakTime}`);
+    }
+
+    const finalActualCheckIn =
+      (updateData.actualCheckIn as Date | undefined) ??
+      timeRecord.actualCheckIn;
+    const finalActualCheckOut =
+      (updateData.actualCheckOut as Date | undefined) ??
+      timeRecord.actualCheckOut;
+    const finalActualBreakTime =
+      (updateData.actualBreakTime as string | undefined) ??
+      timeRecord.actualBreakTime ??
+      "00:00";
+
+    if (
+      finalActualCheckIn &&
+      finalActualCheckOut &&
+      (
+        !timeRecord.actualActiveTime ||
+        !timeRecord.officialOvertimeundertime ||
+        !timeRecord.overtimeUndertime ||
+        !timeRecord.actualBreakTime ||
+        updateData.actualCheckIn !== undefined ||
+        updateData.actualCheckOut !== undefined ||
+        updateData.actualBreakTime !== undefined
+      )
+    ) {
+      const actualActiveTime = calculateActiveTime(
+        finalActualCheckIn,
+        finalActualCheckOut,
+        finalActualBreakTime,
+      );
+
+      updateData.actualActiveTime = actualActiveTime;
+      hasUpdates = true;
+
+      if (timeRecord.requiredActiveTime) {
+        const officialOvertimeUndertime = calculateOvertimeUndertime(
+          actualActiveTime,
+          timeRecord.requiredActiveTime,
+        );
+
+        updateData.officialOvertimeundertime = officialOvertimeUndertime;
+        updateData.overtimeUndertime = addTimeStrings(
+          officialOvertimeUndertime,
+          timeRecord.requestedOvertime || '00:00',
+        );
+      }
     }
 
     if (!hasUpdates) {
