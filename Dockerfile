@@ -18,7 +18,10 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
+RUN apk add --no-cache tzdata
+
 ENV NODE_ENV=production
+ENV TZ=Asia/Dhaka
 
 ARG UID=1001
 ARG GID=1001

@@ -40,6 +40,35 @@ export interface ProcessedTimeData {
   actualBreakTime: string | null; // HH:MM format
 }
 
+const BANGLADESH_OFFSET_MS = 6 * 60 * 60 * 1000;
+
+function parseZKTecoPunchTime(punchTime: string): Date {
+  const normalized = punchTime.trim().replace(' ', 'T');
+
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(normalized)) {
+    return new Date(normalized);
+  }
+
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) {
+    return new Date(normalized);
+  }
+
+  const [, year, month, day, hour, minute, second = '0'] = match;
+
+  return new Date(
+    Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second),
+      0,
+    ) - BANGLADESH_OFFSET_MS,
+  );
+}
+
 class ZKTecoService {
   private baseUrl: string;
   private username: string;
@@ -173,7 +202,7 @@ class ZKTecoService {
 
     // Sort transactions by punch_time to ensure chronological order
     const sortedTransactions = transactions.sort((a, b) => 
-      new Date(a.punch_time).getTime() - new Date(b.punch_time).getTime()
+      parseZKTecoPunchTime(a.punch_time).getTime() - parseZKTecoPunchTime(b.punch_time).getTime()
     );
 
     let actualCheckIn: Date | null = null;
@@ -181,7 +210,7 @@ class ZKTecoService {
     const breakSessions: { breakOut: Date; breakIn: Date | null }[] = [];
 
     for (const transaction of sortedTransactions) {
-      const punchTime = new Date(transaction.punch_time);
+      const punchTime = parseZKTecoPunchTime(transaction.punch_time);
       const punchState = transaction.punch_state;
 
       switch (punchState) {

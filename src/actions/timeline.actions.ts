@@ -86,16 +86,40 @@ interface BackfillResult {
   message: string;
 }
 
-const TIMELINE_BASELINE_START = new Date(2026, 0, 1);
+const BANGLADESH_OFFSET_MS = 6 * 60 * 60 * 1000;
+
+function getBangladeshDateParts(date: Date) {
+  const shifted = new Date(date.getTime() + BANGLADESH_OFFSET_MS);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth(),
+    day: shifted.getUTCDate(),
+    dayOfWeek: shifted.getUTCDay(),
+  };
+}
+
+function createBangladeshDateTime(
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0,
+  millisecond = 0,
+): Date {
+  return new Date(Date.UTC(year, month, day, hour, minute, second, millisecond) - BANGLADESH_OFFSET_MS);
+}
+
+const TIMELINE_BASELINE_START = createBangladeshDateTime(2026, 0, 1);
 
 function normalizeToStartOfDay(date: Date): Date {
-  const normalized = new Date(date);
-  normalized.setHours(0, 0, 0, 0);
-  return normalized;
+  const { year, month, day } = getBangladeshDateParts(date);
+  return createBangladeshDateTime(year, month, day);
 }
 
 function getDateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const { year, month, day } = getBangladeshDateParts(date);
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 function getDisplayName(employee: { firstName: string | null; lastName: string | null; email: string }): string {
@@ -160,14 +184,13 @@ async function createTimelineRecordForEmployee(
       return { created: false, skippedReason: 'on approved leave' };
     }
 
-    const checkInTime = new Date(normalizedDate);
-    const checkOutTime = new Date(normalizedDate);
+    const { year, month, day } = getBangladeshDateParts(normalizedDate);
 
     const [checkInHour, checkInMin] = (employee.branch?.checkInTime || '09:00').split(':').map(Number);
     const [checkOutHour, checkOutMin] = (employee.branch?.checkOutTime || '18:00').split(':').map(Number);
 
-    checkInTime.setHours(checkInHour, checkInMin, 0, 0);
-    checkOutTime.setHours(checkOutHour, checkOutMin, 0, 0);
+    const checkInTime = createBangladeshDateTime(year, month, day, checkInHour, checkInMin);
+    const checkOutTime = createBangladeshDateTime(year, month, day, checkOutHour, checkOutMin);
 
     const requiredBreakTime = employee.branch?.breakDuration || '01:00';
     const requiredActiveTime = calculateActiveTime(checkInTime, checkOutTime, requiredBreakTime);
@@ -206,7 +229,7 @@ async function isWeekendForEmployee(userId: string, date: Date): Promise<boolean
       return false; // If no branch info, assume it's a working day
     }
 
-    const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+    const { dayOfWeek } = getBangladeshDateParts(date); // 0 = Sunday, 6 = Saturday
     const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
     const currentDayName = dayNames[dayOfWeek];
     
@@ -242,8 +265,8 @@ async function hasApprovedLeaveForDate(userId: string, date: Date): Promise<bool
 
 async function isPublicHolidayForBranch(date: Date, branchId?: string | null): Promise<boolean> {
   try {
-    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    const startOfDay = normalizeToStartOfDay(date);
+    const endOfDay = new Date(startOfDay.getTime() + (24 * 60 * 60 * 1000));
 
     const whereCondition: Prisma.PublicHolidayWhereInput = {
       date: {

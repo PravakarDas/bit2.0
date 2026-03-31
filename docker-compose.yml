@@ -12,6 +12,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+      - TZ=Asia/Dhaka
     labels:
       - traefik.enable=true
       - traefik.http.routers.hrm-app.rule=Host(`${DOMAIN}`)
