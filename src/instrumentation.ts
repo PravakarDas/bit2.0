@@ -203,13 +203,13 @@ function startLeaveAutomationCron() {
 
     lastRunDate = todayKey;
     try {
-      console.log("Starting leave automation cron job...");
-      const result = await runLeaveAutomationPipeline({ mode: "UNPROCESSED" });
+        console.log("Starting leave automation cron job...");
+        const result = await runLeaveAutomationPipeline({ mode: "UNPROCESSED" });
       if (!result.success) {
-        console.warn("Leave automation cron skipped:", result.sync.message || "Sync failed before automation");
+          console.warn("Leave automation cron skipped:", result.sync.message || "Sync failed before automation");
         return;
       }
-      console.log("Leave automation cron completed:", result);
+        console.log("Leave automation cron completed:", result);
     } catch (error) {
       console.error("Leave automation cron failed:", error);
     }

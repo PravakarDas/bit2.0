@@ -180,7 +180,7 @@ export default function NotificationsPage() {
 
     const windowSize = 5;
     let start = Math.max(1, currentPage - Math.floor(windowSize / 2));
-    let end = Math.min(totalPages, start + windowSize - 1);
+    const end = Math.min(totalPages, start + windowSize - 1);
 
     if (end - start + 1 < windowSize) {
       start = Math.max(1, end - windowSize + 1);

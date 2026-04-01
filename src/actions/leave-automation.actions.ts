@@ -480,6 +480,10 @@ async function processEmployeeDailyRecord(employee: ActiveEmployee, processDate:
 
     const isFullyFilled = hasRequiredFilled && hasActualFilled;
 
+    if (existingRecord?.isProcessed && ["ABSENT", "ON_LEAVE", "WEEKLY_OFF"].includes(existingRecord.status)) {
+        return;
+    }
+
     // If record exists, is already processed, and fully filled, skip
     if (existingRecord?.isProcessed && isFullyFilled) {
         return;
@@ -716,6 +720,8 @@ async function handleAutoLeaveDeduction(employee: ActiveEmployee, processDate: D
  */
 async function handleAbsentWithoutLeave(employee: ActiveEmployee, processDate: Date, existingRecord: DailyTimeRecord | null) {
     const midnight = getMidnightDate(processDate);
+    const workingDaysInMonth = employee.workingDaysInMonth || 22;
+    const dailySalary = workingDaysInMonth > 0 ? (employee.baseSalary / workingDaysInMonth) : 0;
     const recordData = {
         userId: employee.id,
         date: processDate,
@@ -734,37 +740,59 @@ async function handleAbsentWithoutLeave(employee: ActiveEmployee, processDate: D
         isProcessed: true
     };
 
-    if (existingRecord) {
-        await prisma.dailyTimeRecord.update({
-            where: { id: existingRecord.id },
-            data: recordData
-        });
-    } else {
-        await prisma.dailyTimeRecord.create({
-            data: recordData
-        });
-    }
-
-    // Create audit log
-    await prisma.leaveAuditLog.create({
-        data: {
-            userId: employee.id,
-            action: "ABSENT_WITHOUT_LEAVE",
-            description: `Employee marked absent on ${format(processDate, 'MMMM d, yyyy')} - no available leave balance for auto-deduction`,
-            affectedDate: processDate,
-            processingSource: "SYSTEM"
+    await prisma.$transaction(async (tx) => {
+        if (existingRecord) {
+            await tx.dailyTimeRecord.update({
+                where: { id: existingRecord.id },
+                data: recordData
+            });
+        } else {
+            await tx.dailyTimeRecord.create({
+                data: recordData
+            });
         }
-    });
 
-    // Create notification
-    await prisma.employeeNotification.create({
-        data: {
-            userId: employee.id,
-            type: "ABSENT_WITHOUT_LEAVE",
-            title: "Absent Without Leave",
-            message: `You were marked absent on ${format(processDate, 'MMMM d, yyyy')}. No available leave balance for auto-deduction.`,
-            relatedDate: processDate
+        if (dailySalary > 0) {
+            await tx.user.update({
+                where: { id: employee.id },
+                data: {
+                    walletBalance: { decrement: dailySalary }
+                }
+            });
+
+            await tx.walletTransaction.create({
+                data: {
+                    userId: employee.id,
+                    amount: -dailySalary,
+                    type: "ADJUSTMENT",
+                    description: `Absent without leave penalty for ${format(processDate, 'yyyy-MM-dd')}`
+                }
+            });
         }
+
+        // Create audit log
+        await tx.leaveAuditLog.create({
+            data: {
+                userId: employee.id,
+                action: "ABSENT_WITHOUT_LEAVE",
+                description: `Employee marked absent on ${format(processDate, 'MMMM d, yyyy')} - full day salary deducted from wallet`,
+                affectedDate: processDate,
+                processingSource: "SYSTEM"
+            }
+        });
+
+        // Create notification
+        await tx.employeeNotification.create({
+            data: {
+                userId: employee.id,
+                type: "ABSENT_WITHOUT_LEAVE",
+                title: "Absent Without Leave",
+                message: dailySalary > 0
+                    ? `You were marked absent on ${format(processDate, 'MMMM d, yyyy')}. ৳${dailySalary.toFixed(2)} was deducted from your wallet as a full-day penalty.`
+                    : `You were marked absent on ${format(processDate, 'MMMM d, yyyy')}.`,
+                relatedDate: processDate
+            }
+        });
     });
 }
 

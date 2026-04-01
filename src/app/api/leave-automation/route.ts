@@ -11,44 +11,15 @@ export async function POST(request: Request) {
         
         if (backfillDays) {
             if (backfillDays === 'all') {
-                const earliestRecord = await prisma.dailyTimeRecord.findFirst({
-                    orderBy: { date: 'asc' },
-                    select: { date: true }
-                });
+                    const fromDate = new Date(new Date().getFullYear(), 0, 1);
 
-                const earliestByJoinDate = await prisma.user.findFirst({
-                    where: {
-                        employeeStatus: 'ACTIVE',
-                        isArchived: false,
-                        branchId: { not: null },
-                        dateOfJoining: { not: null }
-                    },
-                    orderBy: { dateOfJoining: 'asc' },
-                    select: { dateOfJoining: true }
-                });
-
-                const earliestByCreatedAt = await prisma.user.findFirst({
-                    where: {
-                        employeeStatus: 'ACTIVE',
-                        isArchived: false,
-                        branchId: { not: null }
-                    },
-                    orderBy: { createdAt: 'asc' },
-                    select: { createdAt: true }
-                });
-
-                const earliestDate = earliestRecord?.date
-                    || earliestByJoinDate?.dateOfJoining
-                    || earliestByCreatedAt?.createdAt;
-                const fromDate = earliestDate ? new Date(earliestDate) : new Date(0);
-
-                result = await runLeaveAutomationPipeline({
-                    mode: 'ALL_DATES',
-                    fromDate,
-                    includeToday: true,
-                    skipIfWithinWindow: true,
-                    now: new Date(),
-                });
+                    result = await runLeaveAutomationPipeline({
+                        mode: 'ALL_DATES',
+                        fromDate,
+                        includeToday: true,
+                        skipIfWithinWindow: true,
+                        now: new Date(),
+                    });
             } else {
                 // Process backfill for specified number of days
                 const days = parseInt(backfillDays);
@@ -58,8 +29,8 @@ export async function POST(request: Request) {
                 result = await processBackfillLeaveAutomation(fromDate);
             }
         } else {
-            // Sync missing ZKTeco data, then process all unprocessed dates (including today and yesterday)
-            result = await runLeaveAutomationPipeline({ mode: 'UNPROCESSED' });
+                // Sync missing ZKTeco data, then process all unprocessed dates (including today and yesterday)
+                result = await runLeaveAutomationPipeline({ mode: 'UNPROCESSED' });
         }
         const resultSuccess = typeof result === 'object' && result !== null && 'success' in result
             ? Boolean((result as { success?: boolean }).success)

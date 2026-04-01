@@ -37,6 +37,7 @@ import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 interface TimeRecord {
   id: string;
   date: Date;
+  status?: "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF";
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
   requiredBreakTime: string | null;
@@ -191,18 +192,34 @@ export default function TimelineTableView({
   };
 
   const getAttendanceStatus = (record: TimeRecord) => {
+    if (record.status === "PRESENT") {
+      return <Badge variant="default">Present</Badge>;
+    }
+
+    if (record.status === "ABSENT") {
+      return <Badge variant="destructive">Absent</Badge>;
+    }
+
+    if (record.status === "ON_LEAVE") {
+      return <Badge variant="outline">On Leave</Badge>;
+    }
+
+    if (record.status === "WEEKLY_OFF") {
+      return <Badge variant="secondary">Weekly Off</Badge>;
+    }
+
     if (!record.requiredCheckIn && !record.requiredCheckOut) {
       return <Badge variant="secondary">Off Day</Badge>;
     }
-    
+
     if (record.actualCheckIn && record.actualCheckOut) {
       return <Badge variant="default">Present</Badge>;
     }
-    
+
     if (record.actualCheckIn) {
       return <Badge variant="outline">Checked In</Badge>;
     }
-    
+
     return <Badge variant="destructive">Absent</Badge>;
   };
 
