@@ -16,7 +16,7 @@ export async function createManualLoan(data: {
   startDate: string; // ISO date string
   endDate: string;   // ISO date string
   gracePeriodMonths: number;
-  paidInstallments: number;
+  paidInstallmentAmount: number;
   reason?: string;
 }) {
   try {
@@ -62,18 +62,40 @@ export async function createManualLoan(data: {
       return { success: false, error: "Loan duration must be at least 1 month" };
     }
 
-    // Validate paid installments
-    if (data.paidInstallments < 0 || data.paidInstallments > monthsDiff) {
+    const emiMonths = monthsDiff - data.gracePeriodMonths;
+
+    if (emiMonths <= 0) {
       return {
         success: false,
-        error: `Paid installments must be between 0 and ${monthsDiff}`,
+        error: "End date must be far enough to include at least 1 EMI month after grace period",
       };
     }
 
-    // Calculate remaining principal after paid installments
-    const totalEmiPerMonth = Math.round(data.loanAmount / monthsDiff);
-    const totalPaid = totalEmiPerMonth * data.paidInstallments;
-    const remainingPrincipal = Math.max(0, data.loanAmount - totalPaid);
+    // Validate paid amount
+    if (data.paidInstallmentAmount < 0 || data.paidInstallmentAmount > data.loanAmount) {
+      return {
+        success: false,
+        error: `Paid amount must be between 0 and ${data.loanAmount}`,
+      };
+    }
+
+    // Calculate remaining principal after amount already paid
+    const remainingPrincipal = Math.max(0, data.loanAmount - data.paidInstallmentAmount);
+    const baseEmi = Math.round(data.loanAmount / emiMonths);
+    const currentEmi = calculateEMI(remainingPrincipal, emiMonths);
+
+    const emiStartDate = new Date(
+      startDate.getFullYear(),
+      startDate.getMonth() + data.gracePeriodMonths,
+      1
+    );
+
+    const currentDate = new Date();
+    const monthsElapsedSinceEmiStart = currentDate < emiStartDate
+      ? 0
+      : (currentDate.getFullYear() - emiStartDate.getFullYear()) * 12 +
+        (currentDate.getMonth() - emiStartDate.getMonth());
+    const remainingEmiMonths = Math.max(1, emiMonths - monthsElapsedSinceEmiStart);
 
     // Create loan
     const loan = await prisma.loan.create({
@@ -86,24 +108,16 @@ export async function createManualLoan(data: {
         status: LoanStatus.ACTIVE,
         // isManuallySeeded: true, // TODO: Enable after migration applied
         reason: data.reason || "Manual registration by admin",
-        emiStartMonth: startDate.getMonth() + 1,
-        emiStartYear: startDate.getFullYear(),
+        emiStartMonth: emiStartDate.getMonth() + 1,
+        emiStartYear: emiStartDate.getFullYear(),
       },
     });
-
-    // Calculate current EMI (0 if still in grace period)
-    const monthsPassed = data.paidInstallments;
-    let currentEmi = 0;
-    if (monthsPassed >= data.gracePeriodMonths) {
-      const remainingMonths = monthsDiff - monthsPassed;
-      currentEmi = calculateEMI(remainingPrincipal, remainingMonths);
-    }
 
     // Create EMI state
     await prisma.emiState.create({
       data: {
         loanId: loan.id,
-        currentEmi,
+        currentEmi: calculateEMI(remainingPrincipal, remainingEmiMonths),
         carryForward: 0,
       },
     });
@@ -113,7 +127,7 @@ export async function createManualLoan(data: {
       data: {
         userId: admin.id,
         loanId: loan.id,
-        changeReason: `Manual loan created for ${employee.firstName} ${employee.lastName}: ৳${data.loanAmount} (${monthsDiff} months, ${data.paidInstallments} paid)`,
+        changeReason: `Manual loan created for ${employee.firstName} ${employee.lastName}: ৳${data.loanAmount} (${monthsDiff} total months, ${data.gracePeriodMonths} grace, ${emiMonths} EMI months, ৳${data.paidInstallmentAmount} paid, base EMI ৳${baseEmi}, remaining months ${remainingEmiMonths})`,
       },
     });
 
