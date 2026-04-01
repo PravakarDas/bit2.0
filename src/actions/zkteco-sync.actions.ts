@@ -16,6 +16,41 @@ export interface SyncResult {
   errors: string[];
 }
 
+async function isZKTecoServerReachable(baseUrl: string): Promise<boolean> {
+  const trimmedBaseUrl = baseUrl.trim();
+  if (!trimmedBaseUrl) {
+    return false;
+  }
+
+  const normalizedBaseUrl = trimmedBaseUrl.endsWith("/")
+    ? trimmedBaseUrl.slice(0, -1)
+    : trimmedBaseUrl;
+  const healthCheckUrl = `${normalizedBaseUrl}/api-token-auth/`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+
+  try {
+    const response = await fetch(healthCheckUrl, {
+      method: "OPTIONS",
+      signal: controller.signal,
+      cache: "no-store",
+    });
+
+    return response.status < 500;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      console.warn(`ZKTeco availability check timed out after 8s: ${healthCheckUrl}`);
+      return false;
+    }
+
+    console.warn(`ZKTeco availability check failed for ${healthCheckUrl}:`, error);
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function timeStringToMinutes(timeStr: string): number {
   if (!timeStr) return 0;
   const isNegative = timeStr.startsWith('-');
@@ -363,6 +398,15 @@ export async function syncAllEmployeesTimeData(): Promise<SyncResult> {
       return result;
     }
 
+    const zkTecoBaseUrl = process.env.ZKTECO_BASE_URL || "";
+    const isServerReachable = await isZKTecoServerReachable(zkTecoBaseUrl);
+    if (!isServerReachable) {
+      result.success = false;
+      result.message = "ZKTeco server is down or unreachable. Sync aborted.";
+      result.errors.push("ZKTeco server is down or unreachable");
+      return result;
+    }
+
     // Get all users with attendance IDs
     const users = await prisma.user.findMany({
       where: {
@@ -398,10 +442,12 @@ export async function syncAllEmployeesTimeData(): Promise<SyncResult> {
         result.errors.push(...userResult.errors);
 
         if (!userResult.success && userResult.errors.length > 0) {
+          result.success = false;
           console.log(`Error syncing data for ${user.firstName} ${user.lastName}:`, userResult.errors);
         }
       } catch (error) {
         console.error(`Error processing user ${user.firstName} ${user.lastName}:`, error);
+        result.success = false;
         result.errors.push(`${user.firstName} ${user.lastName}: ${error instanceof Error ? error.message : "Unknown error"}`);
       }
     }
@@ -421,6 +467,83 @@ export async function syncAllEmployeesTimeData(): Promise<SyncResult> {
   }
 
   return result;
+}
+
+export async function syncAllEmployeesTimeDataForDate(date: Date): Promise<SyncResult> {
+  const targetDate = new Date(date);
+  const result: SyncResult = {
+    success: true,
+    message: "",
+    syncedRecords: 0,
+    skippedRecords: 0,
+    errors: [],
+  };
+
+  try {
+    if (!zkTecoService.isConfigured()) {
+      result.success = false;
+      result.message = "ZKTeco service is not properly configured";
+      result.errors.push("Missing environment variables: ZKTECO_BASE_URL, ZKTECO_USERNAME, or ZKTECO_PASSWORD");
+      return result;
+    }
+
+    const zkTecoBaseUrl = process.env.ZKTECO_BASE_URL || "";
+    const isServerReachable = await isZKTecoServerReachable(zkTecoBaseUrl);
+    if (!isServerReachable) {
+      result.success = false;
+      result.message = "ZKTeco server is down or unreachable. Sync aborted.";
+      result.errors.push("ZKTeco server is down or unreachable");
+      return result;
+    }
+
+    const users = await prisma.user.findMany({
+      where: {
+        attendanceId: {
+          not: null,
+        },
+        isArchived: false,
+        employeeStatus: "ACTIVE",
+      },
+      select: {
+        id: true,
+        attendanceId: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    if (users.length === 0) {
+      result.message = "No active employees with attendance IDs found";
+      return result;
+    }
+
+    console.log(`Starting ZKTeco date sync for ${users.length} employee(s) on ${format(targetDate, 'yyyy-MM-dd')}`);
+
+    for (const user of users) {
+      try {
+        const userResult = await syncEmployeeTimeData(user.id!, targetDate);
+        result.syncedRecords += userResult.syncedRecords;
+        result.skippedRecords += userResult.skippedRecords;
+        result.errors.push(...userResult.errors);
+
+        if (!userResult.success && userResult.errors.length > 0) {
+          result.success = false;
+        }
+      } catch (error) {
+        result.success = false;
+        result.errors.push(`${user.firstName} ${user.lastName}: ${error instanceof Error ? error.message : "Unknown error"}`);
+      }
+    }
+
+    result.message = `Date ${format(targetDate, 'yyyy-MM-dd')}: synced ${result.syncedRecords} record(s), skipped ${result.skippedRecords} record(s)`;
+    return result;
+  } catch (error) {
+    console.error("Error syncing all employees for date:", error);
+    result.success = false;
+    result.message = "An error occurred during date-wise sync";
+    result.errors.push(error instanceof Error ? error.message : "Unknown error");
+    return result;
+  }
 }
 
 /**

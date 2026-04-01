@@ -22,7 +22,14 @@ export default function LeaveAutomationAdmin() {
             const result = await response.json();
             
             if (result.success) {
-                toast.success(`Daily automation completed. Processed ${result.data.processedEmployees} employees.`);
+                const datesProcessed = result?.data?.automation?.data?.datesProcessed;
+                const totalProcessed = result?.data?.automation?.data?.totalProcessed;
+                const syncedRecords = result?.data?.sync?.syncedRecords;
+                if (typeof datesProcessed === "number" && typeof totalProcessed === "number") {
+                    toast.success(`Daily automation completed. Synced ${syncedRecords ?? 0} records and processed ${totalProcessed} employee records across ${datesProcessed} dates.`);
+                } else {
+                    toast.success("Daily automation completed.");
+                }
             } else {
                 toast.error(result.error || "Failed to process daily automation");
             }

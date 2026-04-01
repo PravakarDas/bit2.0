@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { startOfDay, format, subDays } from "date-fns";
 import type { DailyTimeRecord, Prisma } from "@prisma/client";
+import { syncAllEmployeesTimeDataForDate, type SyncResult } from "./zkteco-sync.actions";
 
 type ActiveEmployee = Prisma.UserGetPayload<{
     include: {
@@ -21,6 +22,22 @@ type DailyProcessResult = {
     success: boolean;
     processedEmployees?: number;
     error?: string;
+};
+
+type PenaltyReconciliationResult = {
+    applied: boolean;
+    adjustedAmount: number;
+    direction: "DEBIT" | "CREDIT";
+};
+
+type LeaveAutomationPipelineResult = {
+    success: boolean;
+    sync: SyncResult;
+    automation: {
+        success: boolean;
+        mode: "ALL_DATES" | "UNPROCESSED";
+        data: unknown;
+    };
 };
 
 function getMidnightDate(date: Date) {
@@ -76,6 +93,240 @@ function isWithinRequiredWindow(employee: ActiveEmployee, processDate: Date, now
     requiredCheckOut.setHours(parseInt(checkOutHour), parseInt(checkOutMinute), 0, 0);
 
     return now >= requiredCheckIn && now <= requiredCheckOut;
+}
+
+function buildDateRange(fromDate: Date, toDate: Date): string[] {
+    const dates: string[] = [];
+    const currentDate = startOfDay(new Date(fromDate));
+    const endDate = startOfDay(new Date(toDate));
+
+    while (currentDate <= endDate) {
+        dates.push(format(currentDate, "yyyy-MM-dd"));
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return dates;
+}
+
+async function getUnprocessedDateKeys(): Promise<string[]> {
+    const today = startOfDay(new Date());
+    const datesToProcess = new Set<string>();
+
+    datesToProcess.add(format(subDays(today, 1), 'yyyy-MM-dd'));
+    datesToProcess.add(format(today, 'yyyy-MM-dd'));
+
+    const unprocessedRecords = await prisma.dailyTimeRecord.groupBy({
+        by: ['date'],
+        where: {
+            isProcessed: {
+                not: true,
+            },
+        },
+        orderBy: {
+            date: 'asc',
+        },
+    });
+
+    unprocessedRecords.forEach((record) => {
+        datesToProcess.add(format(record.date, 'yyyy-MM-dd'));
+    });
+
+    return Array.from(datesToProcess).sort();
+}
+
+async function reconcileLatePenaltyWallet(
+    userId: string,
+    processDate: Date,
+    lateMinutes: number,
+    penaltyAmount: number
+): Promise<PenaltyReconciliationResult> {
+    if (penaltyAmount <= 0) {
+        return { applied: false, adjustedAmount: 0, direction: "DEBIT" };
+    }
+
+    const dateKey = format(processDate, "yyyy-MM-dd");
+    const penaltyTag = `Late check-in penalty for ${dateKey}`;
+
+    const priorPenaltyTransactions = await prisma.walletTransaction.findMany({
+        where: {
+            userId,
+            type: "ADJUSTMENT",
+            description: {
+                contains: penaltyTag,
+            },
+        },
+        select: {
+            amount: true,
+        },
+    });
+
+    const alreadyDeducted = priorPenaltyTransactions.reduce((sum, transaction) => {
+        if (transaction.amount >= 0) {
+            return sum;
+        }
+        return sum + Math.abs(transaction.amount);
+    }, 0);
+
+    const diff = Number((penaltyAmount - alreadyDeducted).toFixed(2));
+    if (Math.abs(diff) < 0.01) {
+        return { applied: false, adjustedAmount: 0, direction: "DEBIT" };
+    }
+
+    const direction = diff > 0 ? "DEBIT" : "CREDIT";
+    const adjustmentAmount = Number(Math.abs(diff).toFixed(2));
+    const walletAmount = direction === "DEBIT" ? -adjustmentAmount : adjustmentAmount;
+    const description = direction === "DEBIT"
+        ? `${penaltyTag} (${lateMinutes} min)`
+        : `Late check-in penalty correction for ${dateKey}`;
+
+    await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+            where: { id: userId },
+            data: { walletBalance: { increment: walletAmount } },
+        });
+
+        await tx.walletTransaction.create({
+            data: {
+                userId,
+                amount: walletAmount,
+                type: "ADJUSTMENT",
+                description,
+            },
+        });
+    });
+
+    return {
+        applied: true,
+        adjustedAmount: adjustmentAmount,
+        direction,
+    };
+}
+
+export async function runLeaveAutomationPipeline(options?: {
+    mode?: "ALL_DATES" | "UNPROCESSED";
+    fromDate?: Date;
+    toDate?: Date;
+    includeToday?: boolean;
+    skipIfWithinWindow?: boolean;
+    now?: Date;
+}): Promise<LeaveAutomationPipelineResult> {
+    const mode = options?.mode ?? "UNPROCESSED";
+    const now = options?.now ?? new Date();
+    const today = startOfDay(now);
+
+    const dateKeys = mode === "ALL_DATES"
+        ? buildDateRange(
+            options?.fromDate ?? new Date(0),
+            startOfDay(options?.toDate ?? (options?.includeToday ? today : subDays(today, 1))),
+        )
+        : await getUnprocessedDateKeys();
+
+    const aggregateSync: SyncResult = {
+        success: true,
+        message: "",
+        syncedRecords: 0,
+        skippedRecords: 0,
+        errors: [],
+    };
+
+    const dateResults: Array<{
+        date: string;
+        syncSuccess: boolean;
+        syncMessage: string;
+        syncedRecords: number;
+        skippedRecords: number;
+        automationSuccess: boolean;
+        processedEmployees: number;
+        automationError?: string;
+    }> = [];
+
+    let processedDates = 0;
+    let totalProcessedEmployees = 0;
+    let failedDate: string | null = null;
+
+    for (const dateKey of dateKeys) {
+        const processDate = startOfDay(new Date(dateKey));
+
+        const syncResult = await syncAllEmployeesTimeDataForDate(processDate);
+        aggregateSync.syncedRecords += syncResult.syncedRecords;
+        aggregateSync.skippedRecords += syncResult.skippedRecords;
+        aggregateSync.errors.push(...syncResult.errors);
+
+        if (!syncResult.success) {
+            aggregateSync.success = false;
+            aggregateSync.message = syncResult.message;
+            failedDate = dateKey;
+            dateResults.push({
+                date: dateKey,
+                syncSuccess: false,
+                syncMessage: syncResult.message,
+                syncedRecords: syncResult.syncedRecords,
+                skippedRecords: syncResult.skippedRecords,
+                automationSuccess: false,
+                processedEmployees: 0,
+                automationError: "Skipped due to sync failure",
+            });
+            break;
+        }
+
+        const isToday = isSameDay(processDate, today);
+        const automationResult = await processDailyLeaveAutomation(processDate, {
+            skipIfWithinWindow: Boolean(options?.skipIfWithinWindow && isToday),
+            now: isToday ? now : undefined,
+        });
+
+        const processedEmployees = automationResult.success ? (automationResult.processedEmployees || 0) : 0;
+        if (!automationResult.success) {
+            failedDate = dateKey;
+            dateResults.push({
+                date: dateKey,
+                syncSuccess: true,
+                syncMessage: syncResult.message,
+                syncedRecords: syncResult.syncedRecords,
+                skippedRecords: syncResult.skippedRecords,
+                automationSuccess: false,
+                processedEmployees,
+                automationError: automationResult.error || "Failed to process daily automation",
+            });
+            break;
+        }
+
+        processedDates += 1;
+        totalProcessedEmployees += processedEmployees;
+        dateResults.push({
+            date: dateKey,
+            syncSuccess: true,
+            syncMessage: syncResult.message,
+            syncedRecords: syncResult.syncedRecords,
+            skippedRecords: syncResult.skippedRecords,
+            automationSuccess: true,
+            processedEmployees,
+        });
+    }
+
+    const automationSuccess = failedDate === null;
+    const automationData = {
+        success: automationSuccess,
+        attemptedDates: dateKeys.length,
+        processedDates,
+        totalProcessed: totalProcessedEmployees,
+        failedDate,
+        dateResults,
+    };
+
+    if (!aggregateSync.message) {
+        aggregateSync.message = `Synced ${aggregateSync.syncedRecords} record(s), skipped ${aggregateSync.skippedRecords} record(s)`;
+    }
+
+    return {
+        success: aggregateSync.success && automationSuccess,
+        sync: aggregateSync,
+        automation: {
+            success: automationSuccess,
+            mode,
+            data: automationData,
+        },
+    };
 }
 
 /**
@@ -349,32 +600,29 @@ async function handleWorkDay(employee: ActiveEmployee, processDate: Date, existi
             }
         });
 
-        if (penaltyAmount > 0 && (existingRecord.lateCheckInPenalty || 0) <= 0) {
-            await prisma.$transaction(async (tx) => {
-                await tx.user.update({
-                    where: { id: employee.id },
-                    data: { walletBalance: { increment: -penaltyAmount } }
-                });
+        if (penaltyAmount > 0) {
+            const reconciliation = await reconcileLatePenaltyWallet(
+                employee.id,
+                processDate,
+                lateMinutes,
+                penaltyAmount
+            );
 
-                await tx.walletTransaction.create({
+            if (reconciliation.applied) {
+                const message = reconciliation.direction === "DEBIT"
+                    ? `A penalty of ৳${reconciliation.adjustedAmount.toFixed(2)} was applied for ${lateMinutes} minutes late on ${format(processDate, 'MMMM d, yyyy')}.`
+                    : `A penalty correction of ৳${reconciliation.adjustedAmount.toFixed(2)} was credited for ${format(processDate, 'MMMM d, yyyy')}.`;
+
+                await prisma.employeeNotification.create({
                     data: {
                         userId: employee.id,
-                        amount: -penaltyAmount,
-                        type: "ADJUSTMENT",
-                        description: `Late check-in penalty for ${format(processDate, 'yyyy-MM-dd')} (${lateMinutes} min)`
+                        type: "LATE_CHECKIN_PENALTY",
+                        title: "Late Check-in Penalty",
+                        message,
+                        relatedDate: processDate
                     }
                 });
-            });
-
-            await prisma.employeeNotification.create({
-                data: {
-                    userId: employee.id,
-                    type: "LATE_CHECKIN_PENALTY",
-                    title: "Late Check-in Penalty",
-                    message: `A penalty of ৳${penaltyAmount.toFixed(2)} was applied for ${lateMinutes} minutes late on ${format(processDate, 'MMMM d, yyyy')}.`,
-                    relatedDate: processDate
-                }
-            });
+            }
         }
         return;
     }

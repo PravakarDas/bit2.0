@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { processAllUnprocessedDates, processBackfillLeaveAutomation } from '@/actions/leave-automation.actions';
+import { processBackfillLeaveAutomation, runLeaveAutomationPipeline } from '@/actions/leave-automation.actions';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request) {
@@ -42,10 +42,12 @@ export async function POST(request: Request) {
                     || earliestByCreatedAt?.createdAt;
                 const fromDate = earliestDate ? new Date(earliestDate) : new Date(0);
 
-                result = await processBackfillLeaveAutomation(fromDate, undefined, {
+                result = await runLeaveAutomationPipeline({
+                    mode: 'ALL_DATES',
+                    fromDate,
                     includeToday: true,
                     skipIfWithinWindow: true,
-                    now: new Date()
+                    now: new Date(),
                 });
             } else {
                 // Process backfill for specified number of days
@@ -56,8 +58,29 @@ export async function POST(request: Request) {
                 result = await processBackfillLeaveAutomation(fromDate);
             }
         } else {
-            // Process all unprocessed dates (including today and yesterday)
-            result = await processAllUnprocessedDates();
+            // Sync missing ZKTeco data, then process all unprocessed dates (including today and yesterday)
+            result = await runLeaveAutomationPipeline({ mode: 'UNPROCESSED' });
+        }
+        const resultSuccess = typeof result === 'object' && result !== null && 'success' in result
+            ? Boolean((result as { success?: boolean }).success)
+            : true;
+
+        if (!resultSuccess) {
+            const syncMessage = typeof result === 'object'
+                && result !== null
+                && 'sync' in result
+                && typeof (result as { sync?: { message?: string } }).sync?.message === 'string'
+                ? (result as { sync?: { message?: string } }).sync?.message
+                : undefined;
+
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: syncMessage || 'Leave automation processing failed',
+                    data: result,
+                },
+                { status: 503 }
+            );
         }
         
         return NextResponse.json({

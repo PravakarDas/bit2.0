@@ -264,7 +264,13 @@ export default function TimelineClient() {
       const result = await response.json();
 
       if (result.success) {
-        toast.success(`Leave automation backfill completed. Processed ${result.data.processedDates} dates.`);
+        const processedDates = result?.data?.automation?.data?.processedDates;
+        const syncedRecords = result?.data?.sync?.syncedRecords;
+        if (typeof processedDates === 'number') {
+          toast.success(`Leave automation backfill completed. Synced ${syncedRecords ?? 0} records and processed ${processedDates} dates.`);
+        } else {
+          toast.success('Leave automation backfill completed.');
+        }
         void loadTimeRecords();
       } else {
         toast.error(result.error || 'Failed to process leave automation backfill');
