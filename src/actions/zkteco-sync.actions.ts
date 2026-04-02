@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
+import { getRuntimeSystemControlConfig } from "@/lib/system-control";
 
 export interface SyncResult {
   success: boolean;
@@ -48,6 +49,24 @@ async function isZKTecoServerReachable(baseUrl: string): Promise<boolean> {
     return false;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function applyRuntimeZktecoConfig() {
+  try {
+    const runtime = await getRuntimeSystemControlConfig();
+    zkTecoService.setRuntimeConfig({
+      baseUrl: runtime.zktecoBaseUrl || "",
+      username: runtime.zktecoUsername || "",
+      password: runtime.zktecoPassword || "",
+    });
+  } catch (error) {
+    console.warn("Failed loading runtime ZKTeco config from DB. Using empty fallback.", error);
+    zkTecoService.setRuntimeConfig({
+      baseUrl: "",
+      username: "",
+      password: "",
+    });
   }
 }
 
@@ -111,6 +130,7 @@ export async function syncEmployeeTimeData(userId: string, date: Date): Promise<
   };
 
   try {
+    await applyRuntimeZktecoConfig();
     console.log(`Syncing employee ${userId} for date ${date.toISOString().split('T')[0]}`);
     
     // Check if ZKTeco service is configured
@@ -334,7 +354,7 @@ export async function syncEmployeeTimeDataRange(userId: string): Promise<SyncRes
     for (const date of dates) {
       console.log(`\n=== Processing date: ${date.toISOString()} ===`);
       const dayResult = await syncEmployeeTimeData(userId, date);
-      
+
       result.syncedRecords += dayResult.syncedRecords;
       result.skippedRecords += dayResult.skippedRecords;
       result.errors.push(...dayResult.errors);
@@ -342,12 +362,12 @@ export async function syncEmployeeTimeDataRange(userId: string): Promise<SyncRes
       if (!dayResult.success && dayResult.errors.length > 0) {
         result.success = false;
       }
-      
+
       console.log(`Date ${date.toISOString().split('T')[0]} result:`, {
         success: dayResult.success,
         synced: dayResult.syncedRecords,
         skipped: dayResult.skippedRecords,
-        message: dayResult.message
+        message: dayResult.message,
       });
     }
 
@@ -390,6 +410,7 @@ export async function syncAllEmployeesTimeData(): Promise<SyncResult> {
   };
 
   try {
+    await applyRuntimeZktecoConfig();
     // Check if ZKTeco service is configured
     if (!zkTecoService.isConfigured()) {
       result.success = false;
@@ -398,7 +419,7 @@ export async function syncAllEmployeesTimeData(): Promise<SyncResult> {
       return result;
     }
 
-    const zkTecoBaseUrl = process.env.ZKTECO_BASE_URL || "";
+    const zkTecoBaseUrl = zkTecoService.getBaseUrl();
     const isServerReachable = await isZKTecoServerReachable(zkTecoBaseUrl);
     if (!isServerReachable) {
       result.success = false;
@@ -480,6 +501,7 @@ export async function syncAllEmployeesTimeDataForDate(date: Date): Promise<SyncR
   };
 
   try {
+    await applyRuntimeZktecoConfig();
     if (!zkTecoService.isConfigured()) {
       result.success = false;
       result.message = "ZKTeco service is not properly configured";
@@ -487,7 +509,7 @@ export async function syncAllEmployeesTimeDataForDate(date: Date): Promise<SyncR
       return result;
     }
 
-    const zkTecoBaseUrl = process.env.ZKTECO_BASE_URL || "";
+    const zkTecoBaseUrl = zkTecoService.getBaseUrl();
     const isServerReachable = await isZKTecoServerReachable(zkTecoBaseUrl);
     if (!isServerReachable) {
       result.success = false;

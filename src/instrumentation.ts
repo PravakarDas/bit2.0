@@ -1,6 +1,7 @@
 import { checkAndGenerateToday } from "@/actions/timeline.actions";
 import { syncAllEmployeesTimeData } from "@/actions/zkteco-sync.actions";
 import { runLeaveAutomationPipeline } from "@/actions/leave-automation.actions";
+import { getRuntimeSystemControlConfig } from "@/lib/system-control";
 
 const CRON_GLOBAL_FLAG = "__dailyTimelineCronStarted";
 const ZKTECO_CRON_GLOBAL_FLAG = "__zkTecoSyncCronStarted";
@@ -113,12 +114,17 @@ function startDailyTimelineCron() {
 
   globalAny[CRON_GLOBAL_FLAG] = true;
 
-  const timezone = process.env.APP_TIMEZONE;
-  const targetHour = getValidTime(process.env.CRON_TIMELINE_HOUR, 0, 0, 23);
-  const targetMinute = getValidTime(process.env.CRON_TIMELINE_MINUTE, 1, 0, 59);
   let lastRunDate = "";
 
   const runIfDue = async () => {
+    const runtime = await getRuntimeSystemControlConfig();
+    if (!runtime.timelineCronEnabled) {
+      return;
+    }
+
+    const timezone = runtime.appTimezone;
+    const targetHour = getValidTime(String(runtime.timelineCronHour), 0, 0, 23);
+    const targetMinute = getValidTime(String(runtime.timelineCronMinute), 1, 0, 59);
     const localNow = getLocalTimeParts(timezone);
     const { shouldRun, todayKey } = shouldRunForToday(localNow, targetHour, targetMinute, lastRunDate);
     if (!shouldRun) {
@@ -145,13 +151,18 @@ function startZKTecoSyncCron() {
 
   globalAny[ZKTECO_CRON_GLOBAL_FLAG] = true;
 
-  const timezone = process.env.APP_TIMEZONE;
-  const zkTecoBaseUrl = process.env.ZKTECO_BASE_URL || "";
-  const targetHour = getValidTime(process.env.CRON_ZKTECO_HOUR, 11, 0, 23);
-  const targetMinute = getValidTime(process.env.CRON_ZKTECO_MINUTE, 0, 0, 59);
   let lastRunDate = "";
 
   const runIfDue = async () => {
+    const runtime = await getRuntimeSystemControlConfig();
+    if (!runtime.zktecoCronEnabled) {
+      return;
+    }
+
+    const timezone = runtime.appTimezone;
+    const zkTecoBaseUrl = runtime.zktecoBaseUrl;
+    const targetHour = getValidTime(String(runtime.zktecoCronHour), 11, 0, 23);
+    const targetMinute = getValidTime(String(runtime.zktecoCronMinute), 0, 0, 59);
     const localNow = getLocalTimeParts(timezone);
     const { shouldRun, todayKey } = shouldRunForToday(localNow, targetHour, targetMinute, lastRunDate);
     if (!shouldRun) {
@@ -189,12 +200,17 @@ function startLeaveAutomationCron() {
 
   globalAny[LEAVE_AUTOMATION_CRON_GLOBAL_FLAG] = true;
 
-  const timezone = process.env.APP_TIMEZONE;
-  const targetHour = getValidTime(process.env.CRON_LEAVE_AUTOMATION_HOUR, 23, 0, 23);
-  const targetMinute = getValidTime(process.env.CRON_LEAVE_AUTOMATION_MINUTE, 0, 0, 59);
   let lastRunDate = "";
 
   const runIfDue = async () => {
+    const runtime = await getRuntimeSystemControlConfig();
+    if (!runtime.leaveAutomationCronEnabled) {
+      return;
+    }
+
+    const timezone = runtime.appTimezone;
+    const targetHour = getValidTime(String(runtime.leaveAutomationCronHour), 23, 0, 23);
+    const targetMinute = getValidTime(String(runtime.leaveAutomationCronMinute), 0, 0, 59);
     const localNow = getLocalTimeParts(timezone);
     const { shouldRun, todayKey } = shouldRunForToday(localNow, targetHour, targetMinute, lastRunDate);
     if (!shouldRun) {

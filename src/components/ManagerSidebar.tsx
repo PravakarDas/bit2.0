@@ -15,6 +15,7 @@ import {
     Wallet,
     Timer,
     Building2,
+    Settings,
 } from "lucide-react";
 
 import {
@@ -84,6 +85,11 @@ const managerNavItems = [
         title: "Organization Settings",
         url: "/manager/organization",
         icon: Building2,
+    },
+    {
+        title: "System Control",
+        url: "/manager/system-control",
+        icon: Settings,
     },
 ];
 

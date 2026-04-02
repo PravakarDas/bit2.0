@@ -27,6 +27,7 @@ import {
     UserCog,
     Crown,
     Plus,
+    Settings,
 } from "lucide-react";
 
 import {
@@ -67,6 +68,7 @@ const adminItems = [
     { title: "Overtime Requests", url: "/admin/overtime-requests", icon: ClipboardList },
     { title: "Timeline", url: "/admin/timeline", icon: Clock },
     { title: "Wallet", url: "/admin/wallet", icon: Wallet },
+    { title: "System Control", url: "/admin/system-control", icon: Settings },
 ];
 
 const employeeSubItems = [

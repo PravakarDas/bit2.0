@@ -76,13 +76,33 @@ class ZKTecoService {
   private authToken: string | null = null;
 
   constructor() {
-    this.baseUrl = process.env.ZKTECO_BASE_URL || '';
-    this.username = process.env.ZKTECO_USERNAME || '';
-    this.password = process.env.ZKTECO_PASSWORD || '';
+    this.baseUrl = '';
+    this.username = '';
+    this.password = '';
+  }
 
-    if (!this.baseUrl || !this.username || !this.password) {
-      console.warn('ZKTeco credentials not configured. Check environment variables: ZKTECO_BASE_URL, ZKTECO_USERNAME, ZKTECO_PASSWORD');
+  setRuntimeConfig(config: { baseUrl?: string; username?: string; password?: string }) {
+    const nextBaseUrl = (config.baseUrl ?? this.baseUrl).trim();
+    const nextUsername = (config.username ?? this.username).trim();
+    const nextPassword = config.password ?? this.password;
+
+    const changed =
+      this.baseUrl !== nextBaseUrl ||
+      this.username !== nextUsername ||
+      this.password !== nextPassword;
+
+    this.baseUrl = nextBaseUrl;
+    this.username = nextUsername;
+    this.password = nextPassword;
+
+    if (changed) {
+      // Credentials or endpoint changed; force re-auth.
+      this.authToken = null;
     }
+  }
+
+  getBaseUrl() {
+    return this.baseUrl;
   }
 
   /**

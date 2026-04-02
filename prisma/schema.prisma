@@ -549,6 +549,41 @@ model SystemAudit {
   createdAt DateTime @default(now())
 }
 
+model SystemControlSettings {
+  id                         String   @id @default("global")
+  appTimezone                String   @default("Asia/Dhaka")
+  timelineCronEnabled        Boolean  @default(true)
+  timelineCronHour           Int      @default(1)
+  timelineCronMinute         Int      @default(24)
+  zktecoCronEnabled          Boolean  @default(true)
+  zktecoCronHour             Int      @default(11)
+  zktecoCronMinute           Int      @default(0)
+  leaveAutomationCronEnabled Boolean  @default(true)
+  leaveAutomationCronHour    Int      @default(23)
+  leaveAutomationCronMinute  Int      @default(43)
+  zktecoBaseUrl              String   @default("")
+  zktecoUsername             String   @default("")
+  zktecoPassword             String   @default("")
+  updatedById                String?
+  updatedByEmail             String?
+  updatedByRole              String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+model SystemControlChangeLog {
+  id            String   @id @default(cuid())
+  actorId       String
+  actorName     String
+  actorEmail    String?
+  actorRole     String
+  actorIsManager Boolean @default(false)
+  changedFields String[]
+  previousValues Json?
+  newValues      Json?
+  createdAt     DateTime @default(now())
+}
+
 // Leave Management Models
 model LeaveType {
   id                String   @id @default(cuid())
