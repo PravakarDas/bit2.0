@@ -22,6 +22,22 @@ function minutesToTimeString(minutes: number): string {
   return `${sign}${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
 }
 
+function calculateBranchDailyActiveMinutes(
+  checkInTime: string,
+  checkOutTime: string,
+  breakDuration: string,
+) {
+  const checkInMinutes = timeStringToMinutes(checkInTime || "00:00");
+  const checkOutMinutes = timeStringToMinutes(checkOutTime || "00:00");
+  const breakMinutes = Math.max(0, timeStringToMinutes(breakDuration || "00:00"));
+
+  if (checkOutMinutes <= checkInMinutes) {
+    return 0;
+  }
+
+  return Math.max(0, (checkOutMinutes - checkInMinutes) - breakMinutes);
+}
+
 export async function getOvertimePayoutSummary(userId: string, year: number) {
   const admin = await getDbUser();
   if (!admin || admin.role !== 'SUPERADMIN') {
@@ -30,7 +46,34 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, baseSalary: true, firstName: true, lastName: true, email: true, branchId: true }
+    select: {
+      id: true,
+      baseSalary: true,
+      workingDaysInMonth: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      branchId: true,
+      branch: {
+        select: {
+          checkInTime: true,
+          checkOutTime: true,
+          breakDuration: true,
+        },
+      },
+      leaveEntitlements: {
+        where: {
+          year,
+          leaveType: {
+            leaveResetPolicy: "ROSTER_EVERY_YEAR",
+          },
+        },
+        select: {
+          allocatedDays: true,
+          usedDays: true,
+        },
+      },
+    }
   });
 
   if (!user) {
@@ -55,6 +98,7 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
   let totalRequiredActiveMinutes = 0;
   let totalRequiredBreakMinutes = 0;
   let totalOvertimeMinutes = 0;
+  let totalActualActiveMinutes = 0;
 
   records.forEach(record => {
     // Count working days (records with required times - not weekends/holidays)
@@ -71,6 +115,10 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
       
       // Count present days and overtime (only if employee checked in)
       if (record.actualCheckIn) {
+        if (record.actualActiveTime) {
+          totalActualActiveMinutes += timeStringToMinutes(record.actualActiveTime);
+        }
+
         // Add overtime/undertime
         if (record.overtimeUndertime) {
           totalOvertimeMinutes += timeStringToMinutes(record.overtimeUndertime);
@@ -79,13 +127,30 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
     }
   });
 
+  const totalRenewableLeaveRemainingDays = user.leaveEntitlements.reduce((sum, entitlement) => {
+    return sum + Math.max(0, entitlement.allocatedDays - entitlement.usedDays);
+  }, 0);
+
+  // Calculate total required minutes without leave deduction
   const totalRequiredMinutes = totalRequiredActiveMinutes + totalRequiredBreakMinutes;
-  const annualSalary = user.baseSalary * 12;
-  const amount = totalRequiredMinutes > 0
-    ? Math.ceil((annualSalary / totalRequiredMinutes) * totalOvertimeMinutes)
+
+  // Calculate per-minute salary: baseSalary / workingDaysInMonth / 480 minutes (8 hours)
+  const workingDaysInMonth = user.workingDaysInMonth || 22;
+  const perMinuteSalary = workingDaysInMonth > 0 
+    ? (user.baseSalary / workingDaysInMonth / 480)
     : 0;
 
+  // Convert remaining leave days to minutes (1 day = 8 hours = 480 minutes)
+  const renewableLeaveMinutes = totalRenewableLeaveRemainingDays * 480;
+
+  // Calculate payable minutes = OT/UT + unused leave days
+  const payableMinutes = totalOvertimeMinutes + renewableLeaveMinutes;
+
+  // Calculate final amount
+  const amount = Math.ceil(payableMinutes * perMinuteSalary);
+
   const totalRequiredActiveTime = minutesToTimeString(totalRequiredActiveMinutes);
+  const totalActualActiveTime = minutesToTimeString(totalActualActiveMinutes);
   const totalRequiredBreakTime = minutesToTimeString(totalRequiredBreakMinutes);
   const totalOvertimeUndertime = minutesToTimeString(totalOvertimeMinutes);
 
@@ -97,10 +162,17 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
     user,
     year,
     totalRequiredActiveTime,
+    totalActualActiveTime,
     totalRequiredBreakTime,
     totalOvertimeUndertime,
     totalRequiredMinutes,
     totalOvertimeMinutes,
+    totalActualActiveMinutes,
+    totalRenewableLeaveRemainingDays,
+    renewableLeaveMinutes,
+    payableMinutes,
+    perMinuteSalary,
+    workingDaysInMonth,
     calculatedAmount: amount,
     isPaid: existingPayout?.isPaid ?? false,
     paidAt: existingPayout?.paidAt ?? null,
@@ -131,6 +203,66 @@ export async function getEligibleEmployeesForOvertime(branchId?: string) {
   });
 }
 
+export async function getOvertimePayoutHistory(userId: string) {
+  const admin = await getDbUser();
+  if (!admin || admin.role !== 'SUPERADMIN') {
+    throw new Error("Unauthorized");
+  }
+
+  return await prisma.overtimePayout.findMany({
+    where: { userId },
+    select: {
+      id: true,
+      year: true,
+      totalRequiredActiveTime: true,
+      totalRequiredBreakTime: true,
+      totalOvertimeUndertime: true,
+      totalRequiredMinutes: true,
+      totalOvertimeMinutes: true,
+      calculatedAmount: true,
+      isPaid: true,
+      paidAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: { year: 'desc' },
+  });
+}
+
+export async function getLeaveEntitlementHistory(userId: string) {
+  const admin = await getDbUser();
+  if (!admin || admin.role !== 'SUPERADMIN') {
+    throw new Error("Unauthorized");
+  }
+
+  const entitlements = await prisma.userLeaveEntitlement.findMany({
+    where: { userId },
+    select: {
+      id: true,
+      year: true,
+      allocatedDays: true,
+      usedDays: true,
+      leaveType: {
+        select: {
+          name: true,
+          leaveResetPolicy: true,
+        },
+      },
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: [
+      { year: 'desc' },
+      { leaveType: { name: 'asc' } },
+    ],
+  });
+
+  return entitlements.map((entitlement) => ({
+    ...entitlement,
+    remainingDays: Math.max(0, entitlement.allocatedDays - entitlement.usedDays),
+  }));
+}
+
 export async function applyOvertimePayout(userId: string, year: number) {
   const admin = await getDbUser();
   if (!admin || admin.role !== 'SUPERADMIN') {
@@ -147,6 +279,9 @@ export async function applyOvertimePayout(userId: string, year: number) {
   }
 
   const amount = summary.calculatedAmount;
+  const totalRequiredTime = minutesToTimeString(summary.totalRequiredMinutes);
+  const payableTime = minutesToTimeString(summary.payableMinutes);
+  const payableTimeHours = (summary.payableMinutes / 60).toFixed(2);
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.user.update({
@@ -161,6 +296,15 @@ export async function applyOvertimePayout(userId: string, year: number) {
         type: "YEARLY_OT_UT_ADJUSTMENT",
         description: `Yearly OT/UT adjustment for ${year}`,
       }
+    });
+
+    await tx.employeeNotification.create({
+      data: {
+        userId,
+        type: "YEARLY_OT_UT_PROCESSED",
+        title: `Yearly OT/UT Processed (${year})`,
+        message: `Your yearly OT/UT for ${year} has been processed. Wallet adjusted by ৳${amount}. Calculation: Per-minute salary = ৳${summary.perMinuteSalary.toFixed(2)}, OT/UT = ${summary.totalOvertimeUndertime}, Unused renewable leaves = ${summary.totalRenewableLeaveRemainingDays} day(s) (${minutesToTimeString(summary.renewableLeaveMinutes)}), Total payable = ${payableTime}`,
+      },
     });
 
     const payout = await tx.overtimePayout.upsert({

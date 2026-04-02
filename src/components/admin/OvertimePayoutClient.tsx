@@ -2,13 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getActiveBranches } from "@/actions/branch.actions";
-import { applyOvertimePayout, getEligibleEmployeesForOvertime, getOvertimePayoutSummary } from "@/actions/overtime.actions";
+import {
+  applyOvertimePayout,
+  getEligibleEmployeesForOvertime,
+  getLeaveEntitlementHistory,
+  getOvertimePayoutHistory,
+  getOvertimePayoutSummary,
+} from "@/actions/overtime.actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/currency";
 import { toast } from "sonner";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface Branch {
   id: string;
@@ -34,6 +42,26 @@ interface Summary {
   };
   year: number;
   totalRequiredActiveTime: string;
+  totalActualActiveTime: string;
+  totalRequiredBreakTime: string;
+  totalOvertimeUndertime: string;
+  totalRequiredMinutes: number;
+  totalOvertimeMinutes: number;
+  totalActualActiveMinutes: number;
+  totalRenewableLeaveRemainingDays: number;
+  renewableLeaveMinutes: number;
+  payableMinutes: number;
+  perMinuteSalary: number;
+  workingDaysInMonth: number;
+  calculatedAmount: number;
+  isPaid: boolean;
+  paidAt: Date | null;
+}
+
+interface OvertimePayoutHistoryItem {
+  id: string;
+  year: number;
+  totalRequiredActiveTime: string;
   totalRequiredBreakTime: string;
   totalOvertimeUndertime: string;
   totalRequiredMinutes: number;
@@ -41,6 +69,31 @@ interface Summary {
   calculatedAmount: number;
   isPaid: boolean;
   paidAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface LeaveEntitlementHistoryItem {
+  id: string;
+  year: number;
+  allocatedDays: number;
+  usedDays: number;
+  remainingDays: number;
+  leaveType: {
+    name: string;
+    leaveResetPolicy: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function minutesToTimeString(minutes: number): string {
+  if (minutes === 0) return "00:00";
+  const isNegative = minutes < 0;
+  const absolute = Math.abs(minutes);
+  const hours = Math.floor(absolute / 60);
+  const mins = absolute % 60;
+  return `${isNegative ? "-" : ""}${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
 }
 
 export default function OvertimePayoutClient() {
@@ -49,8 +102,12 @@ export default function OvertimePayoutClient() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
   const [selectedEmployee, setSelectedEmployee] = useState<string>("");
+  const [searchName, setSearchName] = useState<string>("");
+  const [appliedSearchName, setAppliedSearchName] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [payoutHistory, setPayoutHistory] = useState<OvertimePayoutHistoryItem[]>([]);
+  const [leaveHistory, setLeaveHistory] = useState<LeaveEntitlementHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
 
@@ -59,6 +116,17 @@ export default function OvertimePayoutClient() {
     for (let i = 0; i < 6; i++) list.push(currentYear - i);
     return list;
   }, [currentYear]);
+
+  const filteredEmployees = useMemo(() => {
+    const keyword = appliedSearchName.trim().toLowerCase();
+    if (!keyword) return employees;
+
+    return employees.filter((emp) => {
+      const fullName = `${emp.firstName ?? ""} ${emp.lastName ?? ""}`.trim().toLowerCase();
+      const email = emp.email.toLowerCase();
+      return fullName.includes(keyword) || email.includes(keyword);
+    });
+  }, [employees, appliedSearchName]);
 
   useEffect(() => {
     const loadBranches = async () => {
@@ -73,6 +141,8 @@ export default function OvertimePayoutClient() {
       const branchId = selectedBranch === "all" ? undefined : selectedBranch;
       const data = await getEligibleEmployeesForOvertime(branchId);
       setEmployees(data as Employee[]);
+      setAppliedSearchName("");
+      setSearchName("");
       if (selectedEmployee && !data.find((emp: Employee) => emp.id === selectedEmployee)) {
         setSelectedEmployee("");
         setSummary(null);
@@ -85,16 +155,27 @@ export default function OvertimePayoutClient() {
     const loadSummary = async () => {
       if (!selectedEmployee) {
         setSummary(null);
+        setPayoutHistory([]);
+        setLeaveHistory([]);
         return;
       }
       setLoading(true);
       try {
-        const data = await getOvertimePayoutSummary(selectedEmployee, selectedYear);
-        setSummary(data as Summary);
+        const [summaryData, payoutHistoryData, leaveHistoryData] = await Promise.all([
+          getOvertimePayoutSummary(selectedEmployee, selectedYear),
+          getOvertimePayoutHistory(selectedEmployee),
+          getLeaveEntitlementHistory(selectedEmployee),
+        ]);
+
+        setSummary(summaryData as Summary);
+        setPayoutHistory(payoutHistoryData as OvertimePayoutHistoryItem[]);
+        setLeaveHistory(leaveHistoryData as LeaveEntitlementHistoryItem[]);
       } catch (error) {
         console.error(error);
         toast.error("Failed to load payout summary");
         setSummary(null);
+        setPayoutHistory([]);
+        setLeaveHistory([]);
       } finally {
         setLoading(false);
       }
@@ -109,8 +190,14 @@ export default function OvertimePayoutClient() {
       const result = await applyOvertimePayout(summary.user.id, summary.year);
       if (result.success) {
         toast.success("Yearly OT/UT adjustment applied to wallet");
-        const refreshed = await getOvertimePayoutSummary(summary.user.id, summary.year);
-        setSummary(refreshed as Summary);
+        const [refreshedSummary, refreshedPayoutHistory, refreshedLeaveHistory] = await Promise.all([
+          getOvertimePayoutSummary(summary.user.id, summary.year),
+          getOvertimePayoutHistory(summary.user.id),
+          getLeaveEntitlementHistory(summary.user.id),
+        ]);
+        setSummary(refreshedSummary as Summary);
+        setPayoutHistory(refreshedPayoutHistory as OvertimePayoutHistoryItem[]);
+        setLeaveHistory(refreshedLeaveHistory as LeaveEntitlementHistoryItem[]);
       } else {
         toast.error(result.error || "Failed to apply payout");
       }
@@ -146,12 +233,26 @@ export default function OvertimePayoutClient() {
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Employee</label>
+            <div className="flex gap-2">
+              <Input
+                value={searchName}
+                onChange={(event) => setSearchName(event.target.value)}
+                placeholder="Search by employee name"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAppliedSearchName(searchName)}
+              >
+                Search
+              </Button>
+            </div>
             <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
               <SelectTrigger>
                 <SelectValue placeholder="Select employee" />
               </SelectTrigger>
               <SelectContent>
-                {employees.map(emp => (
+                {filteredEmployees.map(emp => (
                   <SelectItem key={emp.id} value={emp.id}>
                     {emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.email}
                   </SelectItem>
@@ -207,18 +308,42 @@ export default function OvertimePayoutClient() {
                   <div className="text-lg font-semibold">{formatCurrency(summary.user.baseSalary || 0)}</div>
                 </div>
                 <div>
+                  <div className="text-xs text-muted-foreground">Working Days in Month</div>
+                  <div className="text-lg font-semibold">{summary.workingDaysInMonth}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Per Minute Salary Value</div>
+                  <div className="text-lg font-semibold">{formatCurrency(summary.perMinuteSalary)}</div>
+                </div>
+                <div>
                   <div className="text-xs text-muted-foreground">Total Required Active Time</div>
                   <div className="text-lg font-semibold">{summary.totalRequiredActiveTime}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Total Actual Active Time</div>
+                  <div className="text-lg font-semibold">{summary.totalActualActiveTime}</div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Total Required Break Time</div>
                   <div className="text-lg font-semibold">{summary.totalRequiredBreakTime}</div>
                 </div>
                 <div>
+                  <div className="text-xs text-muted-foreground">Total Required Minutes</div>
+                  <div className="text-lg font-semibold">{minutesToTimeString(summary.totalRequiredMinutes)}</div>
+                </div>
+                <div>
                   <div className="text-xs text-muted-foreground">Total OT/UT</div>
                   <div className={`text-lg font-semibold ${summary.totalOvertimeUndertime.startsWith("-") ? "text-red-600" : "text-green-600"}`}>
                     {summary.totalOvertimeUndertime.startsWith("-") ? summary.totalOvertimeUndertime : `+${summary.totalOvertimeUndertime}`}
                   </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Remaining Renewable Leaves</div>
+                  <div className="text-lg font-semibold">{summary.totalRenewableLeaveRemainingDays} day(s) = {minutesToTimeString(summary.renewableLeaveMinutes)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Payable Minutes (OT/UT + Leaves)</div>
+                  <div className="text-lg font-semibold text-blue-600">{minutesToTimeString(summary.payableMinutes)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Calculated Amount</div>
@@ -239,6 +364,92 @@ export default function OvertimePayoutClient() {
                   {applying ? "Applying..." : "Apply to Wallet"}
                 </Button>
               </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>OT/UT Payout History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!selectedEmployee ? (
+            <div className="text-sm text-muted-foreground">Select an employee to view payout history.</div>
+          ) : payoutHistory.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No yearly payout records found.</div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Year</TableHead>
+                    <TableHead>Total OT/UT</TableHead>
+                    <TableHead>Required Minutes</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Paid At</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payoutHistory.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">{item.year}</TableCell>
+                      <TableCell className={item.totalOvertimeUndertime.startsWith("-") ? "text-red-600" : "text-green-600"}>
+                        {item.totalOvertimeUndertime.startsWith("-") ? item.totalOvertimeUndertime : `+${item.totalOvertimeUndertime}`}
+                      </TableCell>
+                      <TableCell>{item.totalRequiredMinutes}</TableCell>
+                      <TableCell className={item.calculatedAmount < 0 ? "text-red-600" : "text-green-600"}>
+                        {formatCurrency(item.calculatedAmount)}
+                      </TableCell>
+                      <TableCell>
+                        {item.isPaid ? <Badge variant="secondary">Paid</Badge> : <Badge variant="outline">Pending</Badge>}
+                      </TableCell>
+                      <TableCell>{item.paidAt ? new Date(item.paidAt).toLocaleString() : "--"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Leave Entitlement History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!selectedEmployee ? (
+            <div className="text-sm text-muted-foreground">Select an employee to view leave history.</div>
+          ) : leaveHistory.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No leave entitlement records found.</div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Year</TableHead>
+                    <TableHead>Leave Type</TableHead>
+                    <TableHead>Policy</TableHead>
+                    <TableHead>Allocated</TableHead>
+                    <TableHead>Used</TableHead>
+                    <TableHead>Remaining</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leaveHistory.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">{item.year}</TableCell>
+                      <TableCell>{item.leaveType.name}</TableCell>
+                      <TableCell>{item.leaveType.leaveResetPolicy}</TableCell>
+                      <TableCell>{item.allocatedDays}</TableCell>
+                      <TableCell>{item.usedDays}</TableCell>
+                      <TableCell>{item.remainingDays}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>

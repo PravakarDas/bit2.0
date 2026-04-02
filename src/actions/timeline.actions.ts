@@ -72,6 +72,94 @@ function addTimeStrings(time1?: string | null, time2?: string | null): string {
   return minutesToTimeString(minutes1 + minutes2);
 }
 
+type PenaltyAdjustmentResult = {
+  applied: boolean;
+  adjustedAmount: number;
+  direction: "DEBIT" | "CREDIT";
+};
+
+function getRequiredActiveMinutesForPenalty(
+  requiredCheckIn: Date | null,
+  requiredCheckOut: Date | null,
+  requiredBreakTime: string | null | undefined,
+  requiredActiveTime: string | null | undefined,
+) {
+  const fromStored = timeStringToMinutes(requiredActiveTime || "00:00");
+  if (fromStored > 0) return fromStored;
+
+  if (!requiredCheckIn || !requiredCheckOut) return 0;
+
+  const totalMinutes = Math.max(
+    0,
+    Math.floor((requiredCheckOut.getTime() - requiredCheckIn.getTime()) / (1000 * 60)),
+  );
+  const breakMinutes = timeStringToMinutes(requiredBreakTime || "00:00");
+  return Math.max(0, totalMinutes - breakMinutes);
+}
+
+async function reconcileLatePenaltyWalletOnTimelineEdit(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  date: Date,
+  lateMinutes: number,
+  penaltyAmount: number,
+): Promise<PenaltyAdjustmentResult> {
+  const dateKey = getDateKey(date);
+  const penaltyTag = `Late check-in penalty for ${dateKey}`;
+
+  const priorPenaltyTransactions = await tx.walletTransaction.findMany({
+    where: {
+      userId,
+      type: "ADJUSTMENT",
+      description: {
+        contains: penaltyTag,
+      },
+    },
+    select: {
+      amount: true,
+    },
+  });
+
+  const alreadyDeducted = priorPenaltyTransactions.reduce((sum, transaction) => {
+    if (transaction.amount >= 0) {
+      return sum;
+    }
+    return sum + Math.abs(transaction.amount);
+  }, 0);
+
+  const diff = Number((penaltyAmount - alreadyDeducted).toFixed(2));
+  if (Math.abs(diff) < 0.01) {
+    return { applied: false, adjustedAmount: 0, direction: "DEBIT" };
+  }
+
+  const direction: "DEBIT" | "CREDIT" = diff > 0 ? "DEBIT" : "CREDIT";
+  const adjustmentAmount = Number(Math.abs(diff).toFixed(2));
+  const walletAmount = direction === "DEBIT" ? -adjustmentAmount : adjustmentAmount;
+  const description = direction === "DEBIT"
+    ? `${penaltyTag} (${lateMinutes} min)`
+    : `Late check-in penalty correction for ${dateKey}`;
+
+  await tx.user.update({
+    where: { id: userId },
+    data: { walletBalance: { increment: walletAmount } },
+  });
+
+  await tx.walletTransaction.create({
+    data: {
+      userId,
+      amount: walletAmount,
+      type: "ADJUSTMENT",
+      description,
+    },
+  });
+
+  return {
+    applied: true,
+    adjustedAmount: adjustmentAmount,
+    direction,
+  };
+}
+
 interface TimelineGenerationResult {
   success: boolean;
   recordsCreated?: number;
@@ -763,6 +851,19 @@ export async function updateTimelineRecord(
       return { success: false, error: 'Timeline record not found' };
     }
 
+    const employeeForPenalty = await prisma.user.findUnique({
+      where: { id: currentRecord.userId },
+      select: {
+        id: true,
+        baseSalary: true,
+        workingDaysInMonth: true,
+      },
+    });
+
+    if (!employeeForPenalty) {
+      return { success: false, error: 'Employee not found' };
+    }
+
     const updateData: Prisma.DailyTimeRecordUpdateInput = {
       updatedAt: new Date()
     };
@@ -782,6 +883,12 @@ export async function updateTimelineRecord(
     const finalActualCheckIn = data.actualCheckIn !== undefined ? data.actualCheckIn : currentRecord.actualCheckIn;
     const finalActualCheckOut = data.actualCheckOut !== undefined ? data.actualCheckOut : currentRecord.actualCheckOut;
     const finalActualBreakTime = data.actualBreakTime !== undefined ? data.actualBreakTime : currentRecord.actualBreakTime;
+
+    const affectsLatePenalty =
+      data.requiredCheckIn !== undefined ||
+      data.requiredCheckOut !== undefined ||
+      data.requiredBreakTime !== undefined ||
+      data.actualCheckIn !== undefined;
 
     // Calculate required active time if we have required check-in and check-out
     if (finalRequiredCheckIn && finalRequiredCheckOut) {
@@ -818,17 +925,79 @@ export async function updateTimelineRecord(
       }
     }
 
-    const record = await prisma.dailyTimeRecord.update({
-      where: { id: recordId },
-      data: updateData,
-      include: {
-        user: {
-          select: {
-            firstName: true,
-            lastName: true
-          }
+    let recalculatedLateMinutes = 0;
+    let recalculatedPenaltyAmount = 0;
+
+    if (affectsLatePenalty && finalRequiredCheckIn && finalActualCheckIn) {
+      recalculatedLateMinutes = Math.max(
+        0,
+        Math.floor((finalActualCheckIn.getTime() - finalRequiredCheckIn.getTime()) / (1000 * 60)),
+      );
+
+      const requiredActiveMinutes = getRequiredActiveMinutesForPenalty(
+        finalRequiredCheckIn,
+        finalRequiredCheckOut,
+        finalRequiredBreakTime,
+        (updateData.requiredActiveTime as string | undefined) ?? currentRecord.requiredActiveTime,
+      );
+
+      const workingDaysInMonth = employeeForPenalty.workingDaysInMonth || 22;
+      const dailySalary = workingDaysInMonth > 0 ? (employeeForPenalty.baseSalary / workingDaysInMonth) : 0;
+      const perMinuteRate = requiredActiveMinutes > 0 ? (dailySalary / requiredActiveMinutes) : 0;
+      recalculatedPenaltyAmount = recalculatedLateMinutes > 0
+        ? Number((perMinuteRate * recalculatedLateMinutes).toFixed(2))
+        : 0;
+
+      updateData.lateCheckInMinutes = recalculatedLateMinutes;
+      updateData.lateCheckInPenalty = recalculatedPenaltyAmount;
+    }
+    const { record } = await prisma.$transaction(async (tx) => {
+      const updatedRecord = await tx.dailyTimeRecord.update({
+        where: { id: recordId },
+        data: updateData,
+        include: {
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      });
+
+      let adjustment: PenaltyAdjustmentResult = {
+        applied: false,
+        adjustedAmount: 0,
+        direction: "DEBIT",
+      };
+
+      if (affectsLatePenalty) {
+        adjustment = await reconcileLatePenaltyWalletOnTimelineEdit(
+          tx,
+          currentRecord.userId,
+          currentRecord.date,
+          recalculatedLateMinutes,
+          recalculatedPenaltyAmount,
+        );
+
+        if (adjustment.applied) {
+          const message = adjustment.direction === "DEBIT"
+            ? `A penalty of ৳${adjustment.adjustedAmount.toFixed(2)} was applied after timeline update (${recalculatedLateMinutes} minutes late on ${new Date(currentRecord.date).toLocaleDateString()}).`
+            : `A penalty correction of ৳${adjustment.adjustedAmount.toFixed(2)} was credited after timeline update for ${new Date(currentRecord.date).toLocaleDateString()}.`;
+
+          await tx.employeeNotification.create({
+            data: {
+              userId: currentRecord.userId,
+              type: "LATE_CHECKIN_PENALTY",
+              title: "Late Check-in Penalty Updated",
+              message,
+              relatedDate: currentRecord.date,
+            },
+          });
         }
       }
+
+      return { record: updatedRecord, penaltyAdjustment: adjustment };
     });
 
     if (actor.role === "EMPLOYEE" && actor.isManager) {
