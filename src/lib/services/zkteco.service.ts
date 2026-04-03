@@ -245,18 +245,18 @@ class ZKTecoService {
           actualCheckOut = punchTime; // Last check-out of the day (will be overwritten if there are multiple)
           break;
 
-        case '2': // Break Out
-          // If already on break, keep the original start time so duplicate break-outs
-          // count as one continuous break until a break-in is received.
-          if (!activeBreakStart) {
-            activeBreakStart = punchTime;
+        case '2': // Break Out (returning from break)
+          // When employee returns from break, close the break session
+          if (activeBreakStart) {
+            breakSessions.push({ breakIn: activeBreakStart, breakOut: punchTime });
+            activeBreakStart = null;
           }
           break;
 
-        case '3': // Break In
-          if (activeBreakStart) {
-            breakSessions.push({ breakOut: activeBreakStart, breakIn: punchTime });
-            activeBreakStart = null;
+        case '3': // Break In (going for break)
+          // If not already on break, mark the start of break
+          if (!activeBreakStart) {
+            activeBreakStart = punchTime;
           }
           break;
       }
@@ -264,14 +264,14 @@ class ZKTecoService {
 
     // Policy: if a break is left open, close it at last check-out.
     if (activeBreakStart && actualCheckOut && actualCheckOut.getTime() > activeBreakStart.getTime()) {
-      breakSessions.push({ breakOut: activeBreakStart, breakIn: actualCheckOut });
+      breakSessions.push({ breakIn: activeBreakStart, breakOut: actualCheckOut });
       activeBreakStart = null;
     }
 
-    // Calculate total break time
+    // Calculate total break time: breakOut time - breakIn time (when returned - when left)
     let totalBreakMinutes = 0;
     for (const session of breakSessions) {
-      const breakDuration = session.breakIn.getTime() - session.breakOut.getTime();
+      const breakDuration = session.breakOut.getTime() - session.breakIn.getTime();
       if (breakDuration > 0) {
         totalBreakMinutes += Math.floor(breakDuration / (1000 * 60)); // Convert to minutes
       }

@@ -192,6 +192,11 @@ export default function TimelineTableView({
   };
 
   const getAttendanceStatus = (record: TimeRecord) => {
+    // If auto-deducted leave type exists, show it directly
+    if (record.autoDeductedLeaveType) {
+      return <Badge variant="outline">{record.autoDeductedLeaveType}</Badge>;
+    }
+
     if (record.status === "PRESENT") {
       return <Badge variant="default">Present</Badge>;
     }

@@ -214,6 +214,11 @@ export default function TimelineCalendarView({
                             />
                           </div>
                           {(() => {
+                            // If auto-deducted leave type exists, show it directly
+                            if (record.autoDeductedLeaveType) {
+                              return <Badge variant="outline">{record.autoDeductedLeaveType}</Badge>;
+                            }
+
                             switch (record.status) {
                               case "WEEKLY_OFF":
                                 return <Badge variant="secondary">Weekly Off</Badge>;
