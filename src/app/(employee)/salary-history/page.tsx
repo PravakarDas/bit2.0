@@ -11,6 +11,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { BlurAmount } from "@/components/employee/BlurAmount";
 import { Badge } from "@/components/ui/badge";
 import { History, Loader2, TrendingUp, DollarSign, Calendar } from "lucide-react";
 import { getMySalaryPaymentHistory } from "@/actions/salary.actions";
@@ -87,7 +88,7 @@ export default function SalaryHistoryPage() {
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{salaryPayments.length}</div>
+                        <BlurAmount amount={salaryPayments.length} currency="" amountClassName="text-2xl font-bold" blurred={true} />
                         <p className="text-xs text-muted-foreground">Salary payments received</p>
                     </CardContent>
                 </Card>
@@ -98,7 +99,7 @@ export default function SalaryHistoryPage() {
                         <DollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">৳{totalPaid.toLocaleString("en-BD")}</div>
+                        <BlurAmount amount={totalPaid} amountClassName="text-2xl font-bold" blurred={true} />
                         <p className="text-xs text-muted-foreground">Cumulative earnings</p>
                     </CardContent>
                 </Card>
@@ -109,12 +110,10 @@ export default function SalaryHistoryPage() {
                         <TrendingUp className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">
-                            {salaryPayments.length > 0 
-                                ? `৳${salaryPayments[0].netAmount.toLocaleString("en-BD")}`
-                                : "−"
-                            }
-                        </div>
+                        {salaryPayments.length > 0 
+                            ? <BlurAmount amount={salaryPayments[0].netAmount} amountClassName="text-2xl font-bold" blurred={true} />
+                            : <div className="text-2xl font-bold">−</div>
+                        }
                         <p className="text-xs text-muted-foreground">
                             {salaryPayments.length > 0 
                                 ? formatMonth(salaryPayments[0].month)

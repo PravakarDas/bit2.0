@@ -6,6 +6,7 @@ import { LoanList } from "./LoanList";
 import type { Loan } from "./LoanList";
 import { LoanApplicationForm } from "./LoanApplicationForm";
 import { CreditCard, Landmark, CalendarClock } from "lucide-react";
+import { BlurAmount } from "@/components/employee/BlurAmount";
 
 interface LoanDashboardProps {
     loans: Loan[];
@@ -24,7 +25,7 @@ export function LoanDashboard({ loans, maxEligibleAmount }: LoanDashboardProps) 
     return (
         <Tabs defaultValue="overview" className="space-y-6">
             <div className="flex justify-between items-center">
-                <TabsList className="grid w-full max-w-[400px] grid-cols-3">
+                <TabsList className="grid w-full max-w-100 grid-cols-3">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="history">My Loans</TabsTrigger>
                     <TabsTrigger value="apply">Apply Now</TabsTrigger>
@@ -38,9 +39,9 @@ export function LoanDashboard({ loans, maxEligibleAmount }: LoanDashboardProps) 
                             <CardTitle className="text-sm font-medium text-red-600">Total Active Debt</CardTitle>
                             <CreditCard className="h-4 w-4 text-red-500" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-red-700">৳{totalDebt.toLocaleString("en-BD")}</div>
-                            <p className="text-xs text-muted-foreground mt-1">across {loans.filter(l => l.status === "ACTIVE").length} active loans</p>
+                        <CardContent className="space-y-2">
+                            <BlurAmount amount={totalDebt} amountClassName="text-lg font-bold text-red-700" blurred={true} />
+                            <p className="text-xs text-muted-foreground">across {loans.filter(l => l.status === "ACTIVE").length} active loans</p>
                         </CardContent>
                     </Card>
                     <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
@@ -48,9 +49,9 @@ export function LoanDashboard({ loans, maxEligibleAmount }: LoanDashboardProps) 
                             <CardTitle className="text-sm font-medium text-blue-600">Next EMI Due</CardTitle>
                             <Landmark className="h-4 w-4 text-blue-500" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-blue-700">৳{nextEmi.toLocaleString("en-BD")}</div>
-                            <p className="text-xs text-muted-foreground mt-1">Deducted from next payroll</p>
+                        <CardContent className="space-y-2">
+                            <BlurAmount amount={nextEmi} amountClassName="text-lg font-bold text-blue-700" blurred={true} />
+                            <p className="text-xs text-muted-foreground">Deducted from next payroll</p>
                         </CardContent>
                     </Card>
                     <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
@@ -58,9 +59,9 @@ export function LoanDashboard({ loans, maxEligibleAmount }: LoanDashboardProps) 
                             <CardTitle className="text-sm font-medium text-green-600">Available Limit</CardTitle>
                             <CalendarClock className="h-4 w-4 text-green-500" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-700">৳{maxEligibleAmount.toLocaleString("en-BD")}</div>
-                            <p className="text-xs text-muted-foreground mt-1">Max eligible for new requests</p>
+                        <CardContent className="space-y-2">
+                            <BlurAmount amount={maxEligibleAmount} amountClassName="text-lg font-bold text-green-700" blurred={true} />
+                            <p className="text-xs text-muted-foreground">Max eligible for new requests</p>
                         </CardContent>
                     </Card>
                 </div>

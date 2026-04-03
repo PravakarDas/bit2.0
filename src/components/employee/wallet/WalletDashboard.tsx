@@ -7,6 +7,7 @@ import { WalletRequestForm } from "./WalletRequestForm";
 import { WalletRequestList } from "./WalletRequestList";
 import { WalletTransactionList } from "./WalletTransactionList";
 
+import { BlurAmount } from "@/components/employee/BlurAmount";
 interface WalletDashboardProps {
     balance: number;
     requests: WalletRequest[];
@@ -22,7 +23,7 @@ export function WalletDashboard({ balance, requests, transactions }: WalletDashb
                         <CardTitle className="text-sm font-medium">Wallet Balance</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">৳{balance.toLocaleString("en-BD")}</div>
+                        <BlurAmount amount={balance} amountClassName="text-2xl font-bold" blurred={true} />
                         <p className="text-xs text-muted-foreground">Current available funds</p>
                     </CardContent>
                 </Card>

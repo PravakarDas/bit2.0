@@ -1,127 +1,166 @@
 import { getEmployeeDashboardData } from "@/actions/dashboard.actions";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { SalaryChart } from "@/components/employee/SalaryChart";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BlurAmount } from "@/components/employee/BlurAmount";
+import { LeaveRemaining } from "@/components/employee/LeaveRemaining";
+import { AttendanceChart } from "@/components/employee/charts/AttendanceChart";
+import { MonthComparisonChart } from "@/components/employee/charts/MonthComparisonChart";
+import { OvertimeTrendChart } from "@/components/employee/charts/OvertimeTrendChart";
+import { TimeTrackingTabs } from "@/components/employee/TimeTrackingTabs";
 import {
     Wallet,
     Banknote,
     Stethoscope,
-    ArrowUpRight,
-    ArrowDownLeft,
     Clock,
-    CircleDollarSign
 } from "lucide-react";
 
+interface DashboardData {
+    walletBalance: number;
+    remainingLoan: number;
+    remainingMedical: number;
+    attendanceData: {
+        present: number;
+        absent: number;
+        onLeave: number;
+        weeklyOff: number;
+    };
+    leaveArray: Array<{
+        name: string;
+        remaining: number;
+        total: number;
+        used: number;
+    }>;
+    activeTimeData: {
+        last7WorkingDays: { activeHours: number; requiredHours: number; presentDays: number; workingDays: number };
+        thisWeek: { activeHours: number; requiredHours: number; presentDays: number; workingDays: number };
+        thisMonth: { activeHours: number; requiredHours: number; presentDays: number; workingDays: number };
+        lastMonth: { activeHours: number; requiredHours: number; presentDays: number; workingDays: number };
+        quarterSummaries: Array<{ quarter: string; activeHours: number; requiredHours: number; presentDays: number; workingDays: number }>;
+        dailyRequiredHours: number;
+    };
+    monthComparisonData: Array<{ name: string; thisMonth: number; lastMonth: number }>;
+    overtimeTrendData: Array<{ name: string; hours: number }>;
+}
+
 export default async function EmployeeDashboardPage() {
-    const data = await getEmployeeDashboardData();
+    const data: DashboardData = await getEmployeeDashboardData();
 
     return (
-        <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-indigo-950">Employee Dashboard</h1>
-                <p className="text-muted-foreground">Welcome back! Here&#39;s an overview of your financial standing.</p>
-            </div>
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+            <div className="space-y-4 p-3 sm:p-4 md:p-6">
+                {/* Header */}
+                <div className="flex flex-col gap-1">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+                    <p className="text-xs sm:text-sm text-muted-foreground">Welcome back! Overview of your financial and attendance status.</p>
+                </div>
 
-            {/* Quick Stats */}
-            <div className="grid gap-6 md:grid-cols-3">
-                <Card className="border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-shadow">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Wallet Balance</CardTitle>
-                        <Wallet className="h-4 w-4 text-green-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-green-700">৳{data.walletBalance.toLocaleString("en-BD")}</div>
-                        <p className="text-[10px] text-muted-foreground mt-1 font-medium">Available for instant withdrawal</p>
-                    </CardContent>
-                </Card>
+                {/* Main Grid - Enhanced to fit single viewport */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+                    {/* Quick Financial Stats */}
+                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-green-50 to-green-100/50">
+                        <CardHeader className="pb-2 pt-3 px-3">
+                            <CardTitle className="text-xs font-medium text-green-900 uppercase">Wallet Balance</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-3 pb-3 space-y-1">
+                            <BlurAmount
+                                amount={data.walletBalance}
+                                amountClassName="text-lg font-bold text-green-700"
+                                blurred={true}
+                            />
+                            <Wallet className="h-3 w-3 text-green-600 opacity-60" />
+                        </CardContent>
+                    </Card>
 
-                <Card className="border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-shadow">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Remaining Loan</CardTitle>
-                        <Banknote className="h-4 w-4 text-blue-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-blue-700">৳{data.remainingLoan.toLocaleString("en-BD")}</div>
-                        <p className="text-[10px] text-muted-foreground mt-1 font-medium">Total outstanding principal</p>
-                    </CardContent>
-                </Card>
+                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-blue-50 to-blue-100/50">
+                        <CardHeader className="pb-2 pt-3 px-3">
+                            <CardTitle className="text-xs font-medium text-blue-900 uppercase">Remaining Loan</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-3 pb-3 space-y-1">
+                            <BlurAmount
+                                amount={data.remainingLoan}
+                                amountClassName="text-lg font-bold text-blue-700"
+                                blurred={true}
+                            />
+                            <Banknote className="h-3 w-3 text-blue-600 opacity-60" />
+                        </CardContent>
+                    </Card>
 
-                <Card className="border-l-4 border-l-indigo-500 shadow-sm hover:shadow-md transition-shadow">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Medical Entitlement</CardTitle>
-                        <Stethoscope className="h-4 w-4 text-indigo-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-indigo-700">৳{data.remainingMedical.toLocaleString("en-BD")}</div>
-                        <p className="text-[10px] text-muted-foreground mt-1 font-medium">Available reimbursement for {new Date().getFullYear()}</p>
-                    </CardContent>
-                </Card>
-            </div>
+                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-indigo-50 to-indigo-100/50">
+                        <CardHeader className="pb-2 pt-3 px-3">
+                            <CardTitle className="text-xs font-medium text-indigo-900 uppercase">Medical</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-3 pb-3 space-y-1">
+                            <BlurAmount
+                                amount={data.remainingMedical}
+                                amountClassName="text-lg font-bold text-indigo-700"
+                                blurred={true}
+                            />
+                            <Stethoscope className="h-3 w-3 text-indigo-600 opacity-60" />
+                        </CardContent>
+                    </Card>
 
-            <div className="grid gap-6 lg:grid-cols-7">
-                {/* Salary History Chart */}
-                <Card className="lg:col-span-4 shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="text-xl flex items-center gap-2">
-                            <CircleDollarSign className="h-5 w-5 text-indigo-600" />
-                            Net Pay History
-                        </CardTitle>
-                        <CardDescription>Your last 6 months of take-home salary.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <SalaryChart data={data.salaryHistory} />
-                    </CardContent>
-                </Card>
+                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-amber-50 to-amber-100/50">
+                        <CardHeader className="pb-2 pt-3 px-3">
+                            <CardTitle className="text-xs font-medium text-amber-900 uppercase">Active Leaves</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-3 pb-3 space-y-1">
+                            <span className="text-lg font-bold text-amber-700">
+                                {data.attendanceData.onLeave}
+                            </span>
+                            <Clock className="h-3 w-3 text-amber-600 opacity-60" />
+                        </CardContent>
+                    </Card>
+                </div>
 
-                {/* Recent Transactions */}
-                <Card className="lg:col-span-3 shadow-sm border-t-4 border-t-indigo-600">
-                    <CardHeader>
-                        <CardTitle className="text-xl flex items-center gap-2">
-                            <Clock className="h-5 w-5 text-indigo-600" />
-                            Recent Transactions
-                        </CardTitle>
-                        <CardDescription>Latest movements in your wallet.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-6">
-                            {data.recentTransactions.length === 0 ? (
-                                <div className="text-sm text-center py-8 text-muted-foreground italic">
-                                    No transactions found.
-                                </div>
-                            ) : (
-                                data.recentTransactions.map((tx) => (
-                                    <div key={tx.id} className="flex items-center justify-between group">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`p-2 rounded-full ${tx.type.includes('CREDIT') || tx.type.includes('REIMBURSEMENT')
-                                                ? 'bg-green-100/50 text-green-700'
-                                                : 'bg-red-100/50 text-red-700'
-                                                }`}>
-                                                {tx.type.includes('CREDIT') || tx.type.includes('REIMBURSEMENT')
-                                                    ? <ArrowDownLeft className="h-4 w-4" />
-                                                    : <ArrowUpRight className="h-4 w-4" />}
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-semibold text-slate-900">{tx.description}</p>
-                                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
-                                                    {new Date(tx.createdAt).toLocaleDateString(undefined, {
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                        year: 'numeric'
-                                                    })}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className={`text-sm font-bold tabular-nums ${tx.type.includes('CREDIT') || tx.type.includes('REIMBURSEMENT')
-                                            ? 'text-green-600'
-                                            : 'text-red-600'
-                                            }`}>
-                                            {tx.type.includes('CREDIT') || tx.type.includes('REIMBURSEMENT') ? '+' : '-'}৳{tx.amount.toLocaleString("en-BD")}
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
+                {/* Time Tracking + Leave Balance */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                    <div className="lg:col-span-2">
+                        <TimeTrackingTabs
+                            last7WorkingDays={data.activeTimeData.last7WorkingDays}
+                            thisWeek={data.activeTimeData.thisWeek}
+                            thisMonth={data.activeTimeData.thisMonth}
+                            lastMonth={data.activeTimeData.lastMonth}
+                            quarterSummaries={data.activeTimeData.quarterSummaries}
+                            dailyRequiredHours={data.activeTimeData.dailyRequiredHours}
+                        />
+                    </div>
+                    <div>
+                        <LeaveRemaining leaves={data.leaveArray} />
+                    </div>
+                </div>
+
+                {/* Charts Grid - Compact & Responsive */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {/* Attendance Chart */}
+                    <Card className="border-0 shadow-sm">
+                        <CardHeader className="pb-2 pt-3">
+                            <CardTitle className="text-xs font-semibold">Attendance Rate</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0 pb-2">
+                            <AttendanceChart {...data.attendanceData} />
+                        </CardContent>
+                    </Card>
+
+                    {/* Month Comparison Chart */}
+                    <Card className="border-0 shadow-sm">
+                        <CardHeader className="pb-2 pt-3">
+                            <CardTitle className="text-xs font-semibold">Month Comparison</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0 pb-2">
+                            <MonthComparisonChart data={data.monthComparisonData} />
+                        </CardContent>
+                    </Card>
+
+                    {/* Overtime Trend */}
+                    <Card className="border-0 shadow-sm">
+                        <CardHeader className="pb-2 pt-3">
+                            <CardTitle className="text-xs font-semibold">Overtime Trend</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0 pb-2">
+                            <OvertimeTrendChart data={data.overtimeTrendData} />
+                        </CardContent>
+                    </Card>
+
+                </div>
             </div>
         </div>
     );
