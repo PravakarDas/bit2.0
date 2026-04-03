@@ -38,6 +38,7 @@ interface TimeRecord {
   id: string;
   date: Date;
   status?: "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF";
+  autoDeductedLeaveType: string | null;
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
   requiredBreakTime: string | null;

@@ -91,15 +91,17 @@ interface ApproveLoanDialogProps {
             email: string;
         };
     };
+    approvalMode?: "manager_verified" | "bypass_manager";
     onApprovalSuccess?: () => void;
 }
 
-export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialogProps) {
+export function ApproveLoanDialog({ loan, approvalMode = "manager_verified", onApprovalSuccess }: ApproveLoanDialogProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [loanDetails, setLoanDetails] = useState<LoanDetailsData | null>(null);
     const [declineReason, setDeclineReason] = useState('');
+    const [bypassConfirmText, setBypassConfirmText] = useState('');
     const [formData, setFormData] = useState({
         issuedAmount: loan.issuedAmount,
         gracePeriodMonths: 6,
@@ -121,6 +123,7 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
                 totalMonths: details.loan.totalMonths,
                 adminComments: '',
             });
+            setBypassConfirmText('');
         } catch (error) {
             console.error("Failed to load loan details:", error);
             const errorMessage = error instanceof Error ? error.message : "Failed to load loan details. Please try again.";
@@ -138,10 +141,18 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
 
     const handleApprove = async () => {
         if (!loanDetails) return;
+
+        if (approvalMode === "bypass_manager" && bypassConfirmText !== "BYPASS") {
+            toast.error("Type BYPASS to confirm direct approval without manager verification.");
+            return;
+        }
         
         setLoading(true);
         try {
-            await approveLoan(loan.id, formData);
+            await approveLoan(loan.id, {
+                ...formData,
+                bypassManagerVerification: approvalMode === "bypass_manager",
+            });
             toast.success("Loan approved and initialized successfully");
             setIsOpen(false);
             onApprovalSuccess?.();
@@ -181,9 +192,20 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
     };
 
     const calculateEMI = () => {
-        if (formData.totalMonths <= formData.gracePeriodMonths) return 0;
-        const emiMonths = formData.totalMonths - formData.gracePeriodMonths;
-        return Math.round(formData.issuedAmount / emiMonths);
+        if (formData.totalMonths <= 0) return 0;
+        return Math.round(formData.issuedAmount / formData.totalMonths);
+    };
+
+    const getTimelinePreview = () => {
+        const now = new Date();
+        const firstEmiDate = new Date(now.getFullYear(), now.getMonth() + formData.gracePeriodMonths, 1);
+        const completionDate = new Date(firstEmiDate.getFullYear(), firstEmiDate.getMonth() + formData.totalMonths, 1);
+
+        return {
+            firstEmiDate,
+            completionDate,
+            totalDurationMonths: formData.totalMonths + formData.gracePeriodMonths,
+        };
     };
 
     const isValidApproval = () => {
@@ -197,13 +219,15 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-                <Button size="sm">Review & Approve</Button>
+                <Button size="sm" variant={approvalMode === "bypass_manager" ? "destructive" : "default"}>
+                    {approvalMode === "bypass_manager" ? "Bypass & Approve" : "Review & Approve"}
+                </Button>
             </DialogTrigger>
             <DialogContent className="max-w-5xl max-h-[90vh]">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <CreditCard className="h-5 w-5" />
-                        Loan Approval Review
+                        {approvalMode === "bypass_manager" ? "Direct Loan Approval" : "Loan Approval Review"}
                     </DialogTitle>
                 </DialogHeader>
                 
@@ -379,12 +403,34 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
                             {/* Approval Form */}
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Manual Approval Settings</CardTitle>
+                                    <CardTitle>
+                                        {approvalMode === "bypass_manager" ? "Direct Admin Approval" : "Manual Approval Settings"}
+                                    </CardTitle>
                                     <p className="text-sm text-muted-foreground">
-                                        Review and adjust loan terms as needed
+                                        {approvalMode === "bypass_manager"
+                                            ? "This will approve the loan immediately without manager verification."
+                                            : "Review and adjust loan terms as needed"}
                                     </p>
                                 </CardHeader>
                                 <CardContent>
+                                    {approvalMode === "bypass_manager" && (
+                                        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 space-y-2">
+                                            <p className="font-semibold">Caution</p>
+                                            <p>
+                                                This action skips manager verification and approves the loan directly.
+                                                Double-check the employee profile, salary cap, repayment history, amount, and duration before proceeding.
+                                            </p>
+                                            <div className="grid gap-2 pt-2">
+                                                <Label htmlFor="bypass-confirmation">Type BYPASS to confirm</Label>
+                                                <Input
+                                                    id="bypass-confirmation"
+                                                    value={bypassConfirmText}
+                                                    onChange={(e) => setBypassConfirmText(e.target.value)}
+                                                    placeholder="BYPASS"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="grid gap-6 md:grid-cols-2">
                                         <div className="space-y-4">
                                             <div className="grid gap-2">
@@ -418,7 +464,7 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
                                                 />
                                             </div>
                                             <div className="grid gap-2">
-                                                <Label htmlFor="totalMonths">Total Duration (Months)</Label>
+                                                <Label htmlFor="totalMonths">EMI Duration (Months)</Label>
                                                 <Input
                                                     id="totalMonths"
                                                     type="number"
@@ -455,12 +501,24 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
                                                         <span className="font-medium">৳{calculateEMI().toLocaleString('en-BD')}</span>
                                                     </div>
                                                     <div className="flex justify-between">
-                                                        <span>Payment starts after:</span>
+                                                        <span>Grace period:</span>
                                                         <span className="font-medium">{formData.gracePeriodMonths} months</span>
                                                     </div>
                                                     <div className="flex justify-between">
                                                         <span>EMI months:</span>
-                                                        <span className="font-medium">{Math.max(0, formData.totalMonths - formData.gracePeriodMonths)}</span>
+                                                        <span className="font-medium">{formData.totalMonths}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span>First EMI month:</span>
+                                                        <span className="font-medium">{format(getTimelinePreview().firstEmiDate, 'MMM yyyy')}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span>Projected completion:</span>
+                                                        <span className="font-medium">{format(getTimelinePreview().completionDate, 'MMM yyyy')}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span>Total loan window:</span>
+                                                        <span className="font-medium">{getTimelinePreview().totalDurationMonths} months</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -528,10 +586,14 @@ export function ApproveLoanDialog({ loan, onApprovalSuccess }: ApproveLoanDialog
                                         </AlertDialog>
                                         <Button 
                                             onClick={handleApprove} 
-                                            disabled={loading || !isValidApproval()}
+                                            disabled={loading || !isValidApproval() || (approvalMode === "bypass_manager" && bypassConfirmText !== "BYPASS")}
                                             className="min-w-32"
                                         >
-                                            {loading ? "Approving..." : "Approve Loan"}
+                                            {loading
+                                                ? "Approving..."
+                                                : approvalMode === "bypass_manager"
+                                                    ? "Bypass & Approve"
+                                                    : "Approve Loan"}
                                         </Button>
                                     </div>
                                 </CardContent>

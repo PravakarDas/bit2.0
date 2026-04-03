@@ -13,7 +13,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Calculator } from "lucide-react";
 
@@ -22,20 +21,41 @@ interface LoanApplicationFormProps {
 }
 
 export function LoanApplicationForm({ maxEligibleAmount }: LoanApplicationFormProps) {
+    const minimumLoanAmount = 5000;
+    const effectiveMaxAmount = Math.max(0, Math.min(300000, Math.floor(maxEligibleAmount / 500) * 500));
+    const canApplyLoan = effectiveMaxAmount >= minimumLoanAmount;
+
+    const normalizeAmount = (value: number) => {
+        if (!Number.isFinite(value)) return minimumLoanAmount;
+        const rounded = Math.round(value / 500) * 500;
+        return Math.max(minimumLoanAmount, Math.min(effectiveMaxAmount, rounded));
+    };
+
     const [loading, setLoading] = useState(false);
-    const [amount, setAmount] = useState(Math.min(50000, maxEligibleAmount));
+    const [amount, setAmount] = useState(
+        canApplyLoan ? normalizeAmount(Math.min(50000, effectiveMaxAmount)) : 0
+    );
     const [duration, setDuration] = useState(12);
     const [gracePeriod, setGracePeriod] = useState(3);
     const [reason, setReason] = useState("Personal Requirement");
 
     const estimatedEmi = Math.round(amount / duration);
+    const firstEmiDate = new Date(new Date().getFullYear(), new Date().getMonth() + gracePeriod, 1);
+    const completionDate = new Date(firstEmiDate.getFullYear(), firstEmiDate.getMonth() + duration, 1);
+    const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!canApplyLoan) {
+            toast.error("You are not currently eligible for a new loan request.");
+            return;
+        }
+
         setLoading(true);
 
         const res = await applyForLoan({
-            amount,
+            amount: normalizeAmount(amount),
             duration,
             gracePeriod,
             reason
@@ -65,15 +85,27 @@ export function LoanApplicationForm({ maxEligibleAmount }: LoanApplicationFormPr
                             <Label>Loan Amount</Label>
                             <span className="text-sm font-bold text-slate-700">৳{amount.toLocaleString("en-BD")}</span>
                         </div>
-                        <Slider
-                            value={[amount]}
-                            min={5000}
-                            max={maxEligibleAmount}
-                            step={1000}
-                            onValueChange={(val) => setAmount(val[0])}
-                            className="py-4"
+                        <Input
+                            type="number"
+                            min={minimumLoanAmount}
+                            max={effectiveMaxAmount}
+                            step={500}
+                            value={amount || ""}
+                            onChange={(e) => {
+                                const next = Number(e.target.value);
+                                if (!Number.isFinite(next)) {
+                                    setAmount(minimumLoanAmount);
+                                    return;
+                                }
+                                setAmount(normalizeAmount(next));
+                            }}
+                            onBlur={() => setAmount(normalizeAmount(amount))}
+                            disabled={!canApplyLoan}
+                            placeholder="e.g. 15500"
                         />
-                        <p className="text-[10px] text-muted-foreground text-right">Max allowed: ৳{maxEligibleAmount.toLocaleString("en-BD")}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                            Minimum ৳5,000. Maximum ৳{effectiveMaxAmount.toLocaleString("en-BD")}. Value auto-rounds to nearest ৳500.
+                        </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -121,17 +153,23 @@ export function LoanApplicationForm({ maxEligibleAmount }: LoanApplicationFormPr
                             </div>
                             <div className="text-xs text-blue-900">
                                 <p className="font-semibold">Estimated Monthly EMI</p>
-                                <p className="opacity-70">Starts after {gracePeriod} months</p>
+                                <p className="opacity-70">First EMI: {monthFormatter.format(firstEmiDate)} | Ends: {monthFormatter.format(completionDate)}</p>
                             </div>
                         </div>
                         <span className="text-lg font-bold text-blue-700">
                             ৳{estimatedEmi.toLocaleString("en-BD")}
                         </span>
                     </div>
+
+                    {!canApplyLoan && (
+                        <p className="text-xs text-red-600">
+                            You are not eligible for a new loan right now. Your available limit is below ৳5,000.
+                        </p>
+                    )}
                 </div>
             </CardContent>
             <CardFooter className="bg-slate-50 border-t pt-4">
-                <Button onClick={handleSubmit} className="w-full" disabled={loading}>
+                <Button onClick={handleSubmit} className="w-full" disabled={loading || !canApplyLoan}>
                     {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Submit Application"}
                 </Button>
             </CardFooter>

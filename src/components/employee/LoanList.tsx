@@ -30,6 +30,8 @@ export interface Loan {
     managerRejectionReason?: string | null;
     managerComments?: string | null;
     adminDeclinedReason?: string | null;
+    emiStartMonth?: number | null;
+    emiStartYear?: number | null;
     emiState?: {
         currentEmi: number;
     } | null;
@@ -70,9 +72,29 @@ export function LoanList({ loans }: { loans: Loan[] }) {
                                 ৳{loan.remainingPrincipal.toLocaleString("en-BD")}
                             </TableCell>
                             <TableCell className="text-center text-xs">
-                                {loan.totalMonths} months
+                                {Math.max(0, loan.totalMonths - loan.gracePeriodMonths)} EMI months
                                 <span className="block text-[10px] text-muted-foreground">
                                     (+{loan.gracePeriodMonths} grace)
+                                </span>
+                                <span className="block text-[10px] text-muted-foreground">
+                                    First: {format(
+                                        loan.emiStartMonth && loan.emiStartYear
+                                            ? new Date(loan.emiStartYear, loan.emiStartMonth - 1, 1)
+                                            : new Date(new Date(loan.createdAt).getFullYear(), new Date(loan.createdAt).getMonth() + loan.gracePeriodMonths, 1),
+                                        "MMM yyyy"
+                                    )}
+                                </span>
+                                <span className="block text-[10px] text-muted-foreground">
+                                    Ends: {format(
+                                        (() => {
+                                            const firstEmiDate = loan.emiStartMonth && loan.emiStartYear
+                                                ? new Date(loan.emiStartYear, loan.emiStartMonth - 1, 1)
+                                                : new Date(new Date(loan.createdAt).getFullYear(), new Date(loan.createdAt).getMonth() + loan.gracePeriodMonths, 1);
+                                            const emiMonths = Math.max(1, loan.totalMonths - loan.gracePeriodMonths);
+                                            return new Date(firstEmiDate.getFullYear(), firstEmiDate.getMonth() + emiMonths, 1);
+                                        })(),
+                                        "MMM yyyy"
+                                    )}
                                 </span>
                             </TableCell>
                             <TableCell className="text-right">

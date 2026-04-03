@@ -177,6 +177,7 @@ export async function approveLoan(
         gracePeriodMonths: number;
         totalMonths: number;
         adminComments?: string;
+        bypassManagerVerification?: boolean;
     }
 ) {
     const user = await getDbUser();
@@ -202,9 +203,18 @@ export async function approveLoan(
     }
 
     return await prisma.$transaction(async (tx) => {
+        // `totalMonths` from the approval form represents EMI months.
+        // Convert to full loan timeline by adding grace period months.
+        const emiMonths = data.totalMonths;
+        const totalDurationMonths = emiMonths + data.gracePeriodMonths;
+
+        if (emiMonths <= 0) {
+            throw new Error("EMI duration must be at least 1 month");
+        }
+
         // Calculate Schedule
         const now = new Date();
-        const startMonthDate = new Date(now.getFullYear(), now.getMonth() + data.gracePeriodMonths + 1, 1);
+        const startMonthDate = new Date(now.getFullYear(), now.getMonth() + data.gracePeriodMonths, 1);
 
         // 2. Update the Loan record
         const updatedLoan = await tx.loan.update({
@@ -213,7 +223,7 @@ export async function approveLoan(
                 issuedAmount: data.issuedAmount,
                 remainingPrincipal: data.issuedAmount,
                 gracePeriodMonths: data.gracePeriodMonths,
-                totalMonths: data.totalMonths,
+                totalMonths: totalDurationMonths,
                 status: LoanStatus.ACTIVE,
                 emiStartMonth: startMonthDate.getMonth() + 1,
                 emiStartYear: startMonthDate.getFullYear(),
@@ -223,7 +233,6 @@ export async function approveLoan(
         });
 
         // 3. Create the initial EmiState record
-        const emiMonths = data.totalMonths - data.gracePeriodMonths;
         const initialEmi = data.gracePeriodMonths > 0 ? 0 : calculateEMI(data.issuedAmount, emiMonths);
 
         await tx.emiState.create({
@@ -240,7 +249,7 @@ export async function approveLoan(
                 loanId: updatedLoan.id,
                 oldEmi: 0,
                 newEmi: initialEmi,
-                changeReason: `Loan approved by ${user.id}. EMI starts ${startMonthDate.toLocaleDateString()}.`
+                changeReason: `Loan ${data.bypassManagerVerification ? "directly approved by bypassing manager verification" : "approved by"} ${user.id}. EMI starts ${startMonthDate.toLocaleDateString()}.`
             }
         });
 
@@ -284,6 +293,16 @@ export async function approveLoan(
                     }
                 });
             }
+        } else if (data.bypassManagerVerification) {
+            await tx.employeeNotification.create({
+                data: {
+                    userId: loan.userId,
+                    type: "LOAN_APPLICATION_APPROVED",
+                    title: "Loan Approved",
+                    message: `Your loan request for ৳${data.issuedAmount.toLocaleString()} has been directly approved by Admin ${user.firstName} ${user.lastName} without manager verification.`,
+                    relatedEntityId: loan.id,
+                }
+            });
         }
 
         revalidatePath("/admin/loans");
@@ -500,9 +519,27 @@ export async function applyForLoan(data: {
     const user = await getDbUser();
     if (!user) throw new Error("Unauthorized");
 
+    const roundedAmount = Math.round(data.amount / 500) * 500;
+
+    if (roundedAmount < 5000) {
+        throw new Error("Minimum loan amount is ৳5,000");
+    }
+
+    if (roundedAmount > 300000) {
+        throw new Error("Maximum loan amount is ৳300,000");
+    }
+
+    if (data.duration < 1) {
+        throw new Error("Loan duration must be at least 1 month");
+    }
+
+    if (data.gracePeriod < 0) {
+        throw new Error("Grace period cannot be negative");
+    }
+
     // 1. Validation Logic - Initial Pre-check
     // The deeper check happens in checkLoanEligibility which considers existing debt.
-    const eligibility = await checkLoanEligibility(user.id, data.amount);
+    const eligibility = await checkLoanEligibility(user.id, roundedAmount);
 
     if (!eligibility.eligible) {
         throw new Error(eligibility.reason || "Loan application rejected based on eligibility criteria.");
@@ -515,8 +552,8 @@ export async function applyForLoan(data: {
         const loan = await prisma.loan.create({
             data: {
                 userId: user.id,
-                issuedAmount: data.amount,
-                remainingPrincipal: data.amount,
+                issuedAmount: roundedAmount,
+                remainingPrincipal: roundedAmount,
                 totalMonths: data.duration,
                 gracePeriodMonths: data.gracePeriod,
                 reason: data.reason || "Personal",

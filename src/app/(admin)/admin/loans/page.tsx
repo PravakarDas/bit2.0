@@ -206,20 +206,15 @@ export default function AdminLoansPage() {
                                                 })}
                                             </TableCell>
                                             <TableCell className="text-right pr-6">
-                                                {loan.status === "DECLINED" ? (
-                                                    <div className="text-sm text-red-600">
-                                                        <div className="font-medium">Declined</div>
-                                                        {getDeclineReason(loan) && (
-                                                            <div className="text-xs text-muted-foreground mt-1">
-                                                                {getDeclineReason(loan)}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <Badge variant="secondary" className="text-xs">
-                                                        Awaiting manager verification
-                                                    </Badge>
-                                                )}
+                                                <ApproveLoanDialog
+                                                    loan={{
+                                                        id: loan.id,
+                                                        issuedAmount: loan.issuedAmount,
+                                                        user: { email: loan.user.email }
+                                                    }}
+                                                    approvalMode="bypass_manager"
+                                                    onApprovalSuccess={handleApprovalSuccess}
+                                                />
                                             </TableCell>
                                         </TableRow>
                                     ))
@@ -287,6 +282,7 @@ export default function AdminLoansPage() {
                                                         issuedAmount: loan.issuedAmount,
                                                         user: { email: loan.user.email }
                                                     }}
+                                                    approvalMode="manager_verified"
                                                     onApprovalSuccess={handleApprovalSuccess}
                                                 />
                                             </TableCell>
