@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminNotification } from "./notification.actions";
 import { Prisma } from "@prisma/client";
 import { getDbUser } from "./user.actions";
+import { buildDateRangeFilter } from "@/lib/utils";
 
 /**
  * Convert time string (HH:MM) to minutes
@@ -736,9 +737,10 @@ export async function getTimelineRecords(
     }
     
     if (startDate || endDate) {
-      where.date = {};
-      if (startDate) where.date.gte = startDate;
-      if (endDate) where.date.lte = endDate;
+      const dateFilter = buildDateRangeFilter(startDate, endDate);
+      if (dateFilter) {
+        where.date = dateFilter;
+      }
     }
 
     if (options?.branchId || options?.employeeName) {

@@ -7,6 +7,7 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
 import { logManagerEmployeeEditAction } from "./manager-employee-edit.actions";
+import { buildDateRangeFilter } from "@/lib/utils";
 
 async function logManagerEmployeeRejectionAction(params: {
     actorId: string;
@@ -79,10 +80,9 @@ export async function getArchivedEmployees(fromDate?: string, toDate?: string) {
         role: { not: "SUPERADMIN" }
     };
 
-    if (fromDate || toDate) {
-        whereClause.updatedAt = {};
-        if (fromDate) whereClause.updatedAt.gte = new Date(fromDate);
-        if (toDate) whereClause.updatedAt.lte = new Date(toDate);
+    const dateFilter = buildDateRangeFilter(fromDate, toDate);
+    if (dateFilter) {
+        whereClause.updatedAt = dateFilter;
     }
 
     return await prisma.user.findMany({

@@ -17,3 +17,67 @@ export function formatDate(date: Date | string | null | undefined): string {
 
   return format(value, "PPP");
 }
+
+/**
+ * Parse a date string or Date object to a proper Date object at midnight local time
+ * Handles YYYY-MM-DD format from HTML date inputs
+ */
+export function parseFilterDate(date?: string | Date): Date | undefined {
+  if (!date) return undefined;
+
+  let dateObj: Date;
+  
+  if (typeof date === "string") {
+    // For YYYY-MM-DD format from HTML date input, create local midnight date
+    const parts = date.split("-");
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+      const day = parseInt(parts[2], 10);
+      dateObj = new Date(year, month, day);
+    } else {
+      dateObj = new Date(date);
+    }
+  } else {
+    dateObj = new Date(date);
+  }
+
+  if (Number.isNaN(dateObj.getTime())) {
+    return undefined;
+  }
+
+  return dateObj;
+}
+
+/**
+ * Get the end of day (23:59:59.999) for a given date
+ * Used for inclusive date range filtering
+ */
+export function getEndOfDay(date: Date): Date {
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+  return endOfDay;
+}
+
+/**
+ * Build a date range filter for Prisma queries
+ * Ensures inclusive filtering for the entire day(s) specified
+ */
+export function buildDateRangeFilter(
+  startDate?: string | Date,
+  endDate?: string | Date
+): { gte?: Date; lte?: Date } | undefined {
+  const filter: { gte?: Date; lte?: Date } = {};
+
+  const start = parseFilterDate(startDate);
+  if (start) {
+    filter.gte = start;
+  }
+
+  const end = parseFilterDate(endDate);
+  if (end) {
+    filter.lte = getEndOfDay(end);
+  }
+
+  return Object.keys(filter).length > 0 ? filter : undefined;
+}

@@ -3,6 +3,7 @@
 import { getDbUser } from "@/actions/user.actions";
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
+import { buildDateRangeFilter } from "@/lib/utils";
 
 export interface LateCheckinDashboardFilters {
   branchId?: string;
@@ -58,18 +59,6 @@ export interface EmployeeLateCheckinData {
   }>;
 }
 
-function toOptionalDate(value?: string) {
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return undefined;
-  }
-
-  return parsed;
-}
 
 function formatClock(value: Date | null) {
   if (!value) {
@@ -80,22 +69,7 @@ function formatClock(value: Date | null) {
 }
 
 function buildLateRecordDateFilter(fromDate?: string, toDate?: string) {
-  const dateFilter: { gte?: Date; lte?: Date } = {};
-
-  const from = toOptionalDate(fromDate);
-  const to = toOptionalDate(toDate);
-
-  if (from) {
-    dateFilter.gte = from;
-  }
-
-  if (to) {
-    const endOfDay = new Date(to);
-    endOfDay.setHours(23, 59, 59, 999);
-    dateFilter.lte = endOfDay;
-  }
-
-  return Object.keys(dateFilter).length > 0 ? dateFilter : undefined;
+  return buildDateRangeFilter(fromDate, toDate);
 }
 
 function assertCanAccessAllEmployees(user: Awaited<ReturnType<typeof getDbUser>>) {

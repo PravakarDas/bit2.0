@@ -53,7 +53,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
-import logo from "@/assets/logo.gif";
+import logo from "@/assets/Bit HR.svg";
 import { NotificationWithBadge } from "@/components/NotificationWithBadge";
 
 const adminItems = [
@@ -176,7 +176,7 @@ export function AppSidebar({ role, isManager = false }: { role: string; isManage
                     <Image 
                         src={logo} 
                         alt="BIT Logo" 
-                        width={32} 
+                        width={128} 
                         height={32} 
                         className="rounded"
                     />
