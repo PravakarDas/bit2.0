@@ -670,6 +670,8 @@ model DailyTimeRecord {
   actualActiveTime   String?  // (actualCheckOut - actualCheckIn - actualBreakTime) in HH:MM
   officialOvertimeundertime  String?  // (actualActiveTime - requiredActiveTime) in +/-HH:MM format - Auto calculated
   requestedOvertime  String?  // Overtime approved by admin from employee request in HH:MM format
+  requestedOTstart   DateTime? // Employee requested overtime start time
+  requestedOTend     DateTime? // Employee requested overtime end time
   overtimeUndertime  String?  // Total overtime (officialOvertimeundertime + requestedOvertime) in +/-HH:MM format
 
   // Late check-in penalty tracking
@@ -831,6 +833,8 @@ model OvertimeRequest {
   // Request details
   overtimeDate        DateTime                // The date for which overtime is being requested
   totalOvertime       String                  // Requested overtime duration in HH:MM format
+  requestedOTstart    DateTime?               // Requested overtime start time
+  requestedOTend      DateTime?               // Requested overtime end time
   reason              String                  // Reason for overtime
   taskNo              String?                 // Optional task/project reference
   

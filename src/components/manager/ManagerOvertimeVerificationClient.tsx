@@ -10,6 +10,8 @@ interface OvertimeRequest {
   id: string;
   overtimeDate: Date;
   totalOvertime: string;
+  requestedOTstart?: Date | null;
+  requestedOTend?: Date | null;
   reason: string;
   taskNo: string | null;
   status: string;
@@ -119,6 +121,12 @@ export default function ManagerOvertimeVerificationClient() {
                 </div>
                 <div>
                   <p><strong>Date:</strong> {new Date(request.overtimeDate).toLocaleDateString()}</p>
+                  <p>
+                    <strong>Requested Time:</strong>{" "}
+                    {request.requestedOTstart && request.requestedOTend
+                      ? `${new Date(request.requestedOTstart).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${new Date(request.requestedOTend).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                      : "N/A"}
+                  </p>
                   <p><strong>Duration:</strong> {request.totalOvertime}</p>
                   <p><strong>Task No:</strong> {request.taskNo || "N/A"}</p>
                 </div>

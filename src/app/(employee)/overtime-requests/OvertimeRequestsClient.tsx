@@ -30,6 +30,8 @@ interface OvertimeRequest {
   id: string;
   overtimeDate: Date;
   totalOvertime: string;
+  requestedOTstart?: Date | null;
+  requestedOTend?: Date | null;
   reason: string;
   taskNo: string | null;
   status: "PENDING" | "MANAGER_VERIFIED" | "MANAGER_REJECTED" | "APPROVED" | "DECLINED";
@@ -160,6 +162,11 @@ export function OvertimeRequestsClient({ initialRequests }: OvertimeRequestsClie
                             <Clock className="h-4 w-4" />
                             <span>{request.totalOvertime} hours</span>
                           </div>
+                          {request.requestedOTstart && request.requestedOTend && (
+                            <div className="text-sm text-muted-foreground">
+                              Requested Time: {format(new Date(request.requestedOTstart), "p")} - {format(new Date(request.requestedOTend), "p")}
+                            </div>
+                          )}
                         </div>
                         {getStatusBadge(request.status)}
                       </div>

@@ -68,6 +68,8 @@ interface OvertimeRequest {
   id: string;
   overtimeDate: Date;
   totalOvertime: string;
+  requestedOTstart?: Date | null;
+  requestedOTend?: Date | null;
   reason: string;
   taskNo: string | null;
   status: "PENDING" | "MANAGER_VERIFIED" | "MANAGER_REJECTED" | "APPROVED" | "DECLINED";
@@ -317,6 +319,7 @@ export function OvertimeRequestsAdminClient({
                   <TableRow>
                     <TableHead>Employee</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead>Requested Time</TableHead>
                     <TableHead>Duration</TableHead>
                     <TableHead>Task No</TableHead>
                     <TableHead>Status</TableHead>
@@ -339,6 +342,11 @@ export function OvertimeRequestsAdminClient({
                       </TableCell>
                       <TableCell>
                         {format(new Date(request.overtimeDate), "PPP")}
+                      </TableCell>
+                      <TableCell>
+                        {request.requestedOTstart && request.requestedOTend
+                          ? `${format(new Date(request.requestedOTstart), "p")} - ${format(new Date(request.requestedOTend), "p")}`
+                          : <span className="text-muted-foreground">-</span>}
                       </TableCell>
                       <TableCell>{request.totalOvertime}</TableCell>
                       <TableCell>
@@ -421,6 +429,15 @@ export function OvertimeRequestsAdminClient({
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <p className="font-medium">{selectedRequest.totalOvertime} hours</p>
                   </div>
+                </div>
+
+                <div>
+                  <Label className="text-sm text-muted-foreground">Requested Time Window</Label>
+                  <p className="font-medium mt-1">
+                    {selectedRequest.requestedOTstart && selectedRequest.requestedOTend
+                      ? `${format(new Date(selectedRequest.requestedOTstart), "p")} - ${format(new Date(selectedRequest.requestedOTend), "p")}`
+                      : "N/A"}
+                  </p>
                 </div>
 
                 {selectedRequest.taskNo && (
