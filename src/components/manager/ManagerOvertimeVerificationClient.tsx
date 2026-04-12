@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { getPendingOvertimeForManager, verifyOvertimeRequest, rejectOvertimeRequest } from "@/actions/manager-verification.actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { format } from "date-fns";
 
 interface OvertimeRequest {
   id: string;
@@ -35,6 +37,36 @@ export default function ManagerOvertimeVerificationClient() {
   const [comments, setComments] = useState<Record<string, string>>({});
   const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
   const [showRejectionBox, setShowRejectionBox] = useState<Record<string, boolean>>({});
+  const [branchFilter, setBranchFilter] = useState<string>("all");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
+
+  const branchOptions = Array.from(
+    new Map(
+      requests
+        .map((request) => request.user.branch?.name)
+        .filter((branch): branch is string => Boolean(branch))
+        .map((branch) => [branch, branch])
+    ).values()
+  ).sort();
+
+  const filteredRequests = requests.filter((request) => {
+    const requestBranch = request.user.branch?.name || "";
+    if (branchFilter !== "all" && requestBranch !== branchFilter) {
+      return false;
+    }
+
+    const requestDate = format(new Date(request.overtimeDate), "yyyy-MM-dd");
+    if (startDateFilter && requestDate < startDateFilter) {
+      return false;
+    }
+
+    if (endDateFilter && requestDate > endDateFilter) {
+      return false;
+    }
+
+    return true;
+  });
 
   useEffect(() => {
     loadRequests();
@@ -97,14 +129,68 @@ export default function ManagerOvertimeVerificationClient() {
         </p>
       </div>
 
-      {requests.length === 0 ? (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+            <div className="flex-1">
+              <label className="text-sm font-medium">Branch</label>
+              <select
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+              >
+                <option value="all">All Branches</option>
+                {branchOptions.map((branch) => (
+                  <option key={branch} value={branch}>
+                    {branch}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex-1">
+              <label className="text-sm font-medium">Start Date</label>
+              <Input
+                type="date"
+                className="mt-1"
+                value={startDateFilter}
+                onChange={(e) => setStartDateFilter(e.target.value)}
+              />
+            </div>
+
+            <div className="flex-1">
+              <label className="text-sm font-medium">End Date</label>
+              <Input
+                type="date"
+                className="mt-1"
+                value={endDateFilter}
+                onChange={(e) => setEndDateFilter(e.target.value)}
+              />
+            </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setBranchFilter("all");
+                setStartDateFilter("");
+                setEndDateFilter("");
+              }}
+            >
+              Clear filters
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {filteredRequests.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
             <p className="text-center text-muted-foreground">No pending overtime requests found.</p>
           </CardContent>
         </Card>
       ) : (
-        requests.map((request) => (
+        filteredRequests.map((request) => (
           <Card key={request.id}>
             <CardHeader>
               <CardTitle>
