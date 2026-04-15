@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -68,6 +69,8 @@ interface OvertimeRequest {
   id: string;
   overtimeDate: Date;
   totalOvertime: string;
+  requestedOTstart?: Date | null;
+  requestedOTend?: Date | null;
   reason: string;
   taskNo: string | null;
   status: "PENDING" | "MANAGER_VERIFIED" | "MANAGER_REJECTED" | "APPROVED" | "DECLINED";
@@ -97,15 +100,44 @@ export function OvertimeRequestsAdminClient({
 }: OvertimeRequestsAdminClientProps) {
   const [requests, setRequests] = useState<OvertimeRequest[]>(initialRequests);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [branchFilter, setBranchFilter] = useState<string>("all");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
   const [selectedRequest, setSelectedRequest] = useState<OvertimeRequest | null>(null);
   const [isApproving, setIsApproving] = useState(false);
   const [isDeclining, setIsDeclining] = useState(false);
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
 
+  const branchOptions = Array.from(
+    new Map(
+      requests
+        .map((request) => request.user.branch?.name)
+        .filter((branch): branch is string => Boolean(branch))
+        .map((branch) => [branch, branch])
+    ).values()
+  ).sort();
+
   const filteredRequests = requests.filter((request) => {
-    if (statusFilter === "all") return true;
-    return request.status === statusFilter.toUpperCase();
+    if (statusFilter !== "all" && request.status !== statusFilter.toUpperCase()) {
+      return false;
+    }
+
+    const requestBranch = request.user.branch?.name || "";
+    if (branchFilter !== "all" && requestBranch !== branchFilter) {
+      return false;
+    }
+
+    const requestDate = format(new Date(request.overtimeDate), "yyyy-MM-dd");
+    if (startDateFilter && requestDate < startDateFilter) {
+      return false;
+    }
+
+    if (endDateFilter && requestDate > endDateFilter) {
+      return false;
+    }
+
+    return true;
   });
 
   const handleApprove = async (requestId: string) => {
@@ -289,19 +321,63 @@ export function OvertimeRequestsAdminClient({
 
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-45">
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Requests</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="manager_verified">Manager Verified</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="declined">Declined</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="grid gap-2 md:grid-cols-4">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-45">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Requests</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="manager_verified">Manager Verified</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="declined">Declined</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={branchFilter} onValueChange={setBranchFilter}>
+                  <SelectTrigger className="w-45">
+                    <SelectValue placeholder="Filter by branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Branches</SelectItem>
+                    {branchOptions.map((branch) => (
+                      <SelectItem key={branch} value={branch}>
+                        {branch}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  type="date"
+                  value={startDateFilter}
+                  onChange={(e) => setStartDateFilter(e.target.value)}
+                  aria-label="Start date filter"
+                />
+
+                <Input
+                  type="date"
+                  value={endDateFilter}
+                  onChange={(e) => setEndDateFilter(e.target.value)}
+                  aria-label="End date filter"
+                />
+              </div>
             </div>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setStatusFilter("all");
+                setBranchFilter("all");
+                setStartDateFilter("");
+                setEndDateFilter("");
+              }}
+            >
+              Clear filters
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -317,6 +393,7 @@ export function OvertimeRequestsAdminClient({
                   <TableRow>
                     <TableHead>Employee</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead>Requested Time</TableHead>
                     <TableHead>Duration</TableHead>
                     <TableHead>Task No</TableHead>
                     <TableHead>Status</TableHead>
@@ -339,6 +416,11 @@ export function OvertimeRequestsAdminClient({
                       </TableCell>
                       <TableCell>
                         {format(new Date(request.overtimeDate), "PPP")}
+                      </TableCell>
+                      <TableCell>
+                        {request.requestedOTstart && request.requestedOTend
+                          ? `${format(new Date(request.requestedOTstart), "p")} - ${format(new Date(request.requestedOTend), "p")}`
+                          : <span className="text-muted-foreground">-</span>}
                       </TableCell>
                       <TableCell>{request.totalOvertime}</TableCell>
                       <TableCell>
@@ -421,6 +503,15 @@ export function OvertimeRequestsAdminClient({
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <p className="font-medium">{selectedRequest.totalOvertime} hours</p>
                   </div>
+                </div>
+
+                <div>
+                  <Label className="text-sm text-muted-foreground">Requested Time Window</Label>
+                  <p className="font-medium mt-1">
+                    {selectedRequest.requestedOTstart && selectedRequest.requestedOTend
+                      ? `${format(new Date(selectedRequest.requestedOTstart), "p")} - ${format(new Date(selectedRequest.requestedOTend), "p")}`
+                      : "N/A"}
+                  </p>
                 </div>
 
                 {selectedRequest.taskNo && (

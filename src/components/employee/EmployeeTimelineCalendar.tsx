@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, addDays, isSameMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +43,15 @@ export default function EmployeeTimelineCalendar({
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+  const calendarGridDays: Date[] = [];
+
+  let day = calendarStart;
+  while (day <= calendarEnd) {
+    calendarGridDays.push(day);
+    day = addDays(day, 1);
+  }
 
   const previousMonth = () => {
     const newMonth = subMonths(currentMonth, 1);
@@ -161,7 +170,8 @@ export default function EmployeeTimelineCalendar({
 
               {/* Calendar Days */}
               <div className="grid grid-cols-7 gap-1">
-                {calendarDays.map((day) => {
+                {calendarGridDays.map((day) => {
+                  const isInCurrentMonth = isSameMonth(day, currentMonth);
                   const record = getDateRecord(day);
                   const isSelected = selectedDay && isSameDay(day, selectedDay);
                   const isToday = isSameDay(day, new Date());
@@ -171,16 +181,17 @@ export default function EmployeeTimelineCalendar({
                       key={day.toISOString()}
                       onClick={() => setSelectedDay(day)}
                       className={cn(
-                        "min-h-25 p-2 text-left border rounded-lg hover:bg-gray-50 transition-colors",
+                        "min-h-25 p-2 text-left border rounded-lg transition-colors",
+                        isInCurrentMonth ? "hover:bg-gray-50" : "bg-muted/40 text-muted-foreground/60",
                         isSelected && "border-primary bg-primary/5",
                         isToday && "border-blue-500 bg-blue-50"
                       )}
                     >
                       <div className="text-sm font-medium mb-2">
-                        {format(day, 'd')}
+                        {isInCurrentMonth ? format(day, 'd') : ''}
                       </div>
                       
-                      {record && (
+                      {isInCurrentMonth && record && (
                         <div className="space-y-1">
                           {getStatusBadge(record)}
                           {getOvertimeBadge(record)}

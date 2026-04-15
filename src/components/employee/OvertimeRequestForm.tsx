@@ -24,7 +24,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Clock, Loader2 } from "lucide-react";
-import { format } from "date-fns";
 import { submitOvertimeRequest } from "@/actions/overtime-request.actions";
 import { toast } from "sonner";
 
@@ -32,12 +31,23 @@ const overtimeRequestSchema = z.object({
   overtimeDate: z.date({
     message: "Please select a date for the overtime",
   }),
-  totalOvertime: z
+  requestedOTstart: z
     .string()
-    .min(1, "Overtime duration is required")
-    .regex(/^([0-9]{1,2}):([0-5][0-9])$/, "Use HH:MM format (e.g., 02:30)"),
+    .regex(/^([01][0-9]|2[0-3]):([0-5][0-9])$/, "Use HH:MM format"),
+  requestedOTend: z
+    .string()
+    .regex(/^([01][0-9]|2[0-3]):([0-5][0-9])$/, "Use HH:MM format"),
   reason: z.string().min(10, "Please provide a detailed reason (at least 10 characters)"),
   taskNo: z.string().optional(),
+}).refine((data) => {
+  const [startHour, startMinute] = data.requestedOTstart.split(":").map(Number);
+  const [endHour, endMinute] = data.requestedOTend.split(":").map(Number);
+  const startTotal = startHour * 60 + startMinute;
+  const endTotal = endHour * 60 + endMinute;
+  return endTotal > startTotal;
+}, {
+  path: ["requestedOTend"],
+  message: "End time must be later than start time",
 });
 
 type OvertimeRequestFormValues = z.infer<typeof overtimeRequestSchema>;
@@ -54,9 +64,29 @@ export function OvertimeRequestForm({ onSuccess }: OvertimeRequestFormProps) {
     defaultValues: {
       reason: "",
       taskNo: "",
-      totalOvertime: "",
+      requestedOTstart: "",
+      requestedOTend: "",
     },
   });
+
+  const requestedOTstart = form.watch("requestedOTstart");
+  const requestedOTend = form.watch("requestedOTend");
+
+  const calculatedDuration = (() => {
+    if (!requestedOTstart || !requestedOTend) return null;
+
+    const [startHour, startMinute] = requestedOTstart.split(":").map(Number);
+    const [endHour, endMinute] = requestedOTend.split(":").map(Number);
+    const startTotal = startHour * 60 + startMinute;
+    const endTotal = endHour * 60 + endMinute;
+
+    if (endTotal <= startTotal) return null;
+
+    const diffMinutes = endTotal - startTotal;
+    const hours = Math.floor(diffMinutes / 60).toString().padStart(2, "0");
+    const minutes = (diffMinutes % 60).toString().padStart(2, "0");
+    return `${hours}:${minutes}`;
+  })();
 
   async function onSubmit(values: OvertimeRequestFormValues) {
     setIsSubmitting(true);
@@ -119,27 +149,64 @@ export function OvertimeRequestForm({ onSuccess }: OvertimeRequestFormProps) {
 
             <FormField
               control={form.control}
-              name="totalOvertime"
+              name="requestedOTstart"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Total Overtime Duration</FormLabel>
+                  <FormLabel>Overtime Start Time</FormLabel>
                   <FormControl>
                     <div className="relative">
                       <Clock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
-                        placeholder="e.g., 02:30"
+                        type="time"
                         {...field}
                         className="pl-10"
                       />
                     </div>
                   </FormControl>
                   <FormDescription>
-                    Enter the duration in HH:MM format (e.g., 02:30 for 2 hours 30 minutes)
+                    Enter when your overtime started
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="requestedOTend"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Overtime End Time</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Clock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="time"
+                        {...field}
+                        className="pl-10"
+                      />
+                    </div>
+                  </FormControl>
+                  <FormDescription>
+                    Enter when your overtime ended
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormItem>
+              <FormLabel>Calculated Duration</FormLabel>
+              <FormControl>
+                <Input
+                  value={calculatedDuration || "--:--"}
+                  disabled
+                />
+              </FormControl>
+              <FormDescription>
+                Duration is automatically calculated from start and end time
+              </FormDescription>
+            </FormItem>
 
             <FormField
               control={form.control}
@@ -170,7 +237,7 @@ export function OvertimeRequestForm({ onSuccess }: OvertimeRequestFormProps) {
                   <FormControl>
                     <Textarea
                       placeholder="Provide a detailed explanation for the overtime..."
-                      className="min-h-[100px]"
+                      className="min-h-25"
                       {...field}
                     />
                   </FormControl>

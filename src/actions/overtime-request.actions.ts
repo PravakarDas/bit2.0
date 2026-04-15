@@ -35,12 +35,41 @@ function addTimeStrings(time1?: string | null, time2?: string | null): string {
   return minutesToTimeString(minutes1 + minutes2);
 }
 
+function buildDateTimeFromDateAndTime(baseDate: Date, time: string): Date {
+  const [hours, minutes] = time.split(":").map(Number);
+  const result = new Date(baseDate);
+  result.setHours(hours, minutes, 0, 0);
+  return result;
+}
+
+function calculateDurationFromTimes(startTime: string, endTime: string): string {
+  const [startHour, startMinute] = startTime.split(":").map(Number);
+  const [endHour, endMinute] = endTime.split(":").map(Number);
+  const startTotal = startHour * 60 + startMinute;
+  const endTotal = endHour * 60 + endMinute;
+
+  if (endTotal <= startTotal) {
+    throw new Error("Overtime end time must be later than start time");
+  }
+
+  return minutesToTimeString(endTotal - startTotal);
+}
+
+function minDate(dateA: Date, dateB: Date): Date {
+  return dateA.getTime() <= dateB.getTime() ? dateA : dateB;
+}
+
+function maxDate(dateA: Date, dateB: Date): Date {
+  return dateA.getTime() >= dateB.getTime() ? dateA : dateB;
+}
+
 /**
  * Employee: Submit overtime request
  */
 export async function submitOvertimeRequest(data: {
   overtimeDate: Date;
-  totalOvertime: string;
+  requestedOTstart: string;
+  requestedOTend: string;
   reason: string;
   taskNo?: string;
 }) {
@@ -65,10 +94,23 @@ export async function submitOvertimeRequest(data: {
       return { success: false, error: "Only employees can submit overtime requests" };
     }
 
-    // Validate overtime format (HH:MM)
-    const timeRegex = /^([0-9]{1,2}):([0-5][0-9])$/;
-    if (!timeRegex.test(data.totalOvertime)) {
+    // Validate overtime start/end format (HH:MM)
+    const timeRegex = /^([01][0-9]|2[0-3]):([0-5][0-9])$/;
+    if (!timeRegex.test(data.requestedOTstart) || !timeRegex.test(data.requestedOTend)) {
       return { success: false, error: "Invalid time format. Use HH:MM" };
+    }
+
+    const requestedOTStartDate = buildDateTimeFromDateAndTime(data.overtimeDate, data.requestedOTstart);
+    const requestedOTEndDate = buildDateTimeFromDateAndTime(data.overtimeDate, data.requestedOTend);
+
+    let totalOvertime: string;
+    try {
+      totalOvertime = calculateDurationFromTimes(data.requestedOTstart, data.requestedOTend);
+    } catch (error) {
+      if (error instanceof Error) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: "Invalid overtime time range" };
     }
 
     // Check if there's already a pending request for this date
@@ -89,7 +131,9 @@ export async function submitOvertimeRequest(data: {
       data: {
         userId: user.id,
         overtimeDate: data.overtimeDate,
-        totalOvertime: data.totalOvertime,
+        totalOvertime,
+        requestedOTstart: requestedOTStartDate,
+        requestedOTend: requestedOTEndDate,
         reason: data.reason,
         taskNo: data.taskNo,
       },
@@ -333,6 +377,12 @@ export async function approveOvertimeRequest(requestId: string) {
           where: { id: timeRecord.id },
           data: {
             requestedOvertime: newRequestedOvertime,
+            requestedOTstart: timeRecord.requestedOTstart && request.requestedOTstart
+              ? minDate(timeRecord.requestedOTstart, request.requestedOTstart)
+              : (timeRecord.requestedOTstart || request.requestedOTstart),
+            requestedOTend: timeRecord.requestedOTend && request.requestedOTend
+              ? maxDate(timeRecord.requestedOTend, request.requestedOTend)
+              : (timeRecord.requestedOTend || request.requestedOTend),
             overtimeUndertime: newOvertimeUndertime,
           },
         });
@@ -344,6 +394,8 @@ export async function approveOvertimeRequest(requestId: string) {
             date: startOfDay,
             status: "PRESENT",
             requestedOvertime: request.totalOvertime,
+            requestedOTstart: request.requestedOTstart,
+            requestedOTend: request.requestedOTend,
             overtimeUndertime: request.totalOvertime,
             officialOvertimeundertime: "00:00",
           },
