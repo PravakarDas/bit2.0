@@ -54,11 +54,6 @@ export function WalletAdjustmentDialog({
             return;
         }
 
-        if (adjustmentType === "DEBIT" && adjustmentAmount > currentBalance) {
-            toast.error("Debit amount cannot exceed current balance");
-            return;
-        }
-
         setIsLoading(true);
         try {
             const finalAmount = adjustmentType === "DEBIT" ? -adjustmentAmount : adjustmentAmount;
@@ -134,11 +129,6 @@ export function WalletAdjustmentDialog({
                             value={amount}
                             onChange={(e) => setAmount(e.target.value)}
                         />
-                        {adjustmentType === "DEBIT" && amount && parseFloat(amount) > currentBalance && (
-                            <p className="text-sm text-red-600">
-                                Amount cannot exceed current balance (৳{currentBalance.toLocaleString("en-BD")})
-                            </p>
-                        )}
                     </div>
 
                     <div className="space-y-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { updateWalletRequestStatus, adjustWalletBalance } from "@/actions/wallet.actions";
+import { updateWalletRequestStatus } from "@/actions/wallet.actions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,8 +43,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { ExternalLink, Check, X, TrendingUp, Wallet, Clock, DollarSign, Users as UsersIcon, Search, Plus, Minus } from "lucide-react";
+import { ExternalLink, Check, X, TrendingUp, Wallet, Clock, DollarSign, Users as UsersIcon, Search } from "lucide-react";
 import { format } from "date-fns";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 
@@ -97,13 +96,6 @@ interface EmployeeWallet {
     }>;
 }
 
-interface User {
-    id: string;
-    email: string;
-    firstName: string | null;
-    lastName: string | null;
-}
-
 interface WalletManagementClientProps {
     initialPendingRequests: WalletRequest[];
     allTransactionsData: {
@@ -119,24 +111,16 @@ interface WalletManagementClientProps {
         };
     };
     employeeWallets: EmployeeWallet[];
-    users: User[];
 }
 
 export default function WalletManagementClient({ 
     initialPendingRequests, 
     allTransactionsData,
-    employeeWallets,
-    users 
+    employeeWallets
 }: WalletManagementClientProps) {
     const [pendingRequests, setPendingRequests] = useState(initialPendingRequests);
     const [selectedRequest, setSelectedRequest] = useState<(WalletRequest & { action: "approve" | "reject" }) | null>(null);
     const [loading, setLoading] = useState(false);
-    
-    // Manual adjustment state
-    const [adjustmentUserId, setAdjustmentUserId] = useState("");
-    const [adjustmentAmount, setAdjustmentAmount] = useState("");
-    const [adjustmentDescription, setAdjustmentDescription] = useState("");
-    const [adjustmentLoading, setAdjustmentLoading] = useState(false);
 
     // Filters for history
     const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -161,39 +145,6 @@ export default function WalletManagementClient({
             toast.error(error instanceof Error ? error.message : "An unexpected error occurred");
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleManualAdjustment = async (e: React.FormEvent) => {
-        e.preventDefault();
-        
-        if (!adjustmentUserId || !adjustmentAmount || !adjustmentDescription) {
-            toast.error("Please fill in all fields");
-            return;
-        }
-
-        const amount = parseFloat(adjustmentAmount);
-        if (isNaN(amount) || amount === 0) {
-            toast.error("Please enter a valid amount");
-            return;
-        }
-
-        setAdjustmentLoading(true);
-        try {
-            await adjustWalletBalance(adjustmentUserId, amount, adjustmentDescription);
-            toast.success("Wallet adjusted successfully");
-            
-            // Reset form
-            setAdjustmentUserId("");
-            setAdjustmentAmount("");
-            setAdjustmentDescription("");
-            
-            // Refresh the page
-            window.location.reload();
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to adjust wallet");
-        } finally {
-            setAdjustmentLoading(false);
         }
     };
 
@@ -264,7 +215,7 @@ export default function WalletManagementClient({
             </div>
 
             <Tabs defaultValue="overview" className="w-full">
-                <TabsList className="grid w-full grid-cols-5">
+                <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="pending">
                         Pending Requests
@@ -274,7 +225,6 @@ export default function WalletManagementClient({
                     </TabsTrigger>
                     <TabsTrigger value="history">Transaction History</TabsTrigger>
                     <TabsTrigger value="balances">Employee Balances</TabsTrigger>
-                    <TabsTrigger value="adjustment">Manual Adjustment</TabsTrigger>
                 </TabsList>
 
                 {/* Overview Tab */}
@@ -679,89 +629,6 @@ export default function WalletManagementClient({
                     </Card>
                 </TabsContent>
 
-                {/* Manual Adjustment Tab */}
-                <TabsContent value="adjustment" className="space-y-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Manual Wallet Adjustment</CardTitle>
-                            <CardDescription>Add or remove funds from an employee&apos;s wallet</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <form onSubmit={handleManualAdjustment} className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="employee">Employee</Label>
-                                    <Select value={adjustmentUserId} onValueChange={setAdjustmentUserId}>
-                                        <SelectTrigger id="employee">
-                                            <SelectValue placeholder="Select an employee" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {users.map((user) => (
-                                                <SelectItem key={user.id} value={user.id}>
-                                                    {user.firstName} {user.lastName} ({user.email})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="amount">Amount (৳)</Label>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="icon"
-                                            onClick={() => {
-                                                const current = parseFloat(adjustmentAmount) || 0;
-                                                setAdjustmentAmount(Math.abs(current) > 0 ? (-Math.abs(current)).toString() : "");
-                                            }}
-                                        >
-                                            <Minus className="h-4 w-4" />
-                                        </Button>
-                                        <Input
-                                            id="amount"
-                                            type="number"
-                                            step="0.01"
-                                            placeholder="Enter amount (positive to add, negative to deduct)"
-                                            value={adjustmentAmount}
-                                            onChange={(e) => setAdjustmentAmount(e.target.value)}
-                                            className="flex-1"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="icon"
-                                            onClick={() => {
-                                                const current = parseFloat(adjustmentAmount) || 0;
-                                                setAdjustmentAmount(Math.abs(current).toString());
-                                            }}
-                                        >
-                                            <Plus className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        Enter positive amount to add, negative to deduct from wallet
-                                    </p>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="description">Description</Label>
-                                    <Textarea
-                                        id="description"
-                                        placeholder="Reason for adjustment..."
-                                        value={adjustmentDescription}
-                                        onChange={(e) => setAdjustmentDescription(e.target.value)}
-                                        rows={3}
-                                    />
-                                </div>
-
-                                <Button type="submit" disabled={adjustmentLoading} className="w-full">
-                                    {adjustmentLoading ? "Processing..." : "Apply Adjustment"}
-                                </Button>
-                            </form>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
             </Tabs>
 
             {/* Confirmation Dialog */}
