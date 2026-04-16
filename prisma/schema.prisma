@@ -275,6 +275,11 @@ model User {
   
   // Employee Notifications
   employeeNotifications EmployeeNotification[]
+
+  // Breaking Notice Relations
+  sentBreakingNotices      BreakingNotice[]          @relation("BreakingNoticeSender")
+  targetedBreakingNotices  BreakingNotice[]          @relation("BreakingNoticeTargetUser")
+  breakingNoticeRecipients BreakingNoticeRecipient[] @relation("BreakingNoticeRecipientUser")
   
   // Audit Logs
   auditLogs             LeaveAuditLog[]
@@ -327,6 +332,7 @@ model Branch {
   
   users      User[]
   bonuses    BonusType[]
+  targetedBreakingNotices BreakingNotice[] @relation("BreakingNoticeTargetBranch")
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -713,6 +719,12 @@ enum NotificationStatus {
   READ
 }
 
+enum BreakingNoticeTargetType {
+  ALL_EMPLOYEES
+  SINGLE_EMPLOYEE
+  SINGLE_BRANCH
+}
+
 enum ProfileUpdateStatus {
   PENDING
   APPROVED
@@ -729,6 +741,55 @@ model AdminNotification {
   
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
+}
+
+model BreakingNotice {
+  id             String                   @id @default(cuid())
+  title          String
+  targetType     BreakingNoticeTargetType
+
+  senderId       String
+  sender         User                     @relation("BreakingNoticeSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  targetUserId   String?
+  targetUser     User?                    @relation("BreakingNoticeTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  targetBranchId String?
+  targetBranch   Branch?                  @relation("BreakingNoticeTargetBranch", fields: [targetBranchId], references: [id], onDelete: SetNull)
+
+  version        Int                      @default(1)
+  isEdited       Boolean                  @default(false)
+
+  recipients     BreakingNoticeRecipient[]
+
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@index([targetType])
+  @@index([senderId])
+  @@index([targetUserId])
+  @@index([targetBranchId])
+}
+
+model BreakingNoticeRecipient {
+  id            String         @id @default(cuid())
+
+  noticeId      String
+  notice        BreakingNotice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+
+  userId        String
+  user          User           @relation("BreakingNoticeRecipientUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  status        Boolean        @default(false)
+  seenAt        DateTime?
+  visibleUntil  DateTime?
+  noticeVersion Int            @default(1)
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([noticeId, userId])
+  @@index([userId, status, visibleUntil])
 }
 
 model OvertimePayout {

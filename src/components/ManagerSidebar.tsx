@@ -16,6 +16,7 @@ import {
     Timer,
     Building2,
     Settings,
+    Megaphone,
 } from "lucide-react";
 
 import {
@@ -90,6 +91,11 @@ const managerNavItems = [
         title: "System Control",
         url: "/manager/system-control",
         icon: Settings,
+    },
+    {
+        title: "Notice",
+        url: "/manager/notices",
+        icon: Megaphone,
     },
 ];
 

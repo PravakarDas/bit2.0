@@ -1,7 +1,9 @@
 import { getEmployeeDashboardData } from "@/actions/dashboard.actions";
+import { getEmployeeActiveBreakingNotices } from "@/actions/breaking-notice.actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BlurAmount } from "@/components/employee/BlurAmount";
 import { LeaveRemaining } from "@/components/employee/LeaveRemaining";
+import { BreakingNoticeBanner } from "@/components/employee/BreakingNoticeBanner";
 import { AttendanceChart } from "@/components/employee/charts/AttendanceChart";
 import { MonthComparisonChart } from "@/components/employee/charts/MonthComparisonChart";
 import { OvertimeTrendChart } from "@/components/employee/charts/OvertimeTrendChart";
@@ -42,10 +44,13 @@ interface DashboardData {
 }
 
 export default async function EmployeeDashboardPage() {
-    const data: DashboardData = await getEmployeeDashboardData();
+    const [data, notices]: [DashboardData, Awaited<ReturnType<typeof getEmployeeActiveBreakingNotices>>] = await Promise.all([
+        getEmployeeDashboardData(),
+        getEmployeeActiveBreakingNotices(),
+    ]);
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100">
             <div className="space-y-4 p-3 sm:p-4 md:p-6">
                 {/* Header */}
                 <div className="flex flex-col gap-1">
@@ -53,10 +58,12 @@ export default async function EmployeeDashboardPage() {
                     <p className="text-xs sm:text-sm text-muted-foreground">Welcome back! Overview of your financial and attendance status.</p>
                 </div>
 
+                <BreakingNoticeBanner notices={notices} />
+
                 {/* Main Grid - Enhanced to fit single viewport */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                     {/* Quick Financial Stats */}
-                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-green-50 to-green-100/50">
+                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-linear-to-br from-green-50 to-green-100/50">
                         <CardHeader className="pb-2 pt-3 px-3">
                             <CardTitle className="text-xs font-medium text-green-900 uppercase">Wallet Balance</CardTitle>
                         </CardHeader>
@@ -70,7 +77,7 @@ export default async function EmployeeDashboardPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-blue-50 to-blue-100/50">
+                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-linear-to-br from-blue-50 to-blue-100/50">
                         <CardHeader className="pb-2 pt-3 px-3">
                             <CardTitle className="text-xs font-medium text-blue-900 uppercase">Remaining Loan</CardTitle>
                         </CardHeader>
@@ -84,7 +91,7 @@ export default async function EmployeeDashboardPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-indigo-50 to-indigo-100/50">
+                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-linear-to-br from-indigo-50 to-indigo-100/50">
                         <CardHeader className="pb-2 pt-3 px-3">
                             <CardTitle className="text-xs font-medium text-indigo-900 uppercase">Medical</CardTitle>
                         </CardHeader>
@@ -98,7 +105,7 @@ export default async function EmployeeDashboardPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-amber-50 to-amber-100/50">
+                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-linear-to-br from-amber-50 to-amber-100/50">
                         <CardHeader className="pb-2 pt-3 px-3">
                             <CardTitle className="text-xs font-medium text-amber-900 uppercase">Active Leaves</CardTitle>
                         </CardHeader>
