@@ -16,6 +16,7 @@ interface LeaveBoardTableProps {
 export function LeaveBoardTable({ title, description, basePath, data }: LeaveBoardTableProps) {
   const totalColumnCount = 2 + data.leaveTypes.length * 3 + 3 + 1;
   const hasActiveFilters = data.filters.search.length > 0 || data.filters.branchId !== "all";
+  const employeeProfileBasePath = basePath.startsWith("/manager") ? "/manager/employees" : "/admin/employees";
 
   return (
     <div className="space-y-6">
@@ -120,7 +121,14 @@ export function LeaveBoardTable({ title, description, basePath, data }: LeaveBoa
                   data.rows.map((row) => (
                     <TableRow key={row.userId}>
                       <TableCell>
-                        <div className="font-medium">{row.employeeName}</div>
+                        <Link
+                          href={`${employeeProfileBasePath}/${row.userId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {row.employeeName}
+                        </Link>
                         <div className="text-xs text-muted-foreground">{row.employeeEmail}</div>
                       </TableCell>
                       <TableCell>{row.branchName}</TableCell>
