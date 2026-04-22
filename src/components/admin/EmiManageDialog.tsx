@@ -157,7 +157,7 @@ export function EmiManageDialog({ loan }: EmiManageDialogProps) {
           EMI Controls
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw]! max-w-[95vw]! h-[95vh]! max-h-[95vh]! overflow-y-auto p-4!">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
