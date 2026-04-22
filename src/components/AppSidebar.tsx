@@ -60,6 +60,7 @@ import { NotificationWithBadge } from "@/components/NotificationWithBadge";
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
     { title: "Late Check-Ins", url: "/admin/late-checkins", icon: Clock },
+    { title: "Leave-board", url: "/admin/leave-board", icon: ScrollText },
     { title: "Notifications", url: "/admin/notifications", icon: Bell },
     { title: "Notice", url: "/admin/notices", icon: Megaphone },
     { title: "Role Management", url: "/admin/role-management", icon: UserCog },

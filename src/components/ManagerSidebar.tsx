@@ -7,6 +7,7 @@ import {
     CalendarDays,
     FileCheck,
     Clock,
+    ScrollText,
     ClipboardList,
     Archive,
     ChevronRight,
@@ -51,6 +52,11 @@ const managerNavItems = [
         title: "Holiday Management", 
         url: "/manager/holidays", 
         icon: CalendarDays,
+    },
+    {
+        title: "Leave-board",
+        url: "/manager/leave-board",
+        icon: ScrollText,
     },
     { 
         title: "Profile Requests", 
