@@ -103,6 +103,7 @@ const employeeItems = [
     { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
     { title: "My Leaves", url: "/leaves", icon: ScrollText },
+    { title: "Notices", url: "/notices", icon: Megaphone },
     { title: "Overtime Requests", url: "/overtime-requests", icon: ClipboardList },
     { title: "My Loans", url: "/loans", icon: Banknote },
     { title: "My Medical", url: "/medical", icon: Stethoscope },

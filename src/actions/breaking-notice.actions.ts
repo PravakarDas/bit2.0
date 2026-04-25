@@ -88,6 +88,7 @@ function revalidateNoticePaths() {
   revalidatePath("/admin/notices");
   revalidatePath("/manager/notices");
   revalidatePath("/dashboard");
+  revalidatePath("/notices");
 }
 
 async function resolveTargetSummary(payload: NoticePayload): Promise<string> {
@@ -428,14 +429,9 @@ export async function getEmployeeActiveBreakingNotices() {
     where: { userId: user.id },
     include: {
       notice: {
-        include: {
-          sender: {
-            select: {
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
+        select: {
+          id: true,
+          version: true,
         },
       },
     },
@@ -468,14 +464,13 @@ export async function getEmployeeActiveBreakingNotices() {
     where: { userId: user.id },
     include: {
       notice: {
-        include: {
-          sender: {
-            select: {
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
+        select: {
+          id: true,
+          title: true,
+          isEdited: true,
+          version: true,
+          createdAt: true,
+          updatedAt: true,
         },
       },
     },
@@ -509,14 +504,12 @@ export async function getEmployeeActiveBreakingNotices() {
     },
     include: {
       notice: {
-        include: {
-          sender: {
-            select: {
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
+        select: {
+          id: true,
+          title: true,
+          isEdited: true,
+          createdAt: true,
+          updatedAt: true,
         },
       },
     },
@@ -532,9 +525,39 @@ export async function getEmployeeActiveBreakingNotices() {
     seenStatus: row.status,
     seenAt: row.seenAt,
     visibleUntil: row.visibleUntil,
-    senderName:
-      [row.notice.sender.firstName, row.notice.sender.lastName].filter(Boolean).join(" ") ||
-      row.notice.sender.email,
+    createdAt: row.notice.createdAt,
+    updatedAt: row.notice.updatedAt,
+  }));
+}
+
+export async function getEmployeeAllBreakingNotices() {
+  const user = await getDbUser();
+  if (!user || user.role !== "EMPLOYEE") {
+    return [];
+  }
+
+  const recipientRows = await prisma.breakingNoticeRecipient.findMany({
+    where: { userId: user.id },
+    include: {
+      notice: {
+        select: {
+          id: true,
+          title: true,
+          isEdited: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  return recipientRows.map((row) => ({
+    id: row.notice.id,
+    title: row.notice.title,
+    isEdited: row.notice.isEdited,
     createdAt: row.notice.createdAt,
     updatedAt: row.notice.updatedAt,
   }));

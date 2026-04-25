@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Clock3, Pencil } from "lucide-react";
+import { AlertTriangle, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -9,7 +9,6 @@ interface EmployeeNoticeItem {
   id: string;
   title: string;
   isEdited: boolean;
-  senderName: string;
   seenAt: Date | string | null;
   visibleUntil: Date | string | null;
   createdAt: Date | string;
@@ -20,37 +19,65 @@ interface BreakingNoticeBannerProps {
   notices: EmployeeNoticeItem[];
 }
 
-function formatTimeLeft(visibleUntil: Date | string | null): string {
-  if (!visibleUntil) {
-    return "";
-  }
-
-  const end = new Date(visibleUntil).getTime();
-  const now = Date.now();
-  const diffMs = end - now;
-
-  if (diffMs <= 0) {
-    return "Expired";
-  }
-
-  const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const days = Math.floor(totalHours / 24);
-  const hours = totalHours % 24;
-
-  if (days > 0) {
-    return `${days}d ${hours}h left`;
-  }
-
-  return `${hours}h left`;
-}
-
 export function BreakingNoticeBanner({ notices }: BreakingNoticeBannerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [visibleNoticeIds, setVisibleNoticeIds] = useState<Set<string>>(new Set());
   const dragStartXRef = useRef<number | null>(null);
   const dragDeltaXRef = useRef(0);
+  const hideTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  const canSlide = notices.length > 1;
+  // Show only the 3 latest notices
+  const limitedNotices = notices.slice(0, 3);
+  const canSlide = limitedNotices.length > 1;
+
+  const clearHideTimer = (noticeId: string) => {
+    const timer = hideTimersRef.current.get(noticeId);
+    if (timer) {
+      clearTimeout(timer);
+      hideTimersRef.current.delete(noticeId);
+    }
+  };
+
+  const showNoticeTemporarily = (noticeId: string) => {
+    clearHideTimer(noticeId);
+    setVisibleNoticeIds((prev) => new Set([...prev, noticeId]));
+    
+    const timer = setTimeout(() => {
+      setVisibleNoticeIds((prev) => {
+        const next = new Set(prev);
+        next.delete(noticeId);
+        return next;
+      });
+      hideTimersRef.current.delete(noticeId);
+    }, 3000);
+    
+    hideTimersRef.current.set(noticeId, timer);
+  };
+
+  const hideNoticeNow = (noticeId: string) => {
+    clearHideTimer(noticeId);
+    setVisibleNoticeIds((prev) => {
+      const next = new Set(prev);
+      next.delete(noticeId);
+      return next;
+    });
+  };
+
+  const toggleNoticeVisibility = (noticeId: string) => {
+    if (visibleNoticeIds.has(noticeId)) {
+      hideNoticeNow(noticeId);
+    } else {
+      showNoticeTemporarily(noticeId);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      hideTimersRef.current.forEach((timer) => clearTimeout(timer));
+      hideTimersRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (!canSlide || isDragging) {
@@ -58,13 +85,13 @@ export function BreakingNoticeBanner({ notices }: BreakingNoticeBannerProps) {
     }
 
     const timer = setInterval(() => {
-      setActiveIndex((prev) => (prev + 1) % notices.length);
+      setActiveIndex((prev) => (prev + 1) % limitedNotices.length);
     }, 3500);
 
     return () => clearInterval(timer);
-  }, [canSlide, isDragging, notices.length]);
+  }, [canSlide, isDragging, limitedNotices.length]);
 
-  if (notices.length === 0) {
+  if (limitedNotices.length === 0) {
     return null;
   }
 
@@ -95,9 +122,9 @@ export function BreakingNoticeBanner({ notices }: BreakingNoticeBannerProps) {
     const delta = dragDeltaXRef.current;
 
     if (delta <= -threshold) {
-      setActiveIndex((prev) => (prev + 1) % notices.length);
+      setActiveIndex((prev) => (prev + 1) % limitedNotices.length);
     } else if (delta >= threshold) {
-      setActiveIndex((prev) => (prev - 1 + notices.length) % notices.length);
+      setActiveIndex((prev) => (prev - 1 + limitedNotices.length) % limitedNotices.length);
     }
 
     dragStartXRef.current = null;
@@ -130,13 +157,13 @@ export function BreakingNoticeBanner({ notices }: BreakingNoticeBannerProps) {
           className="flex transition-transform duration-300 ease-out"
           style={{ transform: `translateX(-${activeIndex * 100}%)` }}
         >
-          {notices.map((notice, index) => (
+          {limitedNotices.map((notice, index) => (
             <div key={notice.id} className="w-full shrink-0">
-              <Card className="border-amber-300 bg-linear-to-r from-amber-50 to-orange-50 shadow-sm">
+              <Card className="border-red-300 bg-linear-to-r from-red-50 to-rose-50 shadow-sm">
                 <CardContent className="px-3 py-2">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge className="bg-amber-600 hover:bg-amber-600 text-white text-[10px] px-2 py-0.5">
+                      <Badge className="bg-red-600 hover:bg-red-600 text-white text-[10px] px-2 py-0.5">
                         <AlertTriangle className="mr-1 h-3 w-3" />
                         Notice
                       </Badge>
@@ -148,17 +175,23 @@ export function BreakingNoticeBanner({ notices }: BreakingNoticeBannerProps) {
                         </Badge>
                       )}
 
-                      <span className="inline-flex items-center text-[11px] text-muted-foreground">
-                        <Clock3 className="mr-1 h-3 w-3" />
-                        {formatTimeLeft(notice.visibleUntil)}
-                      </span>
-
                       <span className="text-[11px] text-muted-foreground">
-                        {index + 1}/{notices.length}
+                        {index + 1}/{limitedNotices.length}
                       </span>
                     </div>
 
-                    <p className="text-sm font-semibold text-amber-900 wrap-break-word leading-snug">{notice.title}</p>
+                    <button
+                      type="button"
+                      onClick={() => toggleNoticeVisibility(notice.id)}
+                      className={`text-sm font-semibold text-red-900 wrap-break-word leading-snug text-left w-full rounded px-1 py-0.5 transition-all ${
+                        visibleNoticeIds.has(notice.id)
+                          ? "bg-transparent"
+                          : "bg-red-100/50 blur-sm select-none"
+                      }`}
+                      aria-label={visibleNoticeIds.has(notice.id) ? "Notice visible. Click to hide." : "Notice hidden. Click to reveal for 3 seconds."}
+                    >
+                      {notice.title}
+                    </button>
                   </div>
                 </CardContent>
               </Card>
@@ -169,12 +202,12 @@ export function BreakingNoticeBanner({ notices }: BreakingNoticeBannerProps) {
 
       {canSlide && (
         <div className="flex items-center justify-center gap-1.5">
-          {notices.map((notice, index) => (
+          {limitedNotices.map((notice, index) => (
             <button
               key={notice.id}
               type="button"
               aria-label={`Go to notice ${index + 1}`}
-              className={`h-1.5 rounded-full transition-all ${index === activeIndex ? "w-4 bg-amber-600" : "w-1.5 bg-amber-300"}`}
+              className={`h-1.5 rounded-full transition-all ${index === activeIndex ? "w-4 bg-red-600" : "w-1.5 bg-red-300"}`}
               onClick={() => setActiveIndex(index)}
             />
           ))}
