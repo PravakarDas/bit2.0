@@ -253,6 +253,7 @@ model User {
   
   // Timeline/Attendance Relations
   timeRecords         DailyTimeRecord[]
+  temporaryTimeRecords DailyTimeRecordTemporary[]
   
   // Overtime Payout Relations
   overtimePayouts     OvertimePayout[]
@@ -697,6 +698,42 @@ model DailyTimeRecord {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model DailyTimeRecordTemporary {
+  id                String    @id @default(cuid())
+  date              DateTime
+  status            DailyRecordStatus @default(PRESENT)
+
+  requiredCheckIn   DateTime?
+  requiredCheckOut  DateTime?
+  requiredBreakTime String?
+
+  actualCheckIn     DateTime?
+  actualCheckOut    DateTime?
+  actualBreakTime   String?
+
+  requiredActiveTime String?
+  actualActiveTime   String?
+  officialOvertimeundertime  String?
+  requestedOvertime  String?
+  requestedOTstart   DateTime?
+  requestedOTend     DateTime?
+  overtimeUndertime  String?
+
+  lateCheckInMinutes Int?     @default(0)
+  lateCheckInPenalty Float?   @default(0)
+
+  autoDeductedLeaveType String?
+  isProcessed           Boolean @default(false)
+
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
 }
 
 enum NotificationType {

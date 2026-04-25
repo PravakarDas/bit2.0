@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { createAdminNotification } from "./notification.actions";
 import { logManagerEmployeeEditAction } from "./manager-employee-edit.actions";
+import { Prisma } from "@prisma/client";
 
 async function logManagerProfileRequestAction(params: {
   actorId: string;
@@ -108,6 +109,110 @@ const normalizeWorkingDaysInMonth = (value: unknown) => {
   if (Number.isNaN(parsed)) return undefined;
   return Math.max(0, Math.min(31, Math.floor(Number(parsed))));
 };
+
+const BANGLADESH_OFFSET_MS = 6 * 60 * 60 * 1000;
+
+function normalizeToStartOfDayInBangladesh(date: Date): Date {
+  const shifted = new Date(date.getTime() + BANGLADESH_OFFSET_MS);
+  const year = shifted.getUTCFullYear();
+  const month = shifted.getUTCMonth();
+  const day = shifted.getUTCDate();
+  return new Date(Date.UTC(year, month, day) - BANGLADESH_OFFSET_MS);
+}
+
+async function archiveTimelineBeforeDateOfJoining(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  previousDateOfJoining: Date | null,
+  newDateOfJoining: Date | null,
+) {
+  if (!newDateOfJoining) {
+    return;
+  }
+
+  const normalizedNewDateOfJoining = normalizeToStartOfDayInBangladesh(newDateOfJoining);
+  const normalizedPreviousDateOfJoining = previousDateOfJoining
+    ? normalizeToStartOfDayInBangladesh(previousDateOfJoining)
+    : null;
+
+  if (
+    normalizedPreviousDateOfJoining &&
+    normalizedPreviousDateOfJoining.getTime() === normalizedNewDateOfJoining.getTime()
+  ) {
+    return;
+  }
+
+  const recordsToArchive = await tx.dailyTimeRecord.findMany({
+    where: {
+      userId,
+      date: { lt: normalizedNewDateOfJoining },
+    },
+  });
+
+  if (recordsToArchive.length === 0) {
+    return;
+  }
+
+  for (const record of recordsToArchive) {
+    await tx.dailyTimeRecordTemporary.upsert({
+      where: {
+        userId_date: {
+          userId,
+          date: record.date,
+        },
+      },
+      create: {
+        userId,
+        date: record.date,
+        status: record.status,
+        requiredCheckIn: record.requiredCheckIn,
+        requiredCheckOut: record.requiredCheckOut,
+        requiredBreakTime: record.requiredBreakTime,
+        actualCheckIn: record.actualCheckIn,
+        actualCheckOut: record.actualCheckOut,
+        actualBreakTime: record.actualBreakTime,
+        requiredActiveTime: record.requiredActiveTime,
+        actualActiveTime: record.actualActiveTime,
+        officialOvertimeundertime: record.officialOvertimeundertime,
+        requestedOvertime: record.requestedOvertime,
+        requestedOTstart: record.requestedOTstart,
+        requestedOTend: record.requestedOTend,
+        overtimeUndertime: record.overtimeUndertime,
+        lateCheckInMinutes: record.lateCheckInMinutes,
+        lateCheckInPenalty: record.lateCheckInPenalty,
+        autoDeductedLeaveType: record.autoDeductedLeaveType,
+        isProcessed: record.isProcessed,
+      },
+      update: {
+        status: record.status,
+        requiredCheckIn: record.requiredCheckIn,
+        requiredCheckOut: record.requiredCheckOut,
+        requiredBreakTime: record.requiredBreakTime,
+        actualCheckIn: record.actualCheckIn,
+        actualCheckOut: record.actualCheckOut,
+        actualBreakTime: record.actualBreakTime,
+        requiredActiveTime: record.requiredActiveTime,
+        actualActiveTime: record.actualActiveTime,
+        officialOvertimeundertime: record.officialOvertimeundertime,
+        requestedOvertime: record.requestedOvertime,
+        requestedOTstart: record.requestedOTstart,
+        requestedOTend: record.requestedOTend,
+        overtimeUndertime: record.overtimeUndertime,
+        lateCheckInMinutes: record.lateCheckInMinutes,
+        lateCheckInPenalty: record.lateCheckInPenalty,
+        autoDeductedLeaveType: record.autoDeductedLeaveType,
+        isProcessed: record.isProcessed,
+      },
+    });
+  }
+
+  await tx.dailyTimeRecord.deleteMany({
+    where: {
+      userId,
+      date: { lt: normalizedNewDateOfJoining },
+    },
+  });
+}
 
 /**
  * Get current user's profile information
@@ -292,7 +397,7 @@ export async function updateUserProfileByAdmin(userId: string, data: ProfileData
 
     const employee = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, firstName: true, lastName: true, email: true },
+      select: { id: true, firstName: true, lastName: true, email: true, dateOfJoining: true },
     });
 
     if (!employee) {
@@ -328,9 +433,20 @@ export async function updateUserProfileByAdmin(userId: string, data: ProfileData
       updateData.workingDaysInMonth = normalizeWorkingDaysInMonth(updateData.workingDaysInMonth);
     }
 
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      if (typeof updateData.dateOfJoining !== "undefined") {
+        await archiveTimelineBeforeDateOfJoining(
+          tx,
+          userId,
+          employee.dateOfJoining,
+          updateData.dateOfJoining ?? null,
+        );
+      }
+
+      return tx.user.update({
+        where: { id: userId },
+        data: updateData,
+      });
     });
 
     if (currentUserData.role === "EMPLOYEE" && currentUserData.isManager) {
@@ -481,12 +597,22 @@ export async function approveProfileUpdateRequest(requestId: string, reviewNotes
     }
 
     // Update user and request in a transaction
-    await prisma.$transaction([
-      prisma.user.update({
+    await prisma.$transaction(async (tx) => {
+      if (typeof updateData.dateOfJoining !== "undefined") {
+        await archiveTimelineBeforeDateOfJoining(
+          tx,
+          request.userId,
+          request.user.dateOfJoining,
+          updateData.dateOfJoining ?? null,
+        );
+      }
+
+      await tx.user.update({
         where: { id: request.userId },
         data: updateData,
-      }),
-      prisma.profileUpdateRequest.update({
+      });
+
+      await tx.profileUpdateRequest.update({
         where: { id: requestId },
         data: {
           status: "APPROVED",
@@ -494,8 +620,8 @@ export async function approveProfileUpdateRequest(requestId: string, reviewNotes
           reviewedAt: new Date(),
           reviewNotes,
         },
-      }),
-    ]);
+      });
+    });
 
     if (currentUserData.role === "EMPLOYEE" && currentUserData.isManager) {
       const actorName = [currentUserData.firstName, currentUserData.lastName].filter(Boolean).join(" ") || currentUserData.email;

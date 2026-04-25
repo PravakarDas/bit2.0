@@ -216,6 +216,17 @@ function getDisplayName(employee: { firstName: string | null; lastName: string |
   return fullName || employee.email;
 }
 
+function getEmployeeTimelineStartDate(
+  employee: { dateOfJoining: Date | null },
+): Date {
+  if (!employee.dateOfJoining) {
+    return TIMELINE_BASELINE_START;
+  }
+
+  const joiningDate = normalizeToStartOfDay(employee.dateOfJoining);
+  return joiningDate > TIMELINE_BASELINE_START ? joiningDate : TIMELINE_BASELINE_START;
+}
+
 async function createTimelineRecordForEmployee(
   employee: {
     id: string;
@@ -238,11 +249,9 @@ async function createTimelineRecordForEmployee(
   const employeeName = getDisplayName(employee);
 
   try {
-    if (employee.dateOfJoining) {
-      const joiningDate = normalizeToStartOfDay(employee.dateOfJoining);
-      if (normalizedDate < joiningDate) {
-        return { created: false, skippedReason: 'before joining date' };
-      }
+    const employeeStartDate = getEmployeeTimelineStartDate(employee);
+    if (normalizedDate < employeeStartDate) {
+      return { created: false, skippedReason: 'before employment start' };
     }
 
     if (!skipExistingCheck) {
@@ -302,6 +311,82 @@ async function createTimelineRecordForEmployee(
     console.error(errorMsg);
     return { created: false, error: errorMsg };
   }
+}
+
+async function restoreTimelineRecordsFromTemporary(
+  userId: string,
+  startDate: Date,
+  endDate: Date,
+): Promise<number> {
+  const archivedRecords = await prisma.dailyTimeRecordTemporary.findMany({
+    where: {
+      userId,
+      date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    orderBy: { date: 'asc' },
+  });
+
+  let restoredCount = 0;
+
+  for (const record of archivedRecords) {
+    await prisma.dailyTimeRecord.upsert({
+      where: {
+        userId_date: {
+          userId,
+          date: record.date,
+        },
+      },
+      create: {
+        userId,
+        date: record.date,
+        status: record.status,
+        requiredCheckIn: record.requiredCheckIn,
+        requiredCheckOut: record.requiredCheckOut,
+        requiredBreakTime: record.requiredBreakTime,
+        actualCheckIn: record.actualCheckIn,
+        actualCheckOut: record.actualCheckOut,
+        actualBreakTime: record.actualBreakTime,
+        requiredActiveTime: record.requiredActiveTime,
+        actualActiveTime: record.actualActiveTime,
+        officialOvertimeundertime: record.officialOvertimeundertime,
+        requestedOvertime: record.requestedOvertime,
+        requestedOTstart: record.requestedOTstart,
+        requestedOTend: record.requestedOTend,
+        overtimeUndertime: record.overtimeUndertime,
+        lateCheckInMinutes: record.lateCheckInMinutes,
+        lateCheckInPenalty: record.lateCheckInPenalty,
+        autoDeductedLeaveType: record.autoDeductedLeaveType,
+        isProcessed: record.isProcessed,
+      },
+      update: {
+        status: record.status,
+        requiredCheckIn: record.requiredCheckIn,
+        requiredCheckOut: record.requiredCheckOut,
+        requiredBreakTime: record.requiredBreakTime,
+        actualCheckIn: record.actualCheckIn,
+        actualCheckOut: record.actualCheckOut,
+        actualBreakTime: record.actualBreakTime,
+        requiredActiveTime: record.requiredActiveTime,
+        actualActiveTime: record.actualActiveTime,
+        officialOvertimeundertime: record.officialOvertimeundertime,
+        requestedOvertime: record.requestedOvertime,
+        requestedOTstart: record.requestedOTstart,
+        requestedOTend: record.requestedOTend,
+        overtimeUndertime: record.overtimeUndertime,
+        lateCheckInMinutes: record.lateCheckInMinutes,
+        lateCheckInPenalty: record.lateCheckInPenalty,
+        autoDeductedLeaveType: record.autoDeductedLeaveType,
+        isProcessed: record.isProcessed,
+      },
+    });
+
+    restoredCount++;
+  }
+
+  return restoredCount;
 }
 
 /**
@@ -509,11 +594,15 @@ export async function backfillMissingTimeRecords(): Promise<BackfillResult> {
         continue;
       }
 
-      const joiningDate = normalizeToStartOfDay(employee.dateOfJoining);
-      const startDate = joiningDate > TIMELINE_BASELINE_START ? joiningDate : TIMELINE_BASELINE_START;
+      const startDate = getEmployeeTimelineStartDate(employee);
 
       if (startDate >= today) {
         continue;
+      }
+
+      const restored = await restoreTimelineRecordsFromTemporary(employee.id, startDate, today);
+      if (restored > 0) {
+        totalRecordsCreated += restored;
       }
 
       const existingRecords = await prisma.dailyTimeRecord.findMany({
@@ -637,12 +726,16 @@ export async function checkAndGenerateToday(): Promise<TimelineGenerationResult>
         continue;
       }
 
-      // Joining date exists: create any missing records from max(joining date, 2026-01-01) until today.
-      const joiningDate = normalizeToStartOfDay(employee.dateOfJoining);
-      const startDate = joiningDate > TIMELINE_BASELINE_START ? joiningDate : TIMELINE_BASELINE_START;
+      // Joining date exists: restore archived rows first, then create missing rows.
+      const startDate = getEmployeeTimelineStartDate(employee);
 
       if (startDate > today) {
         continue;
+      }
+
+      const restored = await restoreTimelineRecordsFromTemporary(employee.id, startDate, today);
+      if (restored > 0) {
+        totalCreated += restored;
       }
 
       const existingRecords = await prisma.dailyTimeRecord.findMany({
