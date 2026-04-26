@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
 import { logManagerOrganizationAction } from "./manager-organization.actions";
@@ -54,17 +55,91 @@ async function notifyIfManager(params: {
     }
 }
 
+function isMissingLoanToggleColumnError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+        return false;
+    }
+
+    if (error.code !== "P2022") {
+        return false;
+    }
+
+    const column =
+        typeof error.meta?.column === "string"
+            ? error.meta.column
+            : typeof error.message === "string"
+              ? error.message
+              : "";
+
+    return column.includes("Branch.isLoanApplicationEnabled");
+}
+
 export async function getBranches() {
-    return await prisma.branch.findMany({
-        orderBy: { name: "asc" },
-    });
+    try {
+        return await prisma.branch.findMany({
+            orderBy: { name: "asc" },
+        });
+    } catch (error) {
+        if (!isMissingLoanToggleColumnError(error)) {
+            throw error;
+        }
+
+        const legacyBranches = await prisma.branch.findMany({
+            orderBy: { name: "asc" },
+            select: {
+                id: true,
+                name: true,
+                location: true,
+                isActive: true,
+                checkInTime: true,
+                checkOutTime: true,
+                breakDuration: true,
+                weeklyOffDays: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+        });
+
+        return legacyBranches.map((branch) => ({
+            ...branch,
+            isLoanApplicationEnabled: true,
+        }));
+    }
 }
 
 export async function getActiveBranches() {
-    return await prisma.branch.findMany({
-        where: { isActive: true },
-        orderBy: { name: "asc" },
-    });
+    try {
+        return await prisma.branch.findMany({
+            where: { isActive: true },
+            orderBy: { name: "asc" },
+        });
+    } catch (error) {
+        if (!isMissingLoanToggleColumnError(error)) {
+            throw error;
+        }
+
+        const legacyBranches = await prisma.branch.findMany({
+            where: { isActive: true },
+            orderBy: { name: "asc" },
+            select: {
+                id: true,
+                name: true,
+                location: true,
+                isActive: true,
+                checkInTime: true,
+                checkOutTime: true,
+                breakDuration: true,
+                weeklyOffDays: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+        });
+
+        return legacyBranches.map((branch) => ({
+            ...branch,
+            isLoanApplicationEnabled: true,
+        }));
+    }
 }
 
 export async function createBranch(data: { 
@@ -141,6 +216,83 @@ export async function toggleBranchStatus(id: string, isActive: boolean) {
     } catch (error) {
         console.error("Error toggling branch status:", error);
         return { success: false, error: "Failed to toggle status" };
+    }
+}
+
+export async function toggleBranchLoanApplication(id: string, isLoanApplicationEnabled: boolean) {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
+    try {
+        const branch = await prisma.branch.update({
+            where: { id },
+            data: { isLoanApplicationEnabled },
+        });
+
+        await notifyIfManager({
+            user: user!,
+            action: "UPDATED",
+            entityId: branch.id,
+            entityName: branch.name,
+            details: `loan applications ${isLoanApplicationEnabled ? "enabled" : "disabled"}`,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
+        revalidatePath("/loans");
+        return { success: true, branch };
+    } catch (error) {
+        console.error("Error toggling branch loan application status:", error);
+        if (isMissingLoanToggleColumnError(error)) {
+            return {
+                success: false,
+                error: "Loan toggle column is missing in the database. Please run the latest Prisma migration.",
+            };
+        }
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update loan application setting",
+        };
+    }
+}
+
+export async function toggleAllBranchesLoanApplication(isLoanApplicationEnabled: boolean) {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
+    try {
+        const result = await prisma.branch.updateMany({
+            data: { isLoanApplicationEnabled },
+        });
+
+        await notifyIfManager({
+            user: user!,
+            action: "UPDATED",
+            entityId: "all-branches",
+            entityName: "All Branches",
+            details: `loan applications ${isLoanApplicationEnabled ? "enabled" : "disabled"} for ${result.count} branches`,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
+        revalidatePath("/loans");
+        return { success: true, updatedCount: result.count };
+    } catch (error) {
+        console.error("Error toggling all branches loan application status:", error);
+        if (isMissingLoanToggleColumnError(error)) {
+            return {
+                success: false,
+                error: "Loan toggle column is missing in the database. Please run the latest Prisma migration.",
+            };
+        }
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update all branches loan setting",
+        };
     }
 }
 

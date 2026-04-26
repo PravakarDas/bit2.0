@@ -324,6 +324,7 @@ model Branch {
   name      String
   location  String
   isActive  Boolean  @default(true)
+  isLoanApplicationEnabled Boolean @default(true)
   
   // Timeline/Attendance Settings
   checkInTime    String   @default("09:00")    // Format: "HH:MM" (24-hour)

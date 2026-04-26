@@ -113,6 +113,7 @@ const employeeItems = [
 
 const organizationSubItems = [
     { title: "Branches", icon: Building2, hash: "#branches" },
+    { title: "Branch Loan Controls", icon: Banknote, hash: "#branch-loan-settings" },
     { title: "Departments & Designations", icon: Briefcase, hash: "#departments" },
     { title: "Bonuses", icon: Gift, hash: "#bonuses" },
     { title: "Allowances", icon: DollarSign, hash: "#allowances" },

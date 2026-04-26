@@ -6,6 +6,25 @@ import { revalidatePath } from "next/cache";
 import { calculateEMI, checkLoanEligibility, processLoanPayment } from "@/lib/services/loan.service";
 import { getDbUser } from "./user.actions";
 
+function isMissingBranchLoanToggleColumnError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+        return false;
+    }
+
+    if (error.code !== "P2022") {
+        return false;
+    }
+
+    const column =
+        typeof error.meta?.column === "string"
+            ? error.meta.column
+            : typeof error.message === "string"
+              ? error.message
+              : "";
+
+    return column.includes("Branch.isLoanApplicationEnabled");
+}
+
 /**
  * Fetch all loans for admin review (Pending & Active).
  * Enhanced to include comprehensive employee financial context.
@@ -518,6 +537,24 @@ export async function applyForLoan(data: {
 }) {
     const user = await getDbUser();
     if (!user) throw new Error("Unauthorized");
+
+    if (user.branchId) {
+        try {
+            const branch = await prisma.branch.findUnique({
+                where: { id: user.branchId },
+                select: { isLoanApplicationEnabled: true, name: true },
+            });
+
+            if (branch && !branch.isLoanApplicationEnabled) {
+                throw new Error(`New loan applications are currently turned off for your branch (${branch.name}). Please contact HR/admin.`);
+            }
+        } catch (error) {
+            if (!isMissingBranchLoanToggleColumnError(error)) {
+                throw error;
+            }
+            // Column not migrated yet: keep legacy behavior by allowing applications.
+        }
+    }
 
     const roundedAmount = Math.round(data.amount / 500) * 500;
 
