@@ -6,8 +6,8 @@ export default async function ManagerEmployeeLateCheckinDetailPage({
   params,
   searchParams,
 }: {
-  params: { employeeId: string };
-  searchParams: { from?: string; to?: string };
+  params: Promise<{ employeeId: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   redirect("/unauthorized");
 

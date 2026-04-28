@@ -13,7 +13,7 @@ import { getActiveBranches } from "@/actions/branch.actions";
 import { WorkingDaysInput } from "@/components/admin/WorkingDaysInput";
 import { EmployeeDocumentLinksForm } from "@/components/admin/EmployeeDocumentLinksForm";
 
-export default async function EmployeeProfilePage({ params }: { params: { id: string } }) {
+export default async function EmployeeProfilePage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     const [user, branches] = await Promise.all([
         getUserById(id),

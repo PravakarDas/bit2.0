@@ -4,7 +4,7 @@ import { ManagerDashboard } from "@/components/manager/ManagerDashboard";
 export default async function ManagerDashboardPage({
     searchParams
 }: {
-    searchParams: { branch?: string, from?: string, to?: string }
+    searchParams: Promise<{ branch?: string, from?: string, to?: string }>
 }) {
     const params = await searchParams;
     

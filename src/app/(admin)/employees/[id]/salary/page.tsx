@@ -16,7 +16,7 @@ import { ArrowLeft, History } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-export default async function EmployeeSalaryHistoryPage({ params }: { params: { id: string } }) {
+export default async function EmployeeSalaryHistoryPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     const [user, history] = await Promise.all([
         getUserById(id),

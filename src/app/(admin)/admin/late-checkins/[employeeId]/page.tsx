@@ -5,8 +5,8 @@ export default async function AdminEmployeeLateCheckinDetailPage({
   params,
   searchParams,
 }: {
-  params: { employeeId: string };
-  searchParams: { from?: string; to?: string };
+  params: Promise<{ employeeId: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const routeParams = await params;
   const queryParams = await searchParams;

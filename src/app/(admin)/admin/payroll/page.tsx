@@ -5,7 +5,7 @@ import { PayrollSelectors } from "@/components/admin/PayrollSelectors";
 export default async function PayrollPage({
     searchParams
 }: {
-    searchParams: { month?: string, year?: string }
+    searchParams: Promise<{ month?: string, year?: string }>
 }) {
     const params = await searchParams;
 

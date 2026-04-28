@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 export default async function EmployeeLateCheckinPage({
   searchParams,
 }: {
-  searchParams: { from?: string; to?: string };
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const user = await getDbUser();
   if (!user) redirect("/sign-in");

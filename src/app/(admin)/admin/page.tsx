@@ -4,7 +4,7 @@ import { EnhancedDashboard } from "@/components/admin/EnhancedDashboard";
 export default async function AdminDashboard({
     searchParams
 }: {
-    searchParams: { branch?: string, from?: string, to?: string }
+    searchParams: Promise<{ branch?: string, from?: string, to?: string }>
 }) {
     const params = await searchParams;
     

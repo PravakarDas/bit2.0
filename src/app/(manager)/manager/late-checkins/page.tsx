@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 export default async function ManagerLateCheckinPage({
   searchParams,
 }: {
-  searchParams: { branch?: string; from?: string; to?: string; search?: string };
+  searchParams: Promise<{ branch?: string; from?: string; to?: string; search?: string }>;
 }) {
   redirect("/unauthorized");
 

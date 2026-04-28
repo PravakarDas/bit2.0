@@ -13,9 +13,10 @@ interface SearchParams {
 export default async function ArchivedEmployeesPage({
     searchParams,
 }: {
-    searchParams: SearchParams;
+    searchParams: Promise<SearchParams>;
 }) {
-    const archivedEmployees = await getArchivedEmployees(searchParams.fromDate, searchParams.toDate);
+    const params = await searchParams;
+    const archivedEmployees = await getArchivedEmployees(params.fromDate, params.toDate);
 
     return (
         <div className="space-y-6">
@@ -35,13 +36,13 @@ export default async function ArchivedEmployeesPage({
                 <CardHeader>
                     <CardTitle className="text-lg">
                         Archived Employees ({archivedEmployees.length})
-                        {(searchParams.fromDate || searchParams.toDate) && " - Filtered Results"}
+                        {(params.fromDate || params.toDate) && " - Filtered Results"}
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
                     {archivedEmployees.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
-                            {(searchParams.fromDate || searchParams.toDate) 
+                            {(params.fromDate || params.toDate) 
                                 ? "No archived employees found for the selected date range"
                                 : "No archived employees found"
                             }

@@ -4,7 +4,7 @@ import { LeaveBoardTable } from "@/components/admin/LeaveBoardTable";
 export default async function ManagerLeaveBoardPage({
   searchParams,
 }: {
-  searchParams: { search?: string; branch?: string };
+  searchParams: Promise<{ search?: string; branch?: string }>;
 }) {
   const params = await searchParams;
 
