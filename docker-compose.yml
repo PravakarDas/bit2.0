@@ -1,11 +1,7 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        UID: ${APP_UID:-1001}
-        GID: ${APP_GID:-1001}
+    image: ghcr.io/your-github-username/bit2.0:latest
+    pull_policy: always
     container_name: bitcode-hrm
     restart: unless-stopped
     env_file:
