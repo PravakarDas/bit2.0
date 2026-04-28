@@ -379,7 +379,7 @@ export async function getAllLoansWithManagerInfo() {
     throw new Error("Unauthorized access to loan management");
   }
 
-  return await prisma.loan.findMany({
+  const loans = await prisma.loan.findMany({
     orderBy: {
       createdAt: "desc",
     },
@@ -421,6 +421,76 @@ export async function getAllLoansWithManagerInfo() {
       emiState: true,
     },
   });
+
+  return {
+    loans,
+    canDeleteLoans: user.role === "SUPERADMIN",
+  };
+}
+
+/**
+ * Admin: Hard delete a loan and all loan-specific dependent records.
+ */
+export async function deleteLoan(loanId: string) {
+  const user = await getDbUser();
+
+  if (!user || user.role !== "SUPERADMIN") {
+    return { success: false, error: "Unauthorized access to loan deletion" };
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const loan = await tx.loan.findUnique({
+        where: { id: loanId },
+        include: {
+          emiState: true,
+          payments: true,
+          auditLogs: true,
+        },
+      });
+
+      if (!loan) {
+        throw new Error("Loan not found");
+      }
+
+      const totalPayments = loan.payments.reduce((sum, payment) => sum + payment.amount, 0);
+      const walletImpact = loan.issuedAmount - totalPayments;
+
+      await tx.emiState.deleteMany({
+        where: { loanId },
+      });
+
+      await tx.payment.deleteMany({
+        where: { loanId },
+      });
+
+      await tx.auditLog.deleteMany({
+        where: { loanId },
+      });
+
+      if (walletImpact !== 0) {
+        await tx.user.update({
+          where: { id: loan.userId },
+          data:
+            walletImpact > 0
+              ? { walletBalance: { decrement: walletImpact } }
+              : { walletBalance: { increment: Math.abs(walletImpact) } },
+        });
+      }
+
+      await tx.loan.delete({
+        where: { id: loanId },
+      });
+    });
+
+    revalidatePath("/admin/loans");
+    revalidatePath("/admin/wallet");
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to delete loan:", error);
+    const message = error instanceof Error ? error.message : "Failed to delete loan";
+    return { success: false, error: message };
+  }
 }
 
 /**
