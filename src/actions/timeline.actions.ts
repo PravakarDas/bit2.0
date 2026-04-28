@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { createAdminNotification } from "./notification.actions";
-import { Prisma } from "@prisma/client";
+import { Prisma, type DailyTimeRecord } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 import { buildDateRangeFilter } from "@/lib/utils";
 
@@ -243,7 +243,7 @@ async function reverseAbsentPenaltyOnTimelineEdit(
 
 async function reverseAutoLeaveDeductionOnTimelineEdit(
   tx: Prisma.TransactionClient,
-  currentRecord: Prisma.DailyTimeRecord,
+  currentRecord: DailyTimeRecord,
 ): Promise<LeaveAdjustmentResult> {
   if (!currentRecord.autoDeductedLeaveType) {
     return { applied: false };
