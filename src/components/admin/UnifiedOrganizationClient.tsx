@@ -16,6 +16,8 @@ import { AddBranchDialog } from "./AddBranchDialog";
 import { EditBranchDialog } from "./EditBranchDialog";
 import { DeleteBranchButton } from "./DeleteBranchButton";
 import { BranchToggle } from "./BranchToggle";
+import { BranchLoanApplicationToggle } from "./BranchLoanApplicationToggle";
+import { AllBranchesLoanApplicationToggle } from "./AllBranchesLoanApplicationToggle";
 import { DepartmentClient } from "./DepartmentClient";
 import { DesignationClient } from "./DesignationClient";
 import { AddBonusDialog } from "./AddBonusDialog";
@@ -32,6 +34,7 @@ type Branch = {
     id: string;
     name: string;
     location: string;
+    isLoanApplicationEnabled: boolean;
     checkInTime: string;
     checkOutTime: string;
     breakDuration: string;
@@ -144,12 +147,16 @@ export function UnifiedOrganizationClient({
                         </div>
                     </CardHeader>
                     <CardContent>
+                        <div id="branch-loan-settings" className="mb-4 scroll-mt-20">
+                            <AllBranchesLoanApplicationToggle branches={branches} />
+                        </div>
                         <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
                             <Table>
                                 <TableHeader>
                                     <TableRow className="bg-muted/50">
                                         <TableHead className="font-semibold">Name</TableHead>
                                         <TableHead className="font-semibold">Location</TableHead>
+                                        <TableHead className="font-semibold text-center">Loan Apply</TableHead>
                                         <TableHead className="font-semibold text-center">Status</TableHead>
                                         <TableHead className="font-semibold text-right pr-6">Actions</TableHead>
                                     </TableRow>
@@ -157,7 +164,7 @@ export function UnifiedOrganizationClient({
                                 <TableBody>
                                     {branches.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
+                                            <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
                                                 No branches found. Add your first branch above.
                                             </TableCell>
                                         </TableRow>
@@ -167,12 +174,21 @@ export function UnifiedOrganizationClient({
                                                 <TableCell className="font-medium">{branch.name}</TableCell>
                                                 <TableCell>{branch.location}</TableCell>
                                                 <TableCell className="text-center">
+                                                    <Badge variant={branch.isLoanApplicationEnabled ? "default" : "secondary"}>
+                                                        {branch.isLoanApplicationEnabled ? "On" : "Off"}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-center">
                                                     <Badge variant={branch.isActive ? "default" : "secondary"}>
                                                         {branch.isActive ? "Active" : "Inactive"}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right pr-6">
                                                     <div className="flex items-center justify-end gap-2">
+                                                        <BranchLoanApplicationToggle
+                                                            branchId={branch.id}
+                                                            initialStatus={branch.isLoanApplicationEnabled}
+                                                        />
                                                         <EditBranchDialog branch={branch} />
                                                         <DeleteBranchButton branchId={branch.id} branchName={branch.name} />
                                                         <BranchToggle branchId={branch.id} initialStatus={branch.isActive} />

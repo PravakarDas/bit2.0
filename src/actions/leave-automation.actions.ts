@@ -40,6 +40,10 @@ type LeaveAutomationPipelineResult = {
     };
 };
 
+function normalizeEmployeeIds(employeeIds?: string[]) {
+    return employeeIds?.map((employeeId) => employeeId.trim()).filter(Boolean);
+}
+
 function getMidnightDate(date: Date) {
     const midnight = new Date(date);
     midnight.setHours(0, 0, 0, 0);
@@ -209,10 +213,12 @@ export async function runLeaveAutomationPipeline(options?: {
     includeToday?: boolean;
     skipIfWithinWindow?: boolean;
     now?: Date;
+    employeeIds?: string[];
 }): Promise<LeaveAutomationPipelineResult> {
     const mode = options?.mode ?? "UNPROCESSED";
     const now = options?.now ?? new Date();
     const today = startOfDay(now);
+    const employeeIds = normalizeEmployeeIds(options?.employeeIds);
 
     const dateKeys = mode === "ALL_DATES"
         ? buildDateRange(
@@ -247,7 +253,7 @@ export async function runLeaveAutomationPipeline(options?: {
     for (const dateKey of dateKeys) {
         const processDate = startOfDay(new Date(dateKey));
 
-        const syncResult = await syncAllEmployeesTimeDataForDate(processDate);
+        const syncResult = await syncAllEmployeesTimeDataForDate(processDate, employeeIds);
         aggregateSync.syncedRecords += syncResult.syncedRecords;
         aggregateSync.skippedRecords += syncResult.skippedRecords;
         aggregateSync.errors.push(...syncResult.errors);
@@ -273,6 +279,7 @@ export async function runLeaveAutomationPipeline(options?: {
         const automationResult = await processDailyLeaveAutomation(processDate, {
             skipIfWithinWindow: Boolean(options?.skipIfWithinWindow && isToday),
             now: isToday ? now : undefined,
+            employeeIds,
         });
 
         const processedEmployees = automationResult.success ? (automationResult.processedEmployees || 0) : 0;
@@ -408,9 +415,10 @@ export async function processAllUnprocessedDates() {
  */
 export async function processDailyLeaveAutomation(
     targetDate?: Date,
-    options?: { skipIfWithinWindow?: boolean; now?: Date }
+    options?: { skipIfWithinWindow?: boolean; now?: Date; employeeIds?: string[] }
 ) {
     const processDate = targetDate ? startOfDay(targetDate) : startOfDay(subDays(new Date(), 1)); // Yesterday by default
+    const employeeIds = normalizeEmployeeIds(options?.employeeIds);
     
     try {
         // Get all active employees
@@ -418,7 +426,8 @@ export async function processDailyLeaveAutomation(
             where: {
                 employeeStatus: "ACTIVE",
                 isArchived: false,
-                branchId: { not: null }
+                branchId: { not: null },
+                ...(employeeIds && employeeIds.length > 0 ? { id: { in: employeeIds } } : {}),
             },
             include: {
                 branch: true,
@@ -802,11 +811,13 @@ async function handleAbsentWithoutLeave(employee: ActiveEmployee, processDate: D
 export async function processBackfillLeaveAutomation(
     fromDate: Date,
     toDate?: Date,
-    options?: { includeToday?: boolean; skipIfWithinWindow?: boolean; now?: Date }
+    options?: { includeToday?: boolean; skipIfWithinWindow?: boolean; now?: Date },
+    employeeIds?: string[]
 ) {
     const today = startOfDay(new Date());
     const endDate = toDate ? startOfDay(toDate) : (options?.includeToday ? today : subDays(today, 1));
     const currentDate = startOfDay(new Date(fromDate));
+    const normalizedEmployeeIds = normalizeEmployeeIds(employeeIds);
     
     console.log(`Processing backfill from ${format(fromDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
     
@@ -816,7 +827,8 @@ export async function processBackfillLeaveAutomation(
         const isCurrentDay = isSameDay(currentDate, today);
         await processDailyLeaveAutomation(new Date(currentDate), {
             skipIfWithinWindow: isCurrentDay ? options?.skipIfWithinWindow : false,
-            now: isCurrentDay ? options?.now : undefined
+            now: isCurrentDay ? options?.now : undefined,
+            employeeIds: normalizedEmployeeIds,
         });
         currentDate.setDate(currentDate.getDate() + 1);
         processedDates++;

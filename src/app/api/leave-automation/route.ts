@@ -6,6 +6,7 @@ export async function POST(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const backfillDays = searchParams.get('backfill');
+        const employeeId = searchParams.get('employeeId')?.trim() || undefined;
         
         let result;
         
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
                         includeToday: true,
                         skipIfWithinWindow: true,
                         now: new Date(),
+                        employeeIds: employeeId ? [employeeId] : undefined,
                     });
             } else {
                 // Process backfill for specified number of days
@@ -26,11 +28,14 @@ export async function POST(request: Request) {
                 const fromDate = new Date();
                 fromDate.setDate(fromDate.getDate() - days);
 
-                result = await processBackfillLeaveAutomation(fromDate);
+                result = await processBackfillLeaveAutomation(fromDate, undefined, undefined, employeeId ? [employeeId] : undefined);
             }
         } else {
                 // Sync missing ZKTeco data, then process all unprocessed dates (including today and yesterday)
-                result = await runLeaveAutomationPipeline({ mode: 'UNPROCESSED' });
+                result = await runLeaveAutomationPipeline({
+                    mode: 'UNPROCESSED',
+                    employeeIds: employeeId ? [employeeId] : undefined,
+                });
         }
         const resultSuccess = typeof result === 'object' && result !== null && 'success' in result
             ? Boolean((result as { success?: boolean }).success)

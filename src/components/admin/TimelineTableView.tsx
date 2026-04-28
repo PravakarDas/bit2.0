@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -53,6 +54,15 @@ interface TimeRecord {
     firstName: string | null;
     lastName: string | null;
     email: string;
+    leaveEntitlements?: Array<{
+      id: string;
+      allocatedDays: number;
+      usedDays: number;
+      leaveType: {
+        id: string;
+        name: string;
+      };
+    }>;
     branch: {
       name: string;
       weeklyOffDays: string[];
@@ -84,6 +94,8 @@ export default function TimelineTableView({
 }: TimelineTableViewProps) {
   const [editingRecord, setEditingRecord] = useState<TimeRecord | null>(null);
   const [editForm, setEditForm] = useState({
+    status: 'PRESENT' as "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF",
+    autoDeductedLeaveType: '',
     requiredCheckIn: '',
     requiredCheckOut: '',
     requiredBreakTime: '',
@@ -94,9 +106,21 @@ export default function TimelineTableView({
   const [saving, setSaving] = useState(false);
   const [syncingUsers, setSyncingUsers] = useState<Set<string>>(new Set());
 
+  const availableLeaveTypes = (editingRecord?.user.leaveEntitlements || []).filter(
+    (entitlement) => entitlement.allocatedDays - entitlement.usedDays > 0,
+  );
+
+  const shouldShowManualTimeEditors = ![
+    'ABSENT',
+    'ON_LEAVE',
+    'WEEKLY_OFF',
+  ].includes(editForm.status);
+
   const openEditDialog = (record: TimeRecord) => {
     setEditingRecord(record);
     setEditForm({
+      status: record.status || 'PRESENT',
+      autoDeductedLeaveType: record.autoDeductedLeaveType || '',
       requiredCheckIn: record.requiredCheckIn ? 
         format(new Date(record.requiredCheckIn), 'yyyy-MM-dd\'T\'HH:mm') : '',
       requiredCheckOut: record.requiredCheckOut ? 
@@ -116,12 +140,14 @@ export default function TimelineTableView({
     setSaving(true);
     try {
       const result = await updateTimelineRecord(editingRecord.id, {
-        requiredCheckIn: editForm.requiredCheckIn ? new Date(editForm.requiredCheckIn) : null,
-        requiredCheckOut: editForm.requiredCheckOut ? new Date(editForm.requiredCheckOut) : null,
-        requiredBreakTime: editForm.requiredBreakTime || null,
-        actualCheckIn: editForm.actualCheckIn ? new Date(editForm.actualCheckIn) : null,
-        actualCheckOut: editForm.actualCheckOut ? new Date(editForm.actualCheckOut) : null,
-        actualBreakTime: editForm.actualBreakTime || null
+        status: editForm.status,
+        autoDeductedLeaveType: editForm.status === 'ON_LEAVE' ? editForm.autoDeductedLeaveType || null : null,
+        requiredCheckIn: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.requiredCheckIn ? new Date(editForm.requiredCheckIn) : null),
+        requiredCheckOut: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.requiredCheckOut ? new Date(editForm.requiredCheckOut) : null),
+        requiredBreakTime: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? '00:00' : (editForm.requiredBreakTime || null),
+        actualCheckIn: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.actualCheckIn ? new Date(editForm.actualCheckIn) : null),
+        actualCheckOut: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.actualCheckOut ? new Date(editForm.actualCheckOut) : null),
+        actualBreakTime: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? '00:00' : (editForm.actualBreakTime || null)
       });
 
       if (result.success) {
@@ -138,11 +164,11 @@ export default function TimelineTableView({
     }
   };
 
-  const handleSync = async (userId: string) => {
+  const handleSync = async (userId: string, date: Date) => {
     setSyncingUsers(prev => new Set(prev).add(userId));
     try {
-      console.log(`Starting manual sync for user: ${userId}`);
-      const result = await manualSyncEmployee(userId);
+      console.log(`Starting manual sync for user: ${userId} on ${format(new Date(date), 'yyyy-MM-dd')}`);
+      const result = await manualSyncEmployee(userId, date);
       
       console.log(`Manual sync completed:`, result);
       
@@ -338,7 +364,7 @@ export default function TimelineTableView({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleSync(record.user.id)}
+                        onClick={() => handleSync(record.user.id, record.date)}
                         disabled={syncingUsers.has(record.user.id)}
                         title="Sync attendance data from ZKTeco"
                       >
@@ -356,7 +382,7 @@ export default function TimelineTableView({
                             <Edit className="h-4 w-4" />
                           </Button>
                         </DialogTrigger>
-                      <DialogContent className="max-w-md">
+                      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle>Edit Time Record</DialogTitle>
                         </DialogHeader>
@@ -372,97 +398,152 @@ export default function TimelineTableView({
                           </div>
                           
                           <div className="grid gap-4">
-                            {/* Required Times Section */}
-                            <div className="border-b pb-4">
-                              <h4 className="font-medium text-sm text-muted-foreground mb-3">Required Times</h4>
-                              <div className="grid gap-3">
-                                <div>
-                                  <Label htmlFor="requiredCheckIn">Required Check In</Label>
-                                  <Input
-                                    id="requiredCheckIn"
-                                    type="datetime-local"
-                                    value={editForm.requiredCheckIn}
-                                    onChange={(e) => setEditForm({
-                                      ...editForm,
-                                      requiredCheckIn: e.target.value
-                                    })}
-                                  />
-                                </div>
-                                
-                                <div>
-                                  <Label htmlFor="requiredCheckOut">Required Check Out</Label>
-                                  <Input
-                                    id="requiredCheckOut"
-                                    type="datetime-local"
-                                    value={editForm.requiredCheckOut}
-                                    onChange={(e) => setEditForm({
-                                      ...editForm,
-                                      requiredCheckOut: e.target.value
-                                    })}
-                                  />
-                                </div>
-                                
-                                <div>
-                                  <Label htmlFor="requiredBreakTime">Required Break Time (HH:MM)</Label>
-                                  <Input
-                                    id="requiredBreakTime"
-                                    type="text"
-                                    placeholder="01:00"
-                                    value={editForm.requiredBreakTime}
-                                    onChange={(e) => setEditForm({
-                                      ...editForm,
-                                      requiredBreakTime: e.target.value
-                                    })}
-                                  />
-                                </div>
-                              </div>
+                            <div>
+                              <Label htmlFor="status">Status</Label>
+                              <Select
+                                value={editForm.status}
+                                onValueChange={(value) => setEditForm({
+                                  ...editForm,
+                                  status: value as "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF",
+                                  autoDeductedLeaveType: value === 'ON_LEAVE' ? editForm.autoDeductedLeaveType : ''
+                                })}
+                              >
+                                <SelectTrigger id="status">
+                                  <SelectValue placeholder="Select status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="PRESENT">Present</SelectItem>
+                                  <SelectItem value="ABSENT">Absent</SelectItem>
+                                  <SelectItem value="ON_LEAVE" disabled={availableLeaveTypes.length === 0}>On Leave</SelectItem>
+                                  <SelectItem value="WEEKLY_OFF">Weekly Off</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {availableLeaveTypes.length === 0 && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  No leave balance available for this employee.
+                                </p>
+                              )}
                             </div>
 
-                            {/* Actual Times Section */}
-                            <div>
-                              <h4 className="font-medium text-sm text-muted-foreground mb-3">Actual Times</h4>
-                              <div className="grid gap-3">
-                                <div>
-                                  <Label htmlFor="actualCheckIn">Actual Check In</Label>
-                                  <Input
-                                    id="actualCheckIn"
-                                    type="datetime-local"
-                                    value={editForm.actualCheckIn}
-                                    onChange={(e) => setEditForm({
-                                      ...editForm,
-                                      actualCheckIn: e.target.value
-                                    })}
-                                  />
-                                </div>
-                                
-                                <div>
-                                  <Label htmlFor="actualCheckOut">Actual Check Out</Label>
-                                  <Input
-                                    id="actualCheckOut"
-                                    type="datetime-local"
-                                    value={editForm.actualCheckOut}
-                                    onChange={(e) => setEditForm({
-                                      ...editForm,
-                                      actualCheckOut: e.target.value
-                                    })}
-                                  />
-                                </div>
-                                
-                                <div>
-                                  <Label htmlFor="actualBreakTime">Actual Break Time (HH:MM)</Label>
-                                  <Input
-                                    id="actualBreakTime"
-                                    type="text"
-                                    placeholder="01:00"
-                                    value={editForm.actualBreakTime}
-                                    onChange={(e) => setEditForm({
-                                      ...editForm,
-                                      actualBreakTime: e.target.value
-                                    })}
-                                  />
-                                </div>
+                            {editForm.status === 'ON_LEAVE' && (
+                              <div>
+                                <Label htmlFor="autoDeductedLeaveType">Leave Type</Label>
+                                <Select
+                                  value={editForm.autoDeductedLeaveType || undefined}
+                                  onValueChange={(value) => setEditForm({
+                                    ...editForm,
+                                    autoDeductedLeaveType: value
+                                  })}
+                                >
+                                  <SelectTrigger id="autoDeductedLeaveType">
+                                    <SelectValue placeholder="Select leave type" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {availableLeaveTypes.map((entitlement) => (
+                                      <SelectItem key={entitlement.id} value={entitlement.leaveType.name}>
+                                        {entitlement.leaveType.name} ({entitlement.allocatedDays - entitlement.usedDays} left)
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
-                            </div>
+                            )}
+
+                            {shouldShowManualTimeEditors && (
+                              <>
+                                {/* Required Times Section */}
+                                <div className="border-b pb-4">
+                                  <h4 className="font-medium text-sm text-muted-foreground mb-3">Required Times</h4>
+                                  <div className="grid gap-3">
+                                    <div>
+                                      <Label htmlFor="requiredCheckIn">Required Check In</Label>
+                                      <Input
+                                        id="requiredCheckIn"
+                                        type="datetime-local"
+                                        value={editForm.requiredCheckIn}
+                                        onChange={(e) => setEditForm({
+                                          ...editForm,
+                                          requiredCheckIn: e.target.value
+                                        })}
+                                      />
+                                    </div>
+                                    
+                                    <div>
+                                      <Label htmlFor="requiredCheckOut">Required Check Out</Label>
+                                      <Input
+                                        id="requiredCheckOut"
+                                        type="datetime-local"
+                                        value={editForm.requiredCheckOut}
+                                        onChange={(e) => setEditForm({
+                                          ...editForm,
+                                          requiredCheckOut: e.target.value
+                                        })}
+                                      />
+                                    </div>
+                                    
+                                    <div>
+                                      <Label htmlFor="requiredBreakTime">Required Break Time (HH:MM)</Label>
+                                      <Input
+                                        id="requiredBreakTime"
+                                        type="text"
+                                        placeholder="01:00"
+                                        value={editForm.requiredBreakTime}
+                                        onChange={(e) => setEditForm({
+                                          ...editForm,
+                                          requiredBreakTime: e.target.value
+                                        })}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Actual Times Section */}
+                                <div>
+                                  <h4 className="font-medium text-sm text-muted-foreground mb-3">Actual Times</h4>
+                                  <div className="grid gap-3">
+                                    <div>
+                                      <Label htmlFor="actualCheckIn">Actual Check In</Label>
+                                      <Input
+                                        id="actualCheckIn"
+                                        type="datetime-local"
+                                        value={editForm.actualCheckIn}
+                                        onChange={(e) => setEditForm({
+                                          ...editForm,
+                                          actualCheckIn: e.target.value
+                                        })}
+                                      />
+                                    </div>
+                                    
+                                    <div>
+                                      <Label htmlFor="actualCheckOut">Actual Check Out</Label>
+                                      <Input
+                                        id="actualCheckOut"
+                                        type="datetime-local"
+                                        value={editForm.actualCheckOut}
+                                        onChange={(e) => setEditForm({
+                                          ...editForm,
+                                          actualCheckOut: e.target.value
+                                        })}
+                                      />
+                                    </div>
+                                    
+                                    <div>
+                                      <Label htmlFor="actualBreakTime">Actual Break Time (HH:MM)</Label>
+                                      <Input
+                                        id="actualBreakTime"
+                                        type="text"
+                                        placeholder="01:00"
+                                        value={editForm.actualBreakTime}
+                                        onChange={(e) => setEditForm({
+                                          ...editForm,
+                                          actualBreakTime: e.target.value
+                                        })}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </>
+                            )}
                           </div>
                           
                           <div className="flex justify-end gap-2">

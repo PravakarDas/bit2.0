@@ -1,9 +1,30 @@
 import { getMyLoans } from "@/actions/loan.actions";
 import { getDbUser } from "@/actions/user.actions";
 import { LoanDashboard } from "@/components/employee/LoanDashboard";
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
+
+function isMissingBranchLoanToggleColumnError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+        return false;
+    }
+
+    if (error.code !== "P2022") {
+        return false;
+    }
+
+    const column =
+        typeof error.meta?.column === "string"
+            ? error.meta.column
+            : typeof error.message === "string"
+              ? error.message
+              : "";
+
+    return column.includes("Branch.isLoanApplicationEnabled");
+}
 
 export default async function LoansPage() {
     const user = await getDbUser();
@@ -26,6 +47,23 @@ export default async function LoansPage() {
 
     const maxEligibleAmount = Math.max(0, baseCap - currentDebt);
 
+    let branchLoanApplicationEnabled = true;
+    if (user.branchId) {
+        try {
+            branchLoanApplicationEnabled = (
+                await prisma.branch.findUnique({
+                    where: { id: user.branchId },
+                    select: { isLoanApplicationEnabled: true },
+                })
+            )?.isLoanApplicationEnabled ?? true;
+        } catch (error) {
+            if (!isMissingBranchLoanToggleColumnError(error)) {
+                throw error;
+            }
+            branchLoanApplicationEnabled = true;
+        }
+    }
+
     return (
         <div className="container mx-auto py-8">
             <div className="flex flex-col gap-2 mb-8">
@@ -36,6 +74,7 @@ export default async function LoansPage() {
             <LoanDashboard
                 loans={loans}
                 maxEligibleAmount={maxEligibleAmount}
+                branchLoanApplicationEnabled={branchLoanApplicationEnabled}
             />
         </div>
     );

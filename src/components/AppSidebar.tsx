@@ -23,6 +23,7 @@ import {
     DollarSign,
     Zap,
     Bell,
+    Megaphone,
     ClipboardList,
     UserCog,
     Crown,
@@ -59,7 +60,9 @@ import { NotificationWithBadge } from "@/components/NotificationWithBadge";
 const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
     { title: "Late Check-Ins", url: "/admin/late-checkins", icon: Clock },
+    { title: "Leave-board", url: "/admin/leave-board", icon: ScrollText },
     { title: "Notifications", url: "/admin/notifications", icon: Bell },
+    { title: "Notice", url: "/admin/notices", icon: Megaphone },
     { title: "Role Management", url: "/admin/role-management", icon: UserCog },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
     { title: "Holiday Management", url: "/admin/holidays", icon: CalendarDays },
@@ -100,6 +103,7 @@ const employeeItems = [
     { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
     { title: "My Leaves", url: "/leaves", icon: ScrollText },
+    { title: "Notices", url: "/notices", icon: Megaphone },
     { title: "Overtime Requests", url: "/overtime-requests", icon: ClipboardList },
     { title: "My Loans", url: "/loans", icon: Banknote },
     { title: "My Medical", url: "/medical", icon: Stethoscope },
@@ -109,6 +113,7 @@ const employeeItems = [
 
 const organizationSubItems = [
     { title: "Branches", icon: Building2, hash: "#branches" },
+    { title: "Branch Loan Controls", icon: Banknote, hash: "#branch-loan-settings" },
     { title: "Departments & Designations", icon: Briefcase, hash: "#departments" },
     { title: "Bonuses", icon: Gift, hash: "#bonuses" },
     { title: "Allowances", icon: DollarSign, hash: "#allowances" },

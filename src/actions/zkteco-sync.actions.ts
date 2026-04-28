@@ -490,7 +490,7 @@ export async function syncAllEmployeesTimeData(): Promise<SyncResult> {
   return result;
 }
 
-export async function syncAllEmployeesTimeDataForDate(date: Date): Promise<SyncResult> {
+export async function syncAllEmployeesTimeDataForDate(date: Date, employeeIds?: string[]): Promise<SyncResult> {
   const targetDate = new Date(date);
   const result: SyncResult = {
     success: true,
@@ -525,6 +525,7 @@ export async function syncAllEmployeesTimeDataForDate(date: Date): Promise<SyncR
         },
         isArchived: false,
         employeeStatus: "ACTIVE",
+        ...(employeeIds && employeeIds.length > 0 ? { id: { in: employeeIds } } : {}),
       },
       select: {
         id: true,
@@ -569,10 +570,12 @@ export async function syncAllEmployeesTimeDataForDate(date: Date): Promise<SyncR
 }
 
 /**
- * Manual sync function for UI - syncs all pending missing records for a specific user
+ * Manual sync function for UI.
+ * If a date is provided, sync only that day for the employee.
+ * Otherwise fall back to the historical missing-data range sync.
  */
-export async function manualSyncEmployee(userId: string): Promise<SyncResult> {
-  console.log(`Starting manual sync for user: ${userId}`);
+export async function manualSyncEmployee(userId: string, date?: Date): Promise<SyncResult> {
+  console.log(`Starting manual sync for user: ${userId}${date ? ` on ${format(date, "yyyy-MM-dd")}` : ""}`);
   
   try {
     const actor = await getDbUser();
@@ -597,7 +600,9 @@ export async function manualSyncEmployee(userId: string): Promise<SyncResult> {
       };
     }
 
-    const result = await syncEmployeeTimeDataRange(userId);
+    const result = date
+      ? await syncEmployeeTimeData(userId, date)
+      : await syncEmployeeTimeDataRange(userId);
     
     console.log(`Manual sync completed for user: ${userId}`, {
       success: result.success,

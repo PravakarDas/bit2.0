@@ -11,9 +11,10 @@ import { BlurAmount } from "@/components/employee/BlurAmount";
 interface LoanDashboardProps {
     loans: Loan[];
     maxEligibleAmount: number;
+    branchLoanApplicationEnabled: boolean;
 }
 
-export function LoanDashboard({ loans, maxEligibleAmount }: LoanDashboardProps) {
+export function LoanDashboard({ loans, maxEligibleAmount, branchLoanApplicationEnabled }: LoanDashboardProps) {
     const totalDebt = loans
         .filter(l => l.status === "ACTIVE")
         .reduce((sum, l) => sum + l.remainingPrincipal, 0);
@@ -78,7 +79,10 @@ export function LoanDashboard({ loans, maxEligibleAmount }: LoanDashboardProps) 
 
             <TabsContent value="apply">
                 <div className="py-4">
-                    <LoanApplicationForm maxEligibleAmount={maxEligibleAmount} />
+                    <LoanApplicationForm
+                        maxEligibleAmount={maxEligibleAmount}
+                        branchLoanApplicationEnabled={branchLoanApplicationEnabled}
+                    />
                 </div>
             </TabsContent>
         </Tabs>

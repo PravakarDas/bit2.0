@@ -18,12 +18,14 @@ import { Loader2, Calculator } from "lucide-react";
 
 interface LoanApplicationFormProps {
     maxEligibleAmount: number; // 50% of salary or 300k
+    branchLoanApplicationEnabled: boolean;
 }
 
-export function LoanApplicationForm({ maxEligibleAmount }: LoanApplicationFormProps) {
+export function LoanApplicationForm({ maxEligibleAmount, branchLoanApplicationEnabled }: LoanApplicationFormProps) {
     const minimumLoanAmount = 5000;
     const effectiveMaxAmount = Math.max(0, Math.min(300000, Math.floor(maxEligibleAmount / 500) * 500));
-    const canApplyLoan = effectiveMaxAmount >= minimumLoanAmount;
+    const canApplyByLimit = effectiveMaxAmount >= minimumLoanAmount;
+    const canApplyLoan = canApplyByLimit && branchLoanApplicationEnabled;
 
     const normalizeAmount = (value: number) => {
         if (!Number.isFinite(value)) return minimumLoanAmount;
@@ -47,7 +49,12 @@ export function LoanApplicationForm({ maxEligibleAmount }: LoanApplicationFormPr
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!canApplyLoan) {
+        if (!branchLoanApplicationEnabled) {
+            toast.error("Loan requests are currently turned off for your branch.");
+            return;
+        }
+
+        if (!canApplyByLimit) {
             toast.error("You are not currently eligible for a new loan request.");
             return;
         }
@@ -161,7 +168,13 @@ export function LoanApplicationForm({ maxEligibleAmount }: LoanApplicationFormPr
                         </span>
                     </div>
 
-                    {!canApplyLoan && (
+                    {!branchLoanApplicationEnabled && (
+                        <p className="text-xs text-red-600">
+                            Loan applications are currently disabled for your branch. Please contact HR/admin.
+                        </p>
+                    )}
+
+                    {branchLoanApplicationEnabled && !canApplyByLimit && (
                         <p className="text-xs text-red-600">
                             You are not eligible for a new loan right now. Your available limit is below ৳5,000.
                         </p>

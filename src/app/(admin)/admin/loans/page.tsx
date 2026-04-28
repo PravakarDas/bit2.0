@@ -18,6 +18,7 @@ import { RefreshCw } from "lucide-react";
 import { ProcessEMIButton } from "@/components/admin/loans/ProcessEMIButton";
 import { EmiManageDialog } from "@/components/admin/EmiManageDialog";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
+import { DeleteLoanButton } from "@/components/admin/DeleteLoanButton";
 
 interface Loan {
     id: string;
@@ -63,14 +64,16 @@ interface Loan {
 
 export default function AdminLoansPage() {
     const [allLoans, setAllLoans] = useState<Loan[]>([]);
+    const [canDeleteLoans, setCanDeleteLoans] = useState(false);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
     const loadLoans = async () => {
         try {
             setRefreshing(true);
-            const loans = await getAllLoansWithManagerInfo();
-            setAllLoans(loans as Loan[]);
+            const result = await getAllLoansWithManagerInfo();
+            setAllLoans(result.loans as Loan[]);
+            setCanDeleteLoans(result.canDeleteLoans);
         } catch (error) {
             console.error("Failed to load loans:", error);
         } finally {
@@ -362,7 +365,17 @@ export default function AdminLoansPage() {
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <EmiManageDialog loan={loan} />
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <EmiManageDialog loan={loan} />
+                                                    {canDeleteLoans && (
+                                                        <DeleteLoanButton
+                                                            loanId={loan.id}
+                                                            employeeName={getEmployeeName(loan.user)}
+                                                            loanAmount={loan.issuedAmount}
+                                                            onDeleted={loadLoans}
+                                                        />
+                                                    )}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))

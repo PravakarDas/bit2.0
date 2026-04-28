@@ -7,6 +7,7 @@ import {
     CalendarDays,
     FileCheck,
     Clock,
+    ScrollText,
     ClipboardList,
     Archive,
     ChevronRight,
@@ -16,6 +17,7 @@ import {
     Timer,
     Building2,
     Settings,
+    Megaphone,
 } from "lucide-react";
 
 import {
@@ -50,6 +52,11 @@ const managerNavItems = [
         title: "Holiday Management", 
         url: "/manager/holidays", 
         icon: CalendarDays,
+    },
+    {
+        title: "Leave-board",
+        url: "/manager/leave-board",
+        icon: ScrollText,
     },
     { 
         title: "Profile Requests", 
@@ -90,6 +97,11 @@ const managerNavItems = [
         title: "System Control",
         url: "/manager/system-control",
         icon: Settings,
+    },
+    {
+        title: "Notice",
+        url: "/manager/notices",
+        icon: Megaphone,
     },
 ];
 

@@ -33,6 +33,15 @@ interface TimeRecord {
     firstName: string | null;
     lastName: string | null;
     email: string;
+    leaveEntitlements?: Array<{
+      id: string;
+      allocatedDays: number;
+      usedDays: number;
+      leaveType: {
+        id: string;
+        name: string;
+      };
+    }>;
     branch: {
       name: string;
       weeklyOffDays: string[];
@@ -257,7 +266,22 @@ export default function TimelineClient() {
   const handleLeaveAutomationBackfill = async () => {
     setLeaveBackfillRunning(true);
     try {
-      const response = await fetch('/api/leave-automation?backfill=all', {
+      const selectedEmployeeId = filters.userId || (() => {
+        const query = filters.employeeName.trim().toLowerCase();
+        if (!query) return '';
+
+        const matchingUsers = users.filter((user) => {
+          const fullName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim().toLowerCase();
+          const email = user.email.toLowerCase();
+          return fullName.includes(query) || email.includes(query);
+        });
+
+        return matchingUsers.length === 1 ? matchingUsers[0].id : '';
+      })();
+
+      const employeeQuery = selectedEmployeeId ? `&employeeId=${encodeURIComponent(selectedEmployeeId)}` : '';
+
+      const response = await fetch(`/api/leave-automation?backfill=all${employeeQuery}`, {
         method: 'POST'
       });
 
