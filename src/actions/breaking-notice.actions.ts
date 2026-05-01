@@ -423,7 +423,6 @@ export async function getEmployeeActiveBreakingNotices() {
   }
 
   const now = new Date();
-  const visibilityEnd = new Date(now.getTime() + 72 * 60 * 60 * 1000);
 
   const recipientRows = await prisma.breakingNoticeRecipient.findMany({
     where: { userId: user.id },
@@ -489,7 +488,6 @@ export async function getEmployeeActiveBreakingNotices() {
           data: {
             status: true,
             seenAt: now,
-            visibleUntil: visibilityEnd,
           },
         })
       )
@@ -500,7 +498,6 @@ export async function getEmployeeActiveBreakingNotices() {
     where: {
       userId: user.id,
       status: true,
-      visibleUntil: { gt: now },
     },
     include: {
       notice: {
