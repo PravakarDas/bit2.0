@@ -990,14 +990,17 @@ export async function getTimelineRecords(
       return { success: false, error: "Unauthorized" };
     }
 
-    const canAccessTimeline = actor.role === "SUPERADMIN" || actor.role === "HR" || (actor.role === "EMPLOYEE" && actor.isManager);
+    const isSelfTimelineView = actor.role === "EMPLOYEE" && !actor.isManager;
+    const canAccessTimeline = actor.role === "SUPERADMIN" || actor.role === "HR" || actor.isManager || isSelfTimelineView;
     if (!canAccessTimeline) {
       return { success: false, error: "Unauthorized" };
     }
 
     const where: Prisma.DailyTimeRecordWhereInput = {};
     
-    if (userId) {
+    if (isSelfTimelineView) {
+      where.userId = actor.id;
+    } else if (userId) {
       where.userId = userId;
     }
     
