@@ -7,10 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Calendar, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
 
 interface TimeRecord {
   id: string;
   date: Date;
+  status?: TimelineStatus | null;
+  isProcessed: boolean;
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
   requiredBreakTime: string | null;
@@ -86,19 +89,17 @@ export default function EmployeeTimelineCalendar({
   };
 
   const getStatusBadge = (record: TimeRecord) => {
-    if (!record.requiredCheckIn && !record.requiredCheckOut) {
-      return <Badge variant="secondary" className="text-xs">Off</Badge>;
+    const display = getTimelineStatusDisplay(record);
+
+    if (!display) {
+      return null;
     }
-    
-    if (record.actualCheckIn && record.actualCheckOut) {
-      return <Badge variant="default" className="text-xs">Present</Badge>;
-    }
-    
-    if (record.actualCheckIn) {
-      return <Badge variant="outline" className="text-xs">Partial</Badge>;
-    }
-    
-    return <Badge variant="destructive" className="text-xs">Absent</Badge>;
+
+    return (
+      <Badge variant={display.variant} className={`${display.className || ""} text-xs`.trim()}>
+        {display.label}
+      </Badge>
+    );
   };
 
   const getOvertimeBadge = (record: TimeRecord) => {
@@ -113,6 +114,7 @@ export default function EmployeeTimelineCalendar({
   };
 
   const selectedDayRecord = selectedDay ? getDateRecord(selectedDay) : null;
+  const selectedDayStatusBadge = selectedDayRecord ? getStatusBadge(selectedDayRecord) : null;
 
   return (
     <div className="space-y-4">
@@ -232,10 +234,12 @@ export default function EmployeeTimelineCalendar({
                   {selectedDayRecord ? (
                     <div className="space-y-4">
                       {/* Status */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Status:</span>
-                        {getStatusBadge(selectedDayRecord)}
-                      </div>
+                      {selectedDayStatusBadge && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Status:</span>
+                          {selectedDayStatusBadge}
+                        </div>
+                      )}
 
                       {/* Required Times */}
                       <div className="space-y-2">

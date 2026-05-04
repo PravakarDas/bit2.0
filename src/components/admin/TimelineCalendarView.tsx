@@ -8,11 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Calendar, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
+import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
 
 interface TimeRecord {
   id: string;
   date: Date;
-  status: "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF";
+  status: TimelineStatus | null;
+  isProcessed: boolean;
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
   requiredBreakTime: string | null;
@@ -79,14 +81,15 @@ export default function TimelineCalendarView({
   const getDateSummary = (date: Date) => {
     const dateKey = format(date, 'yyyy-MM-dd');
     const dayRecords = recordsByDate[dateKey] || [];
+    const processedRecords = dayRecords.filter(record => record.isProcessed);
     
-    const total = dayRecords.length;
-    const present = dayRecords.filter(r => r.status === "PRESENT").length;
-    const onLeave = dayRecords.filter(r => r.status === "ON_LEAVE").length;
-    const weeklyOff = dayRecords.filter(r => r.status === "WEEKLY_OFF").length;
-    const absent = dayRecords.filter(r => r.status === "ABSENT").length;
+    const total = processedRecords.length;
+    const present = processedRecords.filter(r => r.status === "PRESENT").length;
+    const onLeave = processedRecords.filter(r => r.status === "ON_LEAVE").length;
+    const weeklyOff = processedRecords.filter(r => r.status === "WEEKLY_OFF").length;
+    const absent = processedRecords.filter(r => r.status === "ABSENT").length;
     
-    return { total, present, onLeave, weeklyOff, absent, records: dayRecords };
+    return { total, present, onLeave, weeklyOff, absent, records: processedRecords };
   };
 
   const selectedDayRecords = selectedDay ? getDateSummary(selectedDay).records : [];
@@ -225,37 +228,17 @@ export default function TimelineCalendarView({
                             />
                           </div>
                           {(() => {
-                            // If auto-deducted leave type exists, show it directly
-                            if (record.autoDeductedLeaveType) {
-                              return <Badge variant="outline">{record.autoDeductedLeaveType}</Badge>;
+                            const display = getTimelineStatusDisplay(record);
+
+                            if (!display) {
+                              return null;
                             }
 
-                            switch (record.status) {
-                              case "WEEKLY_OFF":
-                                return <Badge variant="secondary">Weekly Off</Badge>;
-                              case "ON_LEAVE":
-                                return (
-                                  <div className="flex flex-col gap-1">
-                                    <Badge variant="outline" className="text-xs">On Leave</Badge>
-                                    {record.autoDeductedLeaveType && (
-                                      <span className="text-xs text-orange-600">
-                                        Auto-deducted: {record.autoDeductedLeaveType}
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              case "PRESENT":
-                                if (record.actualCheckIn && record.actualCheckOut) {
-                                  return <Badge variant="default">Present</Badge>;
-                                } else if (record.actualCheckIn) {
-                                  return <Badge variant="outline">Checked In</Badge>;
-                                } else {
-                                  return <Badge variant="default">Present</Badge>;
-                                }
-                              case "ABSENT":
-                              default:
-                                return <Badge variant="destructive">Absent</Badge>;
-                            }
+                            return (
+                              <Badge variant={display.variant} className={display.className}>
+                                {display.label}
+                              </Badge>
+                            );
                           })()}
                         </div>
                         

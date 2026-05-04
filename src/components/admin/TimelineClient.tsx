@@ -17,6 +17,7 @@ import { toast } from "sonner";
 interface TimeRecord {
   id: string;
   date: Date;
+  isProcessed: boolean;
   status: "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF";
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
