@@ -11,10 +11,13 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Calendar, Clock, TrendingUp } from "lucide-react";
+import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
 
 interface TimeRecord {
   id: string;
   date: Date;
+  status?: TimelineStatus | null;
+  isProcessed: boolean;
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
   requiredBreakTime: string | null;
@@ -32,19 +35,17 @@ interface EmployeeTimelineTableProps {
 
 export default function EmployeeTimelineTable({ records }: EmployeeTimelineTableProps) {
   const getStatusBadge = (record: TimeRecord) => {
-    if (!record.requiredCheckIn && !record.requiredCheckOut) {
-      return <Badge variant="secondary">Off Day</Badge>;
+    const display = getTimelineStatusDisplay(record);
+
+    if (!display) {
+      return null;
     }
-    
-    if (record.actualCheckIn && record.actualCheckOut) {
-      return <Badge variant="default">Present</Badge>;
-    }
-    
-    if (record.actualCheckIn) {
-      return <Badge variant="outline">Partial</Badge>;
-    }
-    
-    return <Badge variant="destructive">Absent</Badge>;
+
+    return (
+      <Badge variant={display.variant} className={display.className}>
+        {display.label}
+      </Badge>
+    );
   };
 
   const getOvertimeBadge = (overtime: string | null) => {

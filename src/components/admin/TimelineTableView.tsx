@@ -34,11 +34,13 @@ import {
 import { updateTimelineRecord } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
+import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
 
 interface TimeRecord {
   id: string;
   date: Date;
-  status?: "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF";
+  status?: TimelineStatus | null;
+  isProcessed: boolean;
   autoDeductedLeaveType: string | null;
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
@@ -219,40 +221,17 @@ export default function TimelineTableView({
   };
 
   const getAttendanceStatus = (record: TimeRecord) => {
-    // If auto-deducted leave type exists, show it directly
-    if (record.autoDeductedLeaveType) {
-      return <Badge variant="outline">{record.autoDeductedLeaveType}</Badge>;
+    const display = getTimelineStatusDisplay(record);
+
+    if (!display) {
+      return null;
     }
 
-    if (record.status === "PRESENT") {
-      return <Badge variant="default">Present</Badge>;
-    }
-
-    if (record.status === "ABSENT") {
-      return <Badge variant="destructive">Absent</Badge>;
-    }
-
-    if (record.status === "ON_LEAVE") {
-      return <Badge variant="outline">On Leave</Badge>;
-    }
-
-    if (record.status === "WEEKLY_OFF") {
-      return <Badge variant="secondary">Weekly Off</Badge>;
-    }
-
-    if (!record.requiredCheckIn && !record.requiredCheckOut) {
-      return <Badge variant="secondary">Off Day</Badge>;
-    }
-
-    if (record.actualCheckIn && record.actualCheckOut) {
-      return <Badge variant="default">Present</Badge>;
-    }
-
-    if (record.actualCheckIn) {
-      return <Badge variant="outline">Checked In</Badge>;
-    }
-
-    return <Badge variant="destructive">Absent</Badge>;
+    return (
+      <Badge variant={display.variant} className={display.className}>
+        {display.label}
+      </Badge>
+    );
   };
 
   if (loading) {

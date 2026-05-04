@@ -98,6 +98,7 @@ function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
 interface TimeRecord {
   id: string;
   date: Date;
+  isProcessed: boolean;
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
   requiredBreakTime: string | null;
