@@ -241,6 +241,86 @@ async function reverseAbsentPenaltyOnTimelineEdit(
   };
 }
 
+async function applyAbsentPenaltyOnTimelineEdit(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  date: Date,
+  penaltyAmount: number,
+): Promise<PenaltyAdjustmentResult> {
+  const dateKey = getDateKey(date);
+  const penaltyTag = `Absent without leave penalty for ${dateKey}`;
+
+  const priorPenaltyTransactions = await tx.walletTransaction.findMany({
+    where: {
+      userId,
+      type: "ADJUSTMENT",
+      description: {
+        contains: penaltyTag,
+      },
+    },
+    select: {
+      amount: true,
+    },
+  });
+
+  const alreadyReversed = await tx.walletTransaction.findMany({
+    where: {
+      userId,
+      type: "ADJUSTMENT",
+      description: {
+        contains: `Manual timeline absence correction for ${dateKey}`,
+      },
+    },
+    select: {
+      amount: true,
+    },
+  });
+
+  const originalPenalty = priorPenaltyTransactions.reduce((sum, transaction) => {
+    if (transaction.amount >= 0) {
+      return sum;
+    }
+    return sum + Math.abs(transaction.amount);
+  }, 0);
+
+  const reversedAmount = alreadyReversed.reduce((sum, transaction) => {
+    if (transaction.amount <= 0) {
+      return sum;
+    }
+    return sum + transaction.amount;
+  }, 0);
+
+  const activePenaltyAmount = Number((originalPenalty - reversedAmount).toFixed(2));
+  if (activePenaltyAmount > 0.01) {
+    return { applied: false, adjustedAmount: 0, direction: "DEBIT" };
+  }
+
+  const adjustmentAmount = Number(Math.max(0, penaltyAmount).toFixed(2));
+  if (adjustmentAmount <= 0) {
+    return { applied: false, adjustedAmount: 0, direction: "DEBIT" };
+  }
+
+  await tx.user.update({
+    where: { id: userId },
+    data: { walletBalance: { decrement: adjustmentAmount } },
+  });
+
+  await tx.walletTransaction.create({
+    data: {
+      userId,
+      amount: -adjustmentAmount,
+      type: "ADJUSTMENT",
+      description: penaltyTag,
+    },
+  });
+
+  return {
+    applied: true,
+    adjustedAmount: adjustmentAmount,
+    direction: "DEBIT",
+  };
+}
+
 async function reverseAutoLeaveDeductionOnTimelineEdit(
   tx: Prisma.TransactionClient,
   currentRecord: DailyTimeRecord,
@@ -1321,6 +1401,10 @@ export async function updateTimelineRecord(
       return { success: false, error: 'Employee not found' };
     }
 
+    const workingDaysInMonth = employeeForPenalty.workingDaysInMonth || 22;
+    const dailySalary = workingDaysInMonth > 0 ? (employeeForPenalty.baseSalary / workingDaysInMonth) : 0;
+    const absentPenaltyAmount = Number(dailySalary.toFixed(2));
+
     const updateData: Prisma.DailyTimeRecordUpdateInput = {
       updatedAt: new Date()
     };
@@ -1447,8 +1531,6 @@ export async function updateTimelineRecord(
         (updateData.requiredActiveTime as string | undefined) ?? currentRecord.requiredActiveTime,
       );
 
-      const workingDaysInMonth = employeeForPenalty.workingDaysInMonth || 22;
-      const dailySalary = workingDaysInMonth > 0 ? (employeeForPenalty.baseSalary / workingDaysInMonth) : 0;
       const perMinuteRate = requiredActiveMinutes > 0 ? (dailySalary / requiredActiveMinutes) : 0;
       recalculatedPenaltyAmount = recalculatedLateMinutes > 0
         ? Number((perMinuteRate * recalculatedLateMinutes).toFixed(2))
@@ -1465,6 +1547,7 @@ export async function updateTimelineRecord(
         const shouldReconcilePenalties = affectsLatePenalty && 
           finalStatus !== "ON_LEAVE" && 
           currentRecord.status !== "ON_LEAVE";
+      const shouldApplyAbsentPenalty = currentRecord.status !== "ABSENT" && finalStatus === "ABSENT";
       let absenceAdjustment: PenaltyAdjustmentResult = {
         applied: false,
         adjustedAmount: 0,
@@ -1481,6 +1564,27 @@ export async function updateTimelineRecord(
           currentRecord.userId,
           currentRecord.date,
         );
+      }
+
+      if (shouldApplyAbsentPenalty) {
+        absenceAdjustment = await applyAbsentPenaltyOnTimelineEdit(
+          tx,
+          currentRecord.userId,
+          currentRecord.date,
+          absentPenaltyAmount,
+        );
+
+        if (absenceAdjustment.applied) {
+          await tx.employeeNotification.create({
+            data: {
+              userId: currentRecord.userId,
+              type: "MANUAL_ABSENCE_ADJUSTMENT",
+              title: "Absence Penalty Applied",
+              message: `Your timeline was updated to Absent on ${new Date(currentRecord.date).toLocaleDateString()}. ৳${absenceAdjustment.adjustedAmount.toFixed(2)} was deducted from your wallet.`,
+              relatedDate: currentRecord.date,
+            },
+          });
+        }
       }
 
       if (finalStatus === "ON_LEAVE" && !currentRecord.autoDeductedLeaveType) {
