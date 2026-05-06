@@ -333,6 +333,175 @@ async function reverseAutoLeaveDeductionOnTimelineEdit(
   };
 }
 
+export async function adjustLeaveType(
+  recordId: string,
+  newLeaveTypeName: string,
+) {
+  try {
+    const actor = await getDbUser();
+    if (!actor) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const canUpdateTimeline = actor.role === "SUPERADMIN" || actor.role === "HR" || (actor.role === "EMPLOYEE" && actor.isManager);
+    if (!canUpdateTimeline) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const currentRecord = await prisma.dailyTimeRecord.findUnique({
+      where: { id: recordId },
+    });
+
+    if (!currentRecord) {
+      return { success: false, error: 'Timeline record not found' };
+    }
+
+    if (currentRecord.status !== 'ON_LEAVE') {
+      return { success: false, error: 'Only on-leave records can be switched' };
+    }
+
+    const currentLeaveTypeName = currentRecord.autoDeductedLeaveType;
+
+    if (!currentLeaveTypeName) {
+      return { success: false, error: 'Current leave type is missing' };
+    }
+
+    if (currentLeaveTypeName === newLeaveTypeName) {
+      return { success: true, message: 'Leave type unchanged' };
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const currentLeaveType = await tx.leaveType.findFirst({
+        where: { name: currentLeaveTypeName },
+        select: { id: true, name: true },
+      });
+
+      const targetLeaveType = await tx.leaveType.findFirst({
+        where: { name: newLeaveTypeName },
+        select: { id: true, name: true },
+      });
+
+      if (!currentLeaveType) {
+        throw new Error(`Leave type not found: ${currentLeaveTypeName}`);
+      }
+
+      if (!targetLeaveType) {
+        throw new Error(`Leave type not found: ${newLeaveTypeName}`);
+      }
+
+      const currentEntitlement = await tx.userLeaveEntitlement.findFirst({
+        where: {
+          userId: currentRecord.userId,
+          leaveTypeId: currentLeaveType.id,
+          year: currentRecord.date.getFullYear(),
+        },
+      });
+
+      if (!currentEntitlement) {
+        throw new Error(`No entitlement found for ${currentLeaveType.name}`);
+      }
+
+      const targetEntitlement = await tx.userLeaveEntitlement.findFirst({
+        where: {
+          userId: currentRecord.userId,
+          leaveTypeId: targetLeaveType.id,
+          year: currentRecord.date.getFullYear(),
+        },
+      });
+
+      if (!targetEntitlement || targetEntitlement.usedDays >= targetEntitlement.allocatedDays) {
+        throw new Error(`No leave balance available for ${newLeaveTypeName}`);
+      }
+
+      const restoredCurrentUsedDays = Math.max(0, currentEntitlement.usedDays - 1);
+      const targetUsedDays = targetEntitlement.usedDays + 1;
+
+      await tx.userLeaveEntitlement.update({
+        where: { id: currentEntitlement.id },
+        data: { usedDays: restoredCurrentUsedDays },
+      });
+
+      await tx.userLeaveEntitlement.update({
+        where: { id: targetEntitlement.id },
+        data: { usedDays: targetUsedDays },
+      });
+
+      await tx.leaveAuditLog.create({
+        data: {
+          userId: currentRecord.userId,
+          action: "MANUAL_LEAVE_ADJUSTMENT",
+          description: `Manual timeline correction restored ${currentLeaveType.name} and applied ${targetLeaveType.name} for ${getDateKey(currentRecord.date)}`,
+          affectedDate: currentRecord.date,
+          leaveTypeId: currentLeaveType.id,
+          previousBalance: currentEntitlement.allocatedDays - currentEntitlement.usedDays,
+          newBalance: currentEntitlement.allocatedDays - restoredCurrentUsedDays,
+          deductedDays: -1,
+          processingSource: "MANUAL",
+          metadata: {
+            timelineRecordId: currentRecord.id,
+            originalLeaveTypeName: currentLeaveType.name,
+            switchedToLeaveTypeName: targetLeaveType.name,
+            action: "RESTORE_CURRENT_AND_APPLY_NEW",
+          },
+        },
+      });
+
+      await tx.leaveAuditLog.create({
+        data: {
+          userId: currentRecord.userId,
+          action: "MANUAL_LEAVE_ADJUSTMENT",
+          description: `Manual timeline correction applied ${targetLeaveType.name} for ${getDateKey(currentRecord.date)}`,
+          affectedDate: currentRecord.date,
+          leaveTypeId: targetLeaveType.id,
+          previousBalance: targetEntitlement.allocatedDays - targetEntitlement.usedDays,
+          newBalance: targetEntitlement.allocatedDays - targetUsedDays,
+          deductedDays: 1,
+          processingSource: "MANUAL",
+          metadata: {
+            timelineRecordId: currentRecord.id,
+            originalLeaveTypeName: currentLeaveType.name,
+            switchedToLeaveTypeName: targetLeaveType.name,
+            action: "RESTORE_CURRENT_AND_APPLY_NEW",
+          },
+        },
+      });
+
+      await tx.dailyTimeRecord.update({
+        where: { id: recordId },
+        data: {
+          autoDeductedLeaveType: newLeaveTypeName,
+        },
+      });
+
+      await tx.employeeNotification.create({
+        data: {
+          userId: currentRecord.userId,
+          type: "MANUAL_LEAVE_ADJUSTMENT",
+          title: "Leave Type Updated",
+          message: `Your leave was changed from ${currentLeaveType.name} to ${targetLeaveType.name} for ${new Date(currentRecord.date).toLocaleDateString()}.`,
+          relatedDate: currentRecord.date,
+        },
+      });
+
+      return {
+        success: true,
+        message: `Leave type changed from ${currentLeaveType.name} to ${targetLeaveType.name}`,
+      };
+    }, {
+      timeout: 15000,
+    });
+
+    revalidatePath('/admin/timeline');
+    revalidatePath('/manager/timeline');
+    revalidatePath('/dashboard');
+
+    return result;
+  } catch (error) {
+    console.error('Error adjusting leave type:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to adjust leave type' };
+  }
+}
+
 interface TimelineGenerationResult {
   success: boolean;
   recordsCreated?: number;
@@ -1290,6 +1459,12 @@ export async function updateTimelineRecord(
     }
     const { record } = await prisma.$transaction(async (tx) => {
       let leaveAdjustment: LeaveAdjustmentResult = { applied: false };
+      
+        // ✅ KEY FIX: Skip penalty reconciliation for ON_LEAVE transitions
+        // Leave status has NO penalties, so ON_LEAVE→PRESENT doesn't need wallet adjustments
+        const shouldReconcilePenalties = affectsLatePenalty && 
+          finalStatus !== "ON_LEAVE" && 
+          currentRecord.status !== "ON_LEAVE";
       let absenceAdjustment: PenaltyAdjustmentResult = {
         applied: false,
         adjustedAmount: 0,
@@ -1388,7 +1563,7 @@ export async function updateTimelineRecord(
         direction: "DEBIT",
       };
 
-      if (affectsLatePenalty) {
+        if (shouldReconcilePenalties && recalculatedLateMinutes > 0) {
         adjustment = await reconcileLatePenaltyWalletOnTimelineEdit(
           tx,
           currentRecord.userId,
@@ -1439,7 +1614,9 @@ export async function updateTimelineRecord(
       }
 
       return { record: updatedRecord, penaltyAdjustment: adjustment };
-    });
+      }, {
+        timeout: 15000,  // ✅ Increased from default 5s to 15s for complex operations
+      });
 
     if (actor.role === "EMPLOYEE" && actor.isManager) {
       await createAdminNotification({
