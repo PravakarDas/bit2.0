@@ -31,7 +31,7 @@ import {
   Building2,
   RefreshCw
 } from "lucide-react";
-import { updateTimelineRecord } from "@/actions/timeline.actions";
+import { updateTimelineRecord, adjustLeaveType } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
@@ -141,22 +141,48 @@ export default function TimelineTableView({
 
     setSaving(true);
     try {
-      const result = await updateTimelineRecord(editingRecord.id, {
-        status: editForm.status,
-        autoDeductedLeaveType: editForm.status === 'ON_LEAVE' ? editForm.autoDeductedLeaveType || null : null,
-        requiredCheckIn: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.requiredCheckIn ? new Date(editForm.requiredCheckIn) : null),
-        requiredCheckOut: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.requiredCheckOut ? new Date(editForm.requiredCheckOut) : null),
-        requiredBreakTime: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? '00:00' : (editForm.requiredBreakTime || null),
-        actualCheckIn: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.actualCheckIn ? new Date(editForm.actualCheckIn) : null),
-        actualCheckOut: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.actualCheckOut ? new Date(editForm.actualCheckOut) : null),
-        actualBreakTime: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? '00:00' : (editForm.actualBreakTime || null)
-      });
+      // Check if this is a leave type switch scenario
+      const isCurrentlyOnLeave = editingRecord.status === 'ON_LEAVE';
+      const isBeingChangedToOnLeave = editForm.status === 'ON_LEAVE';
+      const leaveTypeChanged = editingRecord.autoDeductedLeaveType !== editForm.autoDeductedLeaveType;
 
-      if (result.success) {
-        setEditingRecord(null);
-        onRecordUpdate();
+      // Validation: When changing to PRESENT, require check-in and check-out times
+      if (editForm.status === 'PRESENT' && (!editForm.actualCheckIn || !editForm.actualCheckOut)) {
+        alert('Check-in and Check-out times are required when setting status to Present');
+        setSaving(false);
+        return;
+      }
+
+      // Scenario: Switching from one leave type to another (both records are ON_LEAVE with different types)
+      if (isCurrentlyOnLeave && isBeingChangedToOnLeave && leaveTypeChanged && editingRecord.autoDeductedLeaveType && editForm.autoDeductedLeaveType) {
+        // Use the dedicated leave type adjustment action
+        const adjustResult = await adjustLeaveType(editingRecord.id, editForm.autoDeductedLeaveType);
+        
+        if (adjustResult.success) {
+          setEditingRecord(null);
+          onRecordUpdate();
+        } else {
+          alert(`Failed to switch leave type: ${adjustResult.error}`);
+        }
       } else {
-        alert('Failed to update record');
+        // Standard timeline update (status change, time adjustments, etc.)
+        const result = await updateTimelineRecord(editingRecord.id, {
+          status: editForm.status,
+          autoDeductedLeaveType: editForm.status === 'ON_LEAVE' ? editForm.autoDeductedLeaveType || null : null,
+          requiredCheckIn: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.requiredCheckIn ? new Date(editForm.requiredCheckIn) : null),
+          requiredCheckOut: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.requiredCheckOut ? new Date(editForm.requiredCheckOut) : null),
+          requiredBreakTime: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? '00:00' : (editForm.requiredBreakTime || null),
+          actualCheckIn: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.actualCheckIn ? new Date(editForm.actualCheckIn) : null),
+          actualCheckOut: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? editingRecord.date : (editForm.actualCheckOut ? new Date(editForm.actualCheckOut) : null),
+          actualBreakTime: (editForm.status === 'ABSENT' || editForm.status === 'ON_LEAVE' || editForm.status === 'WEEKLY_OFF') ? '00:00' : (editForm.actualBreakTime || null)
+        });
+
+        if (result.success) {
+          setEditingRecord(null);
+          onRecordUpdate();
+        } else {
+          alert('Failed to update record');
+        }
       }
     } catch (error) {
       console.error('Error updating record:', error);
@@ -404,27 +430,68 @@ export default function TimelineTableView({
                               )}
                             </div>
 
+                            {/* Status Transition from ON_LEAVE to PRESENT */}
+                            {editingRecord?.status === 'ON_LEAVE' && editForm.status === 'PRESENT' && editingRecord?.autoDeductedLeaveType && (
+                              <div className="border border-green-200 bg-green-50 p-3 rounded">
+                                <p className="text-xs text-green-800 font-semibold mb-2">✓ Leave Balance Restoration</p>
+                                <p className="text-sm text-green-700">
+                                  Transitioning from <strong>ON_LEAVE</strong> to <strong>PRESENT</strong>:
+                                </p>
+                                <ul className="text-sm text-green-700 list-disc list-inside mt-2 space-y-1">
+                                  <li>1 day will be restored to <strong>{editingRecord.autoDeductedLeaveType}</strong></li>
+                                  <li>Check-in and Check-out times will be required</li>
+                                  <li>All changes will be logged in audit trail</li>
+                                </ul>
+                              </div>
+                            )}
+
                             {editForm.status === 'ON_LEAVE' && (
-                              <div>
-                                <Label htmlFor="autoDeductedLeaveType">Leave Type</Label>
-                                <Select
-                                  value={editForm.autoDeductedLeaveType || undefined}
-                                  onValueChange={(value) => setEditForm({
-                                    ...editForm,
-                                    autoDeductedLeaveType: value
-                                  })}
-                                >
-                                  <SelectTrigger id="autoDeductedLeaveType">
-                                    <SelectValue placeholder="Select leave type" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {availableLeaveTypes.map((entitlement) => (
-                                      <SelectItem key={entitlement.id} value={entitlement.leaveType.name}>
-                                        {entitlement.leaveType.name} ({entitlement.allocatedDays - entitlement.usedDays} left)
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                              <div className="space-y-3 border border-blue-200 bg-blue-50 p-3 rounded">
+                                {editingRecord?.status === 'ON_LEAVE' && editingRecord?.autoDeductedLeaveType && (
+                                  <div>
+                                    <Label className="text-xs font-semibold text-blue-900">Current Leave Type</Label>
+                                    <div className="text-sm font-medium text-blue-800 py-2">
+                                      {editingRecord.autoDeductedLeaveType}
+                                    </div>
+                                  </div>
+                                )}
+                                <div>
+                                  <Label htmlFor="autoDeductedLeaveType" className="text-sm font-semibold">
+                                    {editingRecord?.status === 'ON_LEAVE' ? 'Switch to Leave Type' : 'Select Leave Type'}
+                                  </Label>
+                                  <Select
+                                    value={editForm.autoDeductedLeaveType || undefined}
+                                    onValueChange={(value) => setEditForm({
+                                      ...editForm,
+                                      autoDeductedLeaveType: value
+                                    })}
+                                  >
+                                    <SelectTrigger id="autoDeductedLeaveType">
+                                      <SelectValue placeholder="Select leave type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {availableLeaveTypes.map((entitlement) => {
+                                        const isCurrentLeaveType = editingRecord?.autoDeductedLeaveType === entitlement.leaveType.name;
+                                        const balance = entitlement.allocatedDays - entitlement.usedDays;
+                                        return (
+                                          <SelectItem 
+                                            key={entitlement.id} 
+                                            value={entitlement.leaveType.name}
+                                            disabled={isCurrentLeaveType}
+                                          >
+                                            {entitlement.leaveType.name} ({balance} available)
+                                            {isCurrentLeaveType && ' - Current'}
+                                          </SelectItem>
+                                        );
+                                      })}
+                                    </SelectContent>
+                                  </Select>
+                                  {editForm.autoDeductedLeaveType && editingRecord?.autoDeductedLeaveType && editForm.autoDeductedLeaveType !== editingRecord.autoDeductedLeaveType && (
+                                    <p className="mt-2 text-xs text-blue-700 bg-blue-100 p-2 rounded">
+                                      ℹ️ Switching from <strong>{editingRecord.autoDeductedLeaveType}</strong> to <strong>{editForm.autoDeductedLeaveType}</strong>: +1 day restored, -1 day deducted. All changes will be logged.
+                                    </p>
+                                  )}
+                                </div>
                               </div>
                             )}
 

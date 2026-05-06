@@ -25,6 +25,7 @@ export interface LeaveBoardRow {
   employeeName: string;
   employeeEmail: string;
   branchName: string;
+  assignedLeaveTypeIds: string[];
   leaveByType: Record<string, LeaveBoardMetric>;
   totals: LeaveBoardMetric;
   absent: number;
@@ -161,11 +162,17 @@ export async function getLeaveBoardData(filters: LeaveBoardFilters = {}): Promis
   ]);
 
   const entitlementMap = new Map<string, { allocatedDays: number; usedDays: number }>();
+  const assignedLeaveTypeMap = new Map<string, Set<string>>();
   for (const entitlement of entitlements) {
     entitlementMap.set(`${entitlement.userId}:${entitlement.leaveTypeId}`, {
       allocatedDays: entitlement.allocatedDays,
       usedDays: entitlement.usedDays,
     });
+
+    if (!assignedLeaveTypeMap.has(entitlement.userId)) {
+      assignedLeaveTypeMap.set(entitlement.userId, new Set());
+    }
+    assignedLeaveTypeMap.get(entitlement.userId)?.add(entitlement.leaveTypeId);
   }
 
   const absentMap = new Map<string, number>();
@@ -196,6 +203,7 @@ export async function getLeaveBoardData(filters: LeaveBoardFilters = {}): Promis
       employeeName,
       employeeEmail: employee.email,
       branchName: employee.branch?.name ?? "No Branch",
+      assignedLeaveTypeIds: Array.from(assignedLeaveTypeMap.get(employee.id) ?? []),
       leaveByType,
       totals: toMetric(totalAllocated, totalUsed),
       absent: absentMap.get(employee.id) ?? 0,
