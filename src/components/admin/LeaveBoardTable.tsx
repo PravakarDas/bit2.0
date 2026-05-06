@@ -1,8 +1,10 @@
+"use client";
+
 import Link from "next/link";
-import { Fragment } from "react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { LeaveBoardData } from "@/actions/leave-board.actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -14,9 +16,22 @@ interface LeaveBoardTableProps {
 }
 
 export function LeaveBoardTable({ title, description, basePath, data }: LeaveBoardTableProps) {
-  const totalColumnCount = 2 + data.leaveTypes.length * 3 + 3 + 1;
+  const [expandedEmployees, setExpandedEmployees] = useState<Record<string, boolean>>({});
   const hasActiveFilters = data.filters.search.length > 0 || data.filters.branchId !== "all";
   const employeeProfileBasePath = basePath.startsWith("/manager") ? "/manager/employees" : "/admin/employees";
+  const leaveTypeById = useMemo(() => new Map(data.leaveTypes.map((leaveType) => [leaveType.id, leaveType])), [data.leaveTypes]);
+
+  const sortedRows = useMemo(
+    () => [...data.rows].sort((a, b) => a.employeeName.localeCompare(b.employeeName)),
+    [data.rows]
+  );
+
+  const toggleExpanded = (userId: string) => {
+    setExpandedEmployees((prev) => ({
+      ...prev,
+      [userId]: !prev[userId],
+    }));
+  };
 
   return (
     <div className="space-y-6">
@@ -30,7 +45,7 @@ export function LeaveBoardTable({ title, description, basePath, data }: LeaveBoa
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <form method="get" className="flex flex-wrap items-end gap-3">
+          <form action={basePath} method="get" className="flex flex-wrap items-end gap-3">
             <div className="w-full max-w-xs space-y-2">
               <label htmlFor="search" className="text-sm font-medium">
                 Search Employee
@@ -79,81 +94,103 @@ export function LeaveBoardTable({ title, description, basePath, data }: LeaveBoa
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead rowSpan={2}>Employee</TableHead>
-                  <TableHead rowSpan={2}>Branch</TableHead>
-                  {data.leaveTypes.map((leaveType) => (
-                    <TableHead key={leaveType.id} colSpan={3} className="text-center">
-                      {leaveType.name}
-                    </TableHead>
-                  ))}
-                  <TableHead colSpan={3} className="text-center">
-                    Total
-                  </TableHead>
-                  <TableHead rowSpan={2} className="text-center">
-                    Absent
-                  </TableHead>
-                </TableRow>
-                <TableRow>
-                  {data.leaveTypes.map((leaveType) => (
-                    <Fragment key={leaveType.id}>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="text-right">Used</TableHead>
-                      <TableHead className="text-right">Remaining</TableHead>
-                    </Fragment>
-                  ))}
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Used</TableHead>
-                  <TableHead className="text-right">Remaining</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={totalColumnCount} className="py-10 text-center text-muted-foreground">
-                      No employees found for the selected filters.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  data.rows.map((row) => (
-                    <TableRow key={row.userId}>
-                      <TableCell>
-                        <Link
-                          href={`${employeeProfileBasePath}/${row.userId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {row.employeeName}
-                        </Link>
-                        <div className="text-xs text-muted-foreground">{row.employeeEmail}</div>
-                      </TableCell>
-                      <TableCell>{row.branchName}</TableCell>
+          {sortedRows.length === 0 ? (
+            <div className="py-10 text-center text-muted-foreground">
+              No employees found for the selected filters.
+            </div>
+          ) : (
+            <div className="columns-1 gap-4 md:columns-2">
+              {sortedRows.map((row) => {
+                const isExpanded = !!expandedEmployees[row.userId];
+                const showAbsentSummary = row.totals.remaining <= 0 && row.absent > 0;
+                const assignedLeaveTypes = row.assignedLeaveTypeIds
+                  .map((leaveTypeId) => leaveTypeById.get(leaveTypeId))
+                  .filter((leaveType): leaveType is NonNullable<typeof leaveType> => !!leaveType);
 
-                      {data.leaveTypes.map((leaveType) => {
-                        const metric = row.leaveByType[leaveType.id] ?? { total: 0, used: 0, remaining: 0 };
-                        return (
-                          <Fragment key={`${row.userId}:${leaveType.id}`}>
-                            <TableCell className="text-right">{metric.total}</TableCell>
-                            <TableCell className="text-right">{metric.used}</TableCell>
-                            <TableCell className="text-right">{metric.remaining}</TableCell>
-                          </Fragment>
-                        );
-                      })}
+                return (
+                  <div key={row.userId} className="mb-4 break-inside-avoid rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(row.userId)}
+                            className="text-muted-foreground hover:text-foreground mt-0.5"
+                            aria-label={isExpanded ? `Collapse ${row.employeeName}` : `Expand ${row.employeeName}`}
+                            aria-expanded={isExpanded}
+                          >
+                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </button>
 
-                      <TableCell className="text-right font-medium">{row.totals.total}</TableCell>
-                      <TableCell className="text-right font-medium">{row.totals.used}</TableCell>
-                      <TableCell className="text-right font-medium">{row.totals.remaining}</TableCell>
-                      <TableCell className="text-center font-medium">{row.absent}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                          <Link
+                            href={`${employeeProfileBasePath}/${row.userId}`}
+                            className="truncate font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {row.employeeName}
+                          </Link>
+
+                          <span
+                            className={
+                              showAbsentSummary
+                                ? "shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-sm font-semibold text-red-700"
+                                : "shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-sm font-semibold text-green-700"
+                            }
+                          >
+                            {showAbsentSummary ? `(-${row.absent})` : `(${row.totals.used}/${row.totals.total})`}
+                          </span>
+                        </div>
+
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          <span>{row.branchName}</span>
+                          <span className="mx-1">•</span>
+                          <span className="truncate">{row.employeeEmail}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {isExpanded ? (
+                      <div className="mt-4 space-y-2">
+                        {assignedLeaveTypes.length === 0 ? (
+                          <div className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                            No leave types are assigned for this employee in {data.currentYear}.
+                          </div>
+                        ) : (
+                          assignedLeaveTypes.map((leaveType) => {
+                            const metric = row.leaveByType[leaveType.id] ?? { total: 0, used: 0, remaining: 0 };
+
+                            return (
+                              <div
+                                key={`${row.userId}:${leaveType.id}`}
+                                className="grid grid-cols-12 items-center rounded-md border bg-muted/30 px-3 py-2 text-sm"
+                              >
+                                <div className="col-span-12 font-medium sm:col-span-4">{leaveType.name}</div>
+                                <div className="col-span-4 text-right text-muted-foreground sm:col-span-2">
+                                  T: <span className="font-semibold text-foreground">{metric.total}</span>
+                                </div>
+                                <div className="col-span-4 text-right text-muted-foreground sm:col-span-2">
+                                  U: <span className="font-semibold text-foreground">{metric.used}</span>
+                                </div>
+                                <div className="col-span-4 text-right text-muted-foreground sm:col-span-4">
+                                  R: <span className="font-semibold text-foreground">{metric.remaining}</span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+
+                        <div className="grid grid-cols-12 items-center rounded-md border border-dashed px-3 py-2 text-sm font-medium">
+                          <div className="col-span-12 sm:col-span-4">Total</div>
+                          <div className="col-span-4 text-right sm:col-span-2">T: {row.totals.total}</div>
+                          <div className="col-span-4 text-right sm:col-span-2">U: {row.totals.used}</div>
+                          <div className="col-span-4 text-right sm:col-span-4">R: {row.totals.remaining}</div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
