@@ -288,6 +288,10 @@ model User {
   // Allowance Relations
   employeeAllowances    EmployeeAllowance[]
   payrollOverrides      PayrollAllowanceOverride[]
+
+  // Employee Notes relations
+  notesReceived         EmployeeNote[]
+  notesCreated          EmployeeNote[] @relation("EmployeeNoteCreator")
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1011,5 +1015,24 @@ model TimelineModificationActionLog {
   @@index([actorId, createdAt])
   @@index([targetUserId, createdAt])
   @@index([requestId])
+}
+
+// Employee Notes: free-text notes attached to an employee, visible to Admin and Manager only
+model EmployeeNote {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  note        String
+
+  createdBy   String
+  createdByUser User   @relation("EmployeeNoteCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([employeeId])
+  @@index([createdBy])
 }
 

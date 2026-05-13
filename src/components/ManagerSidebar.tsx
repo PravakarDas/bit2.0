@@ -58,6 +58,11 @@ const managerNavItems = [
         url: "/manager/leave-board",
         icon: ScrollText,
     },
+    {
+        title: "Employee Notes",
+        url: "/manager/employee-notes",
+        icon: ClipboardList,
+    },
     { 
         title: "Profile Requests", 
         url: "/manager/profile-requests", 
