@@ -7,6 +7,7 @@ import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
 import { logManagerOrganizationAction } from "./manager-organization.actions";
 import { logManagerEmployeeEditAction } from "./manager-employee-edit.actions";
+import { isArchivedStatus } from "@/lib/employee-status";
 
 function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
     return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
@@ -432,6 +433,11 @@ export async function applyForLeave(data: {
         
         if (!user) {
             return { success: false, error: "User not found" };
+        }
+
+        // Check if employee is archived
+        if (user.isArchived || isArchivedStatus(user.employeeStatus)) {
+            return { success: false, error: "Archived employees cannot apply for leave" };
         }
         
         // Check if the selected date is a weekly holiday for this employee's branch

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { startOfDay, format, subDays } from "date-fns";
 import type { DailyTimeRecord, Prisma } from "@prisma/client";
 import { syncAllEmployeesTimeDataForDate, type SyncResult } from "./zkteco-sync.actions";
+import { isActiveStatus, isArchivedStatus } from "@/lib/employee-status";
 
 type ActiveEmployee = Prisma.UserGetPayload<{
     include: {
@@ -17,6 +18,21 @@ type ActiveEmployee = Prisma.UserGetPayload<{
 }>;
 
 type EmployeeLeaveEntitlement = ActiveEmployee["leaveEntitlements"][number];
+
+type UnprocessedTimelineRecord = Prisma.DailyTimeRecordGetPayload<{
+    include: {
+        user: {
+            include: {
+                branch: true;
+                leaveEntitlements: {
+                    include: {
+                        leaveType: true;
+                    };
+                };
+            };
+        };
+    };
+}>;
 
 type DailyProcessResult = {
     success: boolean;
@@ -113,18 +129,12 @@ function buildDateRange(fromDate: Date, toDate: Date): string[] {
 }
 
 async function getUnprocessedDateKeys(): Promise<string[]> {
-    const today = startOfDay(new Date());
     const datesToProcess = new Set<string>();
-
-    datesToProcess.add(format(subDays(today, 1), 'yyyy-MM-dd'));
-    datesToProcess.add(format(today, 'yyyy-MM-dd'));
 
     const unprocessedRecords = await prisma.dailyTimeRecord.groupBy({
         by: ['date'],
         where: {
-            isProcessed: {
-                not: true,
-            },
+            isProcessed: false,
         },
         orderBy: {
             date: 'asc',
@@ -214,11 +224,13 @@ export async function runLeaveAutomationPipeline(options?: {
     skipIfWithinWindow?: boolean;
     now?: Date;
     employeeIds?: string[];
+    continueOnSyncFailure?: boolean;
 }): Promise<LeaveAutomationPipelineResult> {
     const mode = options?.mode ?? "UNPROCESSED";
     const now = options?.now ?? new Date();
     const today = startOfDay(now);
     const employeeIds = normalizeEmployeeIds(options?.employeeIds);
+    const continueOnSyncFailure = options?.continueOnSyncFailure ?? true;
 
     const dateKeys = mode === "ALL_DATES"
         ? buildDateRange(
@@ -261,18 +273,21 @@ export async function runLeaveAutomationPipeline(options?: {
         if (!syncResult.success) {
             aggregateSync.success = false;
             aggregateSync.message = syncResult.message;
-            failedDate = dateKey;
-            dateResults.push({
-                date: dateKey,
-                syncSuccess: false,
-                syncMessage: syncResult.message,
-                syncedRecords: syncResult.syncedRecords,
-                skippedRecords: syncResult.skippedRecords,
-                automationSuccess: false,
-                processedEmployees: 0,
-                automationError: "Skipped due to sync failure",
-            });
-            break;
+
+            if (!continueOnSyncFailure) {
+                failedDate = dateKey;
+                dateResults.push({
+                    date: dateKey,
+                    syncSuccess: false,
+                    syncMessage: syncResult.message,
+                    syncedRecords: syncResult.syncedRecords,
+                    skippedRecords: syncResult.skippedRecords,
+                    automationSuccess: false,
+                    processedEmployees: 0,
+                    automationError: "Skipped due to sync failure",
+                });
+                break;
+            }
         }
 
         const isToday = isSameDay(processDate, today);
@@ -326,7 +341,7 @@ export async function runLeaveAutomationPipeline(options?: {
     }
 
     return {
-        success: aggregateSync.success && automationSuccess,
+        success: automationSuccess,
         sync: aggregateSync,
         automation: {
             success: automationSuccess,
@@ -344,41 +359,15 @@ export async function processAllUnprocessedDates() {
     console.log("Starting comprehensive leave automation processing...");
     
     try {
-        const today = startOfDay(new Date());
         const now = new Date();
-        
-        // Get dates to process: yesterday, today, and any dates with unprocessed records
-        const datesToProcess = new Set<string>();
-        
-        // Add yesterday (default processing)
-        datesToProcess.add(format(subDays(today, 1), 'yyyy-MM-dd'));
-        
-        // Add today (for current day processing)
-        datesToProcess.add(format(today, 'yyyy-MM-dd'));
-        
-        // Find dates with incomplete processing
-        const unprocessedRecords = await prisma.dailyTimeRecord.groupBy({
-            by: ['date'],
-            where: {
-                isProcessed: {
-                    not: true
-                }
-            },
-            orderBy: {
-                date: 'asc'
-            }
-        });
-        
-        // Add all dates with unprocessed records
-        unprocessedRecords.forEach(record => {
-            datesToProcess.add(format(record.date, 'yyyy-MM-dd'));
-        });
+        const today = startOfDay(now);
+        const dateKeys = await getUnprocessedDateKeys();
 
         let totalProcessed = 0;
         const results: Array<DailyProcessResult & { date: string }> = [];
 
-        // Process each unique date
-        for (const dateStr of Array.from(datesToProcess).sort()) {
+        // Process each date that still has at least one unprocessed record
+        for (const dateStr of dateKeys) {
             const processDate = startOfDay(new Date(dateStr));
             const isToday = isSameDay(processDate, today);
             
@@ -396,10 +385,10 @@ export async function processAllUnprocessedDates() {
             results.push({ date: dateStr, ...result });
         }
 
-        console.log(`Completed processing ${datesToProcess.size} dates, ${totalProcessed} total employee records`);
+        console.log(`Completed processing ${dateKeys.length} dates, ${totalProcessed} total employee records`);
         return { 
             success: true, 
-            datesProcessed: datesToProcess.size,
+            datesProcessed: dateKeys.length,
             totalProcessed,
             results 
         };
@@ -421,39 +410,42 @@ export async function processDailyLeaveAutomation(
     const employeeIds = normalizeEmployeeIds(options?.employeeIds);
     
     try {
-        // Get all active employees
-        const activeEmployees = await prisma.user.findMany({
+        // Only process rows that are explicitly marked as unprocessed.
+        const unprocessedRecords = await prisma.dailyTimeRecord.findMany({
             where: {
-                employeeStatus: "ACTIVE",
-                isArchived: false,
-                branchId: { not: null },
-                ...(employeeIds && employeeIds.length > 0 ? { id: { in: employeeIds } } : {}),
+                date: processDate,
+                isProcessed: false,
+                ...(employeeIds && employeeIds.length > 0 ? { userId: { in: employeeIds } } : {}),
             },
             include: {
-                branch: true,
-                leaveEntitlements: {
-                    where: {
-                        year: new Date().getFullYear(),
-                        leaveType: {
-                            isActive: true,
-                            leaveResetPolicy: "ROSTER_EVERY_YEAR"
-                        }
-                    },
+                user: {
                     include: {
-                        leaveType: true
-                    },
-                    orderBy: {
-                        createdAt: 'asc' // First created will be used first
+                        branch: true,
+                        leaveEntitlements: {
+                            where: {
+                                year: new Date().getFullYear(),
+                                leaveType: {
+                                    isActive: true,
+                                    leaveResetPolicy: "ROSTER_EVERY_YEAR"
+                                }
+                            },
+                            include: {
+                                leaveType: true
+                            },
+                            orderBy: {
+                                createdAt: 'asc'
+                            }
+                        }
                     }
                 }
             }
         });
 
-        for (const employee of activeEmployees) {
-            await processEmployeeDailyRecord(employee, processDate, options);
+        for (const record of unprocessedRecords) {
+            await processEmployeeDailyRecord(record as UnprocessedTimelineRecord, options);
         }
 
-        return { success: true, processedEmployees: activeEmployees.length };
+        return { success: true, processedEmployees: unprocessedRecords.length };
     } catch (error) {
         console.error("Error processing daily leave automation:", error);
         return { success: false, error: "Failed to process daily automation" };
@@ -463,18 +455,12 @@ export async function processDailyLeaveAutomation(
 /**
  * Process daily record for a single employee
  */
-async function processEmployeeDailyRecord(employee: ActiveEmployee, processDate: Date, options?: { skipIfWithinWindow?: boolean; now?: Date }) {
-    
-    // Check if already processed
-    const existingRecord = await prisma.dailyTimeRecord.findUnique({
-        where: {
-            userId_date: {
-                userId: employee.id,
-                date: processDate
-            }
-        }
-    });
+async function processEmployeeDailyRecord(record: UnprocessedTimelineRecord, options?: { skipIfWithinWindow?: boolean; now?: Date }) {
+    const employee = record.user;
+    const processDate = startOfDay(record.date);
+    const existingRecord = record;
 
+    // Check if already processed
     const hasRequiredFilled = Boolean(
         isNonZeroTime(existingRecord?.requiredCheckIn) &&
         isNonZeroTime(existingRecord?.requiredCheckOut) &&

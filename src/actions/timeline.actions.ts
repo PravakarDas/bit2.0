@@ -6,6 +6,7 @@ import { createAdminNotification } from "./notification.actions";
 import { Prisma, type DailyTimeRecord } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 import { buildDateRangeFilter } from "@/lib/utils";
+import { isArchivedStatus } from "@/lib/employee-status";
 
 /**
  * Convert time string (HH:MM) to minutes
@@ -899,11 +900,12 @@ export async function generateDailyTimeRecords(targetDate: Date = new Date()): P
 
     console.log(`Generating timeline records for date: ${normalizedDate.toISOString()}`);
 
-    // Get all active employees
+    // Get all active employees (exclude archived employees)
     const activeEmployees = await prisma.user.findMany({
       where: {
         status: 'APPROVED',
-        role: 'EMPLOYEE'
+        role: 'EMPLOYEE',
+        isArchived: false  // Only generate timeline for active employees
       },
       include: {
         branch: true
@@ -988,7 +990,8 @@ export async function backfillMissingTimeRecords(): Promise<BackfillResult> {
     const activeEmployees = await prisma.user.findMany({
       where: {
         status: 'APPROVED',
-        role: 'EMPLOYEE'
+        role: 'EMPLOYEE',
+        isArchived: false  // Only backfill for active employees
       },
       include: {
         branch: true
@@ -1117,7 +1120,8 @@ export async function checkAndGenerateToday(): Promise<TimelineGenerationResult>
     const activeEmployees = await prisma.user.findMany({
       where: {
         status: 'APPROVED',
-        role: 'EMPLOYEE'
+        role: 'EMPLOYEE',
+        isArchived: false  // Only check for active employees
       },
       include: {
         branch: true

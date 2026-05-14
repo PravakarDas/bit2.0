@@ -6,6 +6,7 @@ import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
 import { updateTimelineRecord } from "./timeline.actions";
 import { Prisma } from "@prisma/client";
+import { isArchivedStatus } from "@/lib/employee-status";
 
 function normalizeDateOnly(date: Date): Date {
   const normalized = new Date(date);
@@ -38,6 +39,11 @@ export async function submitTimelineModificationRequest(data: SubmitTimelineModi
 
     if (user.role !== "EMPLOYEE") {
       return { success: false, error: "Only employees can submit timeline modification requests" };
+    }
+
+    // Check if employee is archived
+    if (user.isArchived || isArchivedStatus(user.employeeStatus)) {
+      return { success: false, error: "Archived employees cannot submit timeline modification requests" };
     }
 
     const hasAnyRequestedField = Boolean(

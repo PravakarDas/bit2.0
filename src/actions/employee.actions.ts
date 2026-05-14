@@ -8,8 +8,50 @@ import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
 import { logManagerEmployeeEditAction } from "./manager-employee-edit.actions";
 import { buildDateRangeFilter } from "@/lib/utils";
+import { isArchivedStatus } from "@/lib/employee-status";
 
-async function logManagerEmployeeRejectionAction(params: {
+/**
+ * Get archive warning data for an employee
+ * Returns wallet balance and all loan records
+ */
+export async function getArchiveWarningsData(userId: string) {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                walletBalance: true,
+                loans: {
+                    select: {
+                        id: true,
+                        issuedAmount: true,
+                        remainingPrincipal: true,
+                        status: true,
+                        reason: true,
+                    },
+                },
+            },
+        });
+
+        if (!user) {
+            return { walletBalance: 0, loans: [] };
+        }
+
+        return {
+            walletBalance: user.walletBalance,
+            loans: user.loans,
+        };
+    } catch (error) {
+        console.error("Error fetching archive warnings data:", error);
+        return { walletBalance: 0, loans: [] };
+    }
+}
+
+async function logManagerEmployeeRejection({
+    actorId,
+    actorName,
+    employeeId,
+    employeeName,
+}: {
     actorId: string;
     actorName: string;
     employeeId: string;
@@ -18,23 +60,23 @@ async function logManagerEmployeeRejectionAction(params: {
     try {
         await prisma.auditLog.create({
             data: {
-                userId: params.actorId,
+                userId: actorId,
                 oldEmi: null,
                 newEmi: null,
-                changeReason: `Manager rejected employee account: ${params.employeeName} (${params.employeeId})`,
+                changeReason: `Manager rejected employee account: ${employeeName} (${employeeId})`,
             },
         });
 
         await createAdminNotification({
             type: "SYSTEM_ALERT",
             title: "Manager Rejected Employee Account",
-            message: `${params.actorName} rejected the employee account for ${params.employeeName}`,
+            message: `${actorName} rejected the employee account for ${employeeName}`,
             metadata: {
-                actorId: params.actorId,
-                actorName: params.actorName,
+                actorId,
+                actorName,
                 action: "REJECTED",
-                employeeId: params.employeeId,
-                employeeName: params.employeeName,
+                employeeId,
+                employeeName,
                 source: "employee_account_approval",
             },
         });
@@ -201,7 +243,7 @@ export async function rejectEmployee(userId: string) {
             const actorName = [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email;
             const employeeName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email;
 
-            await logManagerEmployeeRejectionAction({
+            await logManagerEmployeeRejection({
                 actorId: actor.id,
                 actorName,
                 employeeId: user.id,
@@ -220,24 +262,96 @@ export async function rejectEmployee(userId: string) {
 
 export async function updateEmployeeStatus(userId: string, employeeStatus: EmployeeStatus) {
     try {
-        const updateData: Prisma.UserUpdateInput = { employeeStatus };
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { employeeStatus: true, isArchived: true, archivedAt: true },
+        });
 
-        // If status is RESIGNED or TERMINATED, archive the employee
-        if (employeeStatus === "RESIGNED" || employeeStatus === "TERMINATED") {
-            updateData.isArchived = true;
+        if (!user) {
+            return { success: false, error: "Employee not found" };
         }
 
-        const user = await prisma.user.update({
+        const currentStatus = user.employeeStatus;
+        const newIsArchived = isArchivedStatus(employeeStatus);
+        const wasArchived = user.isArchived;
+
+        const updateData: Prisma.UserUpdateInput = { 
+            employeeStatus,
+            isArchived: newIsArchived,
+        };
+
+        // If transitioning to archived status, set archivedAt timestamp
+        if (newIsArchived && !wasArchived) {
+            updateData.archivedAt = new Date();
+        }
+
+        // If reactivating from archive, clear the archivedAt timestamp
+        if (!newIsArchived && wasArchived) {
+            updateData.archivedAt = null;
+        }
+
+        const updatedUser = await prisma.user.update({
             where: { id: userId },
             data: updateData,
+            include: {
+                branch: true,
+                department: true,
+                designation: true,
+            },
         });
 
         revalidatePath("/admin/employees");
         revalidatePath("/admin/archived-employees");
-        return { success: true, user };
+        revalidatePath(`/admin/employees/${userId}`);
+        revalidatePath("/manager/employees");
+        revalidatePath("/manager/employees/archived");
+
+        // Log the status change
+        if (newIsArchived && !wasArchived) {
+            console.log(`Employee ${userId} archived with status ${employeeStatus}`);
+        } else if (!newIsArchived && wasArchived) {
+            console.log(`Employee ${userId} reactivated from archive to status ${employeeStatus}`);
+        }
+
+        return { success: true, user: updatedUser };
     } catch (error) {
         console.error("Error updating employee status:", error);
         return { success: false, error: "Failed to update employee status" };
+    }
+}
+
+export async function updatePayrollContinuationMonths(userId: string, months: number) {
+    try {
+        const actor = await getDbUser();
+        const isAuthorized = !!actor && (["SUPERADMIN", "HR"].includes(actor.role) || (actor.role === "EMPLOYEE" && actor.isManager));
+
+        if (!isAuthorized) {
+            return { success: false, error: "Unauthorized" };
+        }
+
+        // Validate months is non-negative integer
+        if (!Number.isInteger(months) || months < 0) {
+            return { success: false, error: "Payroll continuation months must be a non-negative integer" };
+        }
+
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data: { payrollContinuationMonths: months },
+            include: {
+                branch: true,
+                department: true,
+                designation: true,
+            },
+        });
+
+        revalidatePath(`/admin/employees/${userId}`);
+        revalidatePath(`/manager/employees/${userId}`);
+        revalidatePath("/admin/archived-employees");
+
+        return { success: true, user };
+    } catch (error) {
+        console.error("Error updating payroll continuation months:", error);
+        return { success: false, error: "Failed to update payroll continuation months" };
     }
 }
 
