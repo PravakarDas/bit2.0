@@ -282,7 +282,7 @@ export default function TimelineClient() {
 
       const employeeQuery = selectedEmployeeId ? `&employeeId=${encodeURIComponent(selectedEmployeeId)}` : '';
 
-      const response = await fetch(`/api/leave-automation?backfill=all${employeeQuery}`, {
+      const response = await fetch(`/api/leave-automation${employeeQuery}`, {
         method: 'POST'
       });
 
@@ -292,17 +292,17 @@ export default function TimelineClient() {
         const processedDates = result?.data?.automation?.data?.processedDates;
         const syncedRecords = result?.data?.sync?.syncedRecords;
         if (typeof processedDates === 'number') {
-          toast.success(`Leave automation backfill completed. Synced ${syncedRecords ?? 0} records and processed ${processedDates} dates.`);
+          toast.success(`Leave automation completed. Synced ${syncedRecords ?? 0} records and processed ${processedDates} dates.`);
         } else {
-          toast.success('Leave automation backfill completed.');
+          toast.success('Leave automation completed.');
         }
         void loadTimeRecords();
       } else {
-        toast.error(result.error || 'Failed to process leave automation backfill');
+        toast.error(result.error || 'Failed to process leave automation');
       }
     } catch (error) {
       console.error('Error running leave automation backfill:', error);
-      toast.error('Failed to process leave automation backfill');
+      toast.error('Failed to process leave automation');
     } finally {
       setLeaveBackfillRunning(false);
     }
@@ -338,7 +338,7 @@ export default function TimelineClient() {
             disabled={leaveBackfillRunning}
           >
             <RotateCcw className={`h-4 w-4 mr-2 ${leaveBackfillRunning ? 'animate-spin' : ''}`} />
-            {leaveBackfillRunning ? 'Processing...' : 'Run Leave Automation (All)'}
+            {leaveBackfillRunning ? 'Processing...' : 'Run Leave Automation'}
           </Button>
           <Button 
             variant="outline" 

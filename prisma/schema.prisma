@@ -8,10 +8,18 @@ datasource db {
 }
 
 enum EmployeeStatus {
+  // Active type statuses
   ACTIVE
   PROBATION
+  
+  // Archived type statuses
   RESIGNED
   TERMINATED
+  LAYOFF
+  RETIRED
+  CONTRACT_ENDED
+  SUSPENDED
+  ABSCONDED
 }
 
 enum Role {
@@ -166,6 +174,8 @@ model User {
   status        UserStatus @default(PENDING)
   employeeStatus EmployeeStatus? @default(ACTIVE)
   isArchived    Boolean    @default(false)
+  archivedAt    DateTime?  // Timestamp when employee was archived
+  payrollContinuationMonths Int @default(2) // Number of months to continue payroll after archive
   walletBalance Float      @default(0)
   
   // Current active salary for quick lookups

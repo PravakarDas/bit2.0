@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProfileView } from "@/components/employee/ProfileView";
 import { ProfileEditFormTabbed as ProfileEditForm } from "@/components/employee/ProfileEditFormTabbed";
 import { getUserProfileById } from "@/actions/profile.actions";
+import { EmployeeStatusSelect } from "@/components/admin/EmployeeStatusSelect";
 import { User } from "@prisma/client";
 import { Loader2, ArrowLeft, Wallet } from "lucide-react";
 import { toast } from "sonner";
@@ -103,6 +104,14 @@ export default function AdminEmployeeDetailPage() {
             </h1>
             <p className="text-muted-foreground">{user.email}</p>
           </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <EmployeeStatusSelect
+            employeeId={user.id}
+            currentStatus={user.employeeStatus}
+            employeeName={`${user.firstName} ${user.lastName}`}
+            onStatusChanged={() => fetchData()}
+          />
         </div>
       </div>
 

@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { OvertimeRequestStatus } from "@prisma/client";
+import { isArchivedStatus } from "@/lib/employee-status";
 
 // Helper to convert HH:MM to minutes
 function timeStringToMinutes(timeStr: string): number {
@@ -82,7 +83,7 @@ export async function submitOvertimeRequest(data: {
     // Get user from database
     const user = await prisma.user.findUnique({
       where: { clerkId: userId },
-      select: { id: true, firstName: true, lastName: true, role: true },
+      select: { id: true, firstName: true, lastName: true, role: true, isArchived: true, employeeStatus: true },
     });
 
     if (!user) {
@@ -92,6 +93,11 @@ export async function submitOvertimeRequest(data: {
     // Ensure employee role
     if (user.role !== "EMPLOYEE") {
       return { success: false, error: "Only employees can submit overtime requests" };
+    }
+
+    // Check if employee is archived
+    if (user.isArchived || isArchivedStatus(user.employeeStatus)) {
+      return { success: false, error: "Archived employees cannot submit overtime requests" };
     }
 
     // Validate overtime start/end format (HH:MM)

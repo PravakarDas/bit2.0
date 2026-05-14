@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { calculateEMI } from "@/lib/services/loan.service";
 import { LoanStatus, ClaimStatus, UserStatus } from "@prisma/client";
+import { shouldGeneratePayroll } from "@/lib/employee-status";
 
 export async function getAllProcessedPayrolls() {
     const payments = await prisma.salaryPayment.findMany({
@@ -73,17 +74,26 @@ interface PayrollAggregation {
 
 export async function getPayrollAggregation(month: number, year: number) {
     const payrollMonth = `${year}-${month.toString().padStart(2, '0')}`;
+    const currentDate = new Date(year, month - 1, 1); // First day of the payroll month
 
     const users = await prisma.user.findMany({
         where: {
             status: UserStatus.APPROVED,
-            isArchived: false,
             role: { not: "SUPERADMIN" },
             salaryPayments: {
                 none: {
                     month: payrollMonth
                 }
-            }
+            },
+            OR: [
+                // Active employees
+                { isArchived: false },
+                // Archived employees still within payroll continuation period
+                {
+                    isArchived: true,
+                    archivedAt: { not: null }
+                }
+            ]
         },
         include: {
             loans: {
@@ -110,6 +120,20 @@ export async function getPayrollAggregation(month: number, year: number) {
         },
     });
 
+    // Filter archived employees based on payroll continuation logic
+    const eligibleUsers = users.filter((user) => {
+        if (!user.isArchived) {
+            return true; // Include all active employees
+        }
+
+        // For archived employees, check if they're within payroll continuation period
+        return shouldGeneratePayroll(
+            user.archivedAt,
+            user.payrollContinuationMonths,
+            currentDate
+        );
+    });
+
     const allActiveBonuses = await prisma.bonusType.findMany({
         where: { isActive: true },
         include: { branches: true },
@@ -125,7 +149,7 @@ export async function getPayrollAggregation(month: number, year: number) {
         },
     });
 
-    return users.map((user) => {
+    return eligibleUsers.map((user) => {
         // Fetch ALL Approved but Unpaid Claims for this user
         const approvedClaims = user.medicalClaims; // Already filtered by status: "APPROVED" in include
         const totalMedical = approvedClaims.reduce(
