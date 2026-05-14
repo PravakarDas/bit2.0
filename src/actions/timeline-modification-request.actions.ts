@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
-import { updateTimelineRecord } from "./timeline.actions";
+import { updateTimelineRecordInTransaction } from "./timeline.actions";
 import { Prisma } from "@prisma/client";
 import { isArchivedStatus } from "@/lib/employee-status";
 
@@ -12,6 +12,29 @@ function normalizeDateOnly(date: Date): Date {
   const normalized = new Date(date);
   normalized.setHours(0, 0, 0, 0);
   return normalized;
+}
+
+function shiftDateByDays(date: Date, days: number): Date {
+  const shifted = new Date(date);
+  shifted.setDate(shifted.getDate() + days);
+  return shifted;
+}
+
+function combineDateAndTime(baseDate: Date, timeValue: string): Date {
+  const combined = new Date(baseDate);
+  const [hours, minutes] = timeValue.split(":").map(Number);
+  combined.setHours(hours, minutes, 0, 0);
+  return combined;
+}
+
+function getApprovalRecordDate(requestedDate: Date): Date {
+  // DailyTimeRecord for timeline modification approval should align with the requested shift date.
+  // Applying an additional -1 day shift here causes updates to land one day too early.
+  return normalizeDateOnly(requestedDate);
+}
+
+function getRequestedShiftDate(requestedDate: Date): Date {
+  return normalizeDateOnly(requestedDate);
 }
 
 function isManagerUser(user: { role: string; isManager?: boolean | null }) {
@@ -232,94 +255,128 @@ export async function approveTimelineModificationRequest(requestId: string, revi
       return { success: false, error: "Unauthorized" };
     }
 
-    const request = await prisma.timelineModificationRequest.findUnique({
-      where: { id: requestId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
+    const approvalResult = await prisma.$transaction(async (tx) => {
+      const request = await tx.timelineModificationRequest.findUnique({
+        where: { id: requestId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              branch: {
+                select: {
+                  checkInTime: true,
+                  checkOutTime: true,
+                  breakDuration: true,
+                },
+              },
+            },
           },
         },
-      },
-    });
+      });
 
-    if (!request) {
-      return { success: false, error: "Request not found" };
-    }
+      if (!request) {
+        throw new Error("Request not found");
+      }
 
-    if (request.status !== "PENDING") {
-      return { success: false, error: "Request has already been processed" };
-    }
+      if (request.status !== "PENDING") {
+        throw new Error("Request has already been processed");
+      }
 
-    const recordDate = normalizeDateOnly(new Date(request.requestedDate));
+      const requestedShiftDate = getRequestedShiftDate(new Date(request.requestedDate));
+      const recordDate = getApprovalRecordDate(request.requestedDate);
+      const branchCheckInTime = request.user.branch?.checkInTime || "09:00";
+      const branchCheckOutTime = request.user.branch?.checkOutTime || "18:00";
+      const branchBreakDuration = request.user.branch?.breakDuration || "01:00";
 
-    let timeRecord = await prisma.dailyTimeRecord.findUnique({
-      where: {
-        userId_date: {
-          userId: request.userId,
-          date: recordDate,
-        },
-      },
-    });
-
-    if (!timeRecord) {
-      timeRecord = await prisma.dailyTimeRecord.create({
-        data: {
-          userId: request.userId,
-          date: recordDate,
-          status: "PRESENT",
+      let timeRecord = await tx.dailyTimeRecord.findUnique({
+        where: {
+          userId_date: {
+            userId: request.userId,
+            date: recordDate,
+          },
         },
       });
-    }
 
-    const timelineUpdateResult = await updateTimelineRecord(timeRecord.id, {
-      actualCheckIn: request.requestedCheckIn,
-      actualCheckOut: request.requestedCheckOut,
-      actualBreakTime: request.requestedBreakTime,
-    });
+      if (!timeRecord) {
+        timeRecord = await tx.dailyTimeRecord.create({
+          data: {
+            userId: request.userId,
+            date: recordDate,
+            status: "PRESENT",
+            requiredCheckIn: combineDateAndTime(requestedShiftDate, branchCheckInTime),
+            requiredCheckOut: combineDateAndTime(requestedShiftDate, branchCheckOutTime),
+            requiredBreakTime: branchBreakDuration,
+            actualCheckIn: request.requestedCheckIn,
+            actualCheckOut: request.requestedCheckOut,
+            actualBreakTime: request.requestedBreakTime || branchBreakDuration,
+            isProcessed: true,
+          },
+        });
+      }
 
-    if (!timelineUpdateResult.success) {
-      return { success: false, error: timelineUpdateResult.error || "Failed to apply timeline changes" };
-    }
+      const timelineUpdateResult = await updateTimelineRecordInTransaction(tx, timeRecord.id, {
+        requiredCheckIn: combineDateAndTime(requestedShiftDate, branchCheckInTime),
+        requiredCheckOut: combineDateAndTime(requestedShiftDate, branchCheckOutTime),
+        requiredBreakTime: branchBreakDuration,
+        actualCheckIn: request.requestedCheckIn,
+        actualCheckOut: request.requestedCheckOut,
+        actualBreakTime: request.requestedBreakTime || branchBreakDuration,
+        status: "PRESENT",
+        isProcessed: true,
+      });
 
-    const updatedRequest = await prisma.timelineModificationRequest.update({
-      where: { id: requestId },
-      data: {
-        status: "APPROVED",
-        reviewedById: reviewer.id,
-        reviewerNote: reviewerNote?.trim() || null,
-        reviewedAt: new Date(),
-        appliedAt: new Date(),
-      },
-    });
+      if (!timelineUpdateResult.success) {
+        throw new Error(timelineUpdateResult.error || "Failed to apply timeline changes");
+      }
 
-    await prisma.timelineModificationActionLog.create({
-      data: {
-        actionType: "REQUEST_APPROVED",
-        actionDetails: `Timeline modification request approved by ${reviewer.firstName || "Reviewer"} ${reviewer.lastName || ""}`,
-        actorId: reviewer.id,
-        targetUserId: request.userId,
-        requestId: request.id,
-        dailyTimeRecordId: timeRecord.id,
-        metadata: {
-          reviewerRole: reviewer.role,
-          reviewerNote: reviewerNote || null,
+      const updatedRequest = await tx.timelineModificationRequest.update({
+        where: { id: requestId },
+        data: {
+          status: "APPROVED",
+          reviewedById: reviewer.id,
+          reviewerNote: reviewerNote?.trim() || null,
+          reviewedAt: new Date(),
+          appliedAt: new Date(),
         },
-      },
+      });
+
+      await tx.timelineModificationActionLog.create({
+        data: {
+          actionType: "REQUEST_APPROVED",
+          actionDetails: `Timeline modification request approved by ${reviewer.firstName || "Reviewer"} ${reviewer.lastName || ""}`,
+          actorId: reviewer.id,
+          targetUserId: request.userId,
+          requestId: request.id,
+          dailyTimeRecordId: timeRecord.id,
+          metadata: {
+            reviewerRole: reviewer.role,
+            reviewerNote: reviewerNote || null,
+            requestedDate: requestedShiftDate,
+            timelineRecordDate: recordDate,
+          },
+        },
+      });
+
+      await tx.employeeNotification.create({
+        data: {
+          userId: request.userId,
+          type: "TIMELINE_MODIFICATION_REQUEST_APPROVED",
+          title: "Timeline Modification Request Approved",
+          message: `Your timeline modification request for ${requestedShiftDate.toLocaleDateString()} has been approved and applied to ${recordDate.toLocaleDateString()}.`,
+          relatedDate: recordDate,
+          relatedEntityId: request.id,
+        },
+      });
+
+      return { request, updatedRequest, recordDate };
+    }, {
+      maxWait: 10000,
+      timeout: 120000,
     });
 
-    await prisma.employeeNotification.create({
-      data: {
-        userId: request.userId,
-        type: "TIMELINE_MODIFICATION_REQUEST_APPROVED",
-        title: "Timeline Modification Request Approved",
-        message: `Your timeline modification request for ${recordDate.toLocaleDateString()} has been approved by ${reviewer.firstName || ""} ${reviewer.lastName || ""}.`,
-        relatedDate: recordDate,
-        relatedEntityId: request.id,
-      },
-    });
+    const { request, updatedRequest, recordDate } = approvalResult;
 
     if (isManagerUser(reviewer)) {
       await createAdminNotification({
@@ -331,6 +388,8 @@ export async function approveTimelineModificationRequest(requestId: string, revi
           managerId: reviewer.id,
           employeeId: request.userId,
           action: "APPROVED",
+          requestedDate: request.requestedDate,
+          timelineRecordDate: recordDate,
         },
       });
     }
@@ -344,6 +403,9 @@ export async function approveTimelineModificationRequest(requestId: string, revi
     return { success: true, data: updatedRequest };
   } catch (error) {
     console.error("Error approving timeline modification request:", error);
+    if (error instanceof Error && error.message) {
+      return { success: false, error: error.message };
+    }
     return { success: false, error: "Failed to approve timeline modification request" };
   }
 }
