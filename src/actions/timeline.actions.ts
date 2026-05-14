@@ -112,15 +112,26 @@ async function reconcileLatePenaltyWalletOnTimelineEdit(
   penaltyAmount: number,
 ): Promise<PenaltyAdjustmentResult> {
   const dateKey = getDateKey(date);
+  const legacyDateKey = getUtcDateKey(date);
   const penaltyTag = `Late check-in penalty for ${dateKey}`;
+  const legacyPenaltyTag = `Late check-in penalty for ${legacyDateKey}`;
 
   const priorPenaltyTransactions = await tx.walletTransaction.findMany({
     where: {
       userId,
       type: "ADJUSTMENT",
-      description: {
-        contains: penaltyTag,
-      },
+      OR: [
+        {
+          description: {
+            contains: penaltyTag,
+          },
+        },
+        {
+          description: {
+            contains: legacyPenaltyTag,
+          },
+        },
+      ],
     },
     select: {
       amount: true,
@@ -173,15 +184,26 @@ async function reverseAbsentPenaltyOnTimelineEdit(
   date: Date,
 ): Promise<PenaltyAdjustmentResult> {
   const dateKey = getDateKey(date);
+  const legacyDateKey = getUtcDateKey(date);
   const penaltyTag = `Absent without leave penalty for ${dateKey}`;
+  const legacyPenaltyTag = `Absent without leave penalty for ${legacyDateKey}`;
 
   const priorPenaltyTransactions = await tx.walletTransaction.findMany({
     where: {
       userId,
       type: "ADJUSTMENT",
-      description: {
-        contains: penaltyTag,
-      },
+      OR: [
+        {
+          description: {
+            contains: penaltyTag,
+          },
+        },
+        {
+          description: {
+            contains: legacyPenaltyTag,
+          },
+        },
+      ],
     },
     select: {
       amount: true,
@@ -249,15 +271,26 @@ async function applyAbsentPenaltyOnTimelineEdit(
   penaltyAmount: number,
 ): Promise<PenaltyAdjustmentResult> {
   const dateKey = getDateKey(date);
+  const legacyDateKey = getUtcDateKey(date);
   const penaltyTag = `Absent without leave penalty for ${dateKey}`;
+  const legacyPenaltyTag = `Absent without leave penalty for ${legacyDateKey}`;
 
   const priorPenaltyTransactions = await tx.walletTransaction.findMany({
     where: {
       userId,
       type: "ADJUSTMENT",
-      description: {
-        contains: penaltyTag,
-      },
+      OR: [
+        {
+          description: {
+            contains: penaltyTag,
+          },
+        },
+        {
+          description: {
+            contains: legacyPenaltyTag,
+          },
+        },
+      ],
     },
     select: {
       amount: true,
@@ -631,6 +664,10 @@ function normalizeToStartOfDay(date: Date): Date {
 function getDateKey(date: Date): string {
   const { year, month, day } = getBangladeshDateParts(date);
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function getUtcDateKey(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
 function getDisplayName(employee: { firstName: string | null; lastName: string | null; email: string }): string {
@@ -1358,6 +1395,355 @@ export async function getTimelineRecords(
 /**
  * Update a specific timeline record
  */
+type TimelineRecordTransactionInput = {
+  requiredCheckIn?: Date | null;
+  requiredCheckOut?: Date | null;
+  requiredBreakTime?: string | null;
+  actualCheckIn?: Date | null;
+  actualCheckOut?: Date | null;
+  actualBreakTime?: string | null;
+  status?: "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF";
+  autoDeductedLeaveType?: string | null;
+  notes?: string | null;
+  isProcessed?: boolean;
+};
+
+export async function updateTimelineRecordInTransaction(
+  tx: Prisma.TransactionClient,
+  recordId: string,
+  data: TimelineRecordTransactionInput,
+) {
+  const currentRecord = await tx.dailyTimeRecord.findUnique({
+    where: { id: recordId },
+  });
+
+  if (!currentRecord) {
+    return { success: false, error: 'Timeline record not found' };
+  }
+
+  const employeeForPenalty = await tx.user.findUnique({
+    where: { id: currentRecord.userId },
+    select: {
+      id: true,
+      baseSalary: true,
+      workingDaysInMonth: true,
+    },
+  });
+
+  if (!employeeForPenalty) {
+    return { success: false, error: 'Employee not found' };
+  }
+
+  const workingDaysInMonth = employeeForPenalty.workingDaysInMonth || 22;
+  const dailySalary = workingDaysInMonth > 0 ? (employeeForPenalty.baseSalary / workingDaysInMonth) : 0;
+  const absentPenaltyAmount = Number(dailySalary.toFixed(2));
+
+  const updateData: Prisma.DailyTimeRecordUpdateInput = {
+    updatedAt: new Date(),
+  };
+
+  const recordMidnight = new Date(currentRecord.date);
+  recordMidnight.setHours(0, 0, 0, 0);
+
+  if (data.requiredCheckIn !== undefined) updateData.requiredCheckIn = data.requiredCheckIn;
+  if (data.requiredCheckOut !== undefined) updateData.requiredCheckOut = data.requiredCheckOut;
+  if (data.requiredBreakTime !== undefined) updateData.requiredBreakTime = data.requiredBreakTime;
+  if (data.actualCheckIn !== undefined) updateData.actualCheckIn = data.actualCheckIn;
+  if (data.actualCheckOut !== undefined) updateData.actualCheckOut = data.actualCheckOut;
+  if (data.actualBreakTime !== undefined) updateData.actualBreakTime = data.actualBreakTime;
+  if (data.isProcessed !== undefined) updateData.isProcessed = data.isProcessed;
+
+  const finalStatus = data.status ?? currentRecord.status;
+  const finalAutoDeductedLeaveType = finalStatus === "ON_LEAVE"
+    ? (data.autoDeductedLeaveType !== undefined ? data.autoDeductedLeaveType : currentRecord.autoDeductedLeaveType)
+    : null;
+
+  if (data.status !== undefined) updateData.status = data.status;
+  if (finalStatus === "ON_LEAVE") {
+    updateData.autoDeductedLeaveType = finalAutoDeductedLeaveType;
+  } else if (data.autoDeductedLeaveType !== undefined || currentRecord.autoDeductedLeaveType) {
+    updateData.autoDeductedLeaveType = null;
+  }
+
+  const zeroedStatus = finalStatus === "ABSENT" || finalStatus === "ON_LEAVE" || finalStatus === "WEEKLY_OFF";
+
+  if (zeroedStatus) {
+    updateData.requiredCheckIn = recordMidnight;
+    updateData.requiredCheckOut = recordMidnight;
+    updateData.requiredBreakTime = "00:00";
+    updateData.actualCheckIn = recordMidnight;
+    updateData.actualCheckOut = recordMidnight;
+    updateData.actualBreakTime = "00:00";
+    updateData.requiredActiveTime = "00:00";
+    updateData.actualActiveTime = "00:00";
+    updateData.officialOvertimeundertime = "00:00";
+    updateData.requestedOvertime = "00:00";
+    updateData.overtimeUndertime = "00:00";
+    updateData.lateCheckInMinutes = 0;
+    updateData.lateCheckInPenalty = 0;
+  }
+
+  if (finalStatus === "ON_LEAVE" && !finalAutoDeductedLeaveType) {
+    return { success: false, error: 'Leave type is required for On Leave status' };
+  }
+
+  const finalRequiredCheckIn = zeroedStatus
+    ? recordMidnight
+    : (data.requiredCheckIn !== undefined ? data.requiredCheckIn : currentRecord.requiredCheckIn);
+  const finalRequiredCheckOut = zeroedStatus
+    ? recordMidnight
+    : (data.requiredCheckOut !== undefined ? data.requiredCheckOut : currentRecord.requiredCheckOut);
+  const finalRequiredBreakTime = zeroedStatus
+    ? "00:00"
+    : (data.requiredBreakTime !== undefined ? data.requiredBreakTime : currentRecord.requiredBreakTime);
+  const finalActualCheckIn = zeroedStatus
+    ? recordMidnight
+    : (data.actualCheckIn !== undefined ? data.actualCheckIn : currentRecord.actualCheckIn);
+  const finalActualCheckOut = zeroedStatus
+    ? recordMidnight
+    : (data.actualCheckOut !== undefined ? data.actualCheckOut : currentRecord.actualCheckOut);
+  const finalActualBreakTime = zeroedStatus
+    ? "00:00"
+    : (data.actualBreakTime !== undefined ? data.actualBreakTime : currentRecord.actualBreakTime);
+
+  const affectsLatePenalty =
+    data.requiredCheckIn !== undefined ||
+    data.requiredCheckOut !== undefined ||
+    data.requiredBreakTime !== undefined ||
+    data.actualCheckIn !== undefined;
+
+  if (finalRequiredCheckIn && finalRequiredCheckOut) {
+    updateData.requiredActiveTime = calculateActiveTime(
+      finalRequiredCheckIn,
+      finalRequiredCheckOut,
+      finalRequiredBreakTime || '00:00'
+    );
+  }
+
+  if (finalActualCheckIn && finalActualCheckOut) {
+    updateData.actualActiveTime = calculateActiveTime(
+      finalActualCheckIn,
+      finalActualCheckOut,
+      finalActualBreakTime || '00:00'
+    );
+
+    const requiredActiveTime = updateData.requiredActiveTime || currentRecord.requiredActiveTime;
+    const actualActiveTime = updateData.actualActiveTime;
+    if (typeof requiredActiveTime === 'string' && typeof actualActiveTime === 'string') {
+      updateData.officialOvertimeundertime = calculateOvertimeUndertime(
+        actualActiveTime,
+        requiredActiveTime
+      );
+
+      const requestedOvertime = currentRecord.requestedOvertime || '00:00';
+      updateData.overtimeUndertime = addTimeStrings(
+        updateData.officialOvertimeundertime,
+        requestedOvertime
+      );
+    }
+  }
+
+  let recalculatedLateMinutes = 0;
+  let recalculatedPenaltyAmount = 0;
+
+  if (affectsLatePenalty && finalRequiredCheckIn && finalActualCheckIn) {
+    recalculatedLateMinutes = Math.max(
+      0,
+      Math.floor((finalActualCheckIn.getTime() - finalRequiredCheckIn.getTime()) / (1000 * 60)),
+    );
+
+    const requiredActiveMinutes = getRequiredActiveMinutesForPenalty(
+      finalRequiredCheckIn,
+      finalRequiredCheckOut,
+      finalRequiredBreakTime,
+      (updateData.requiredActiveTime as string | undefined) ?? currentRecord.requiredActiveTime,
+    );
+
+    const perMinuteRate = requiredActiveMinutes > 0 ? (dailySalary / requiredActiveMinutes) : 0;
+    recalculatedPenaltyAmount = recalculatedLateMinutes > 0
+      ? Number((perMinuteRate * recalculatedLateMinutes).toFixed(2))
+      : 0;
+
+    updateData.lateCheckInMinutes = recalculatedLateMinutes;
+    updateData.lateCheckInPenalty = recalculatedPenaltyAmount;
+  }
+
+  let leaveAdjustment: LeaveAdjustmentResult = { applied: false };
+  const shouldReconcilePenalties = affectsLatePenalty &&
+    finalStatus !== "ON_LEAVE";
+  const shouldApplyAbsentPenalty = currentRecord.status !== "ABSENT" && finalStatus === "ABSENT";
+  let absenceAdjustment: PenaltyAdjustmentResult = {
+    applied: false,
+    adjustedAmount: 0,
+    direction: "DEBIT",
+  };
+
+  if (currentRecord.status === "ON_LEAVE" && finalStatus !== "ON_LEAVE") {
+    leaveAdjustment = await reverseAutoLeaveDeductionOnTimelineEdit(tx, currentRecord);
+  }
+
+  if (currentRecord.status === "ABSENT" && finalStatus !== "ABSENT") {
+    absenceAdjustment = await reverseAbsentPenaltyOnTimelineEdit(
+      tx,
+      currentRecord.userId,
+      currentRecord.date,
+    );
+  }
+
+  if (shouldApplyAbsentPenalty) {
+    absenceAdjustment = await applyAbsentPenaltyOnTimelineEdit(
+      tx,
+      currentRecord.userId,
+      currentRecord.date,
+      absentPenaltyAmount,
+    );
+
+    if (absenceAdjustment.applied) {
+      await tx.employeeNotification.create({
+        data: {
+          userId: currentRecord.userId,
+          type: "MANUAL_ABSENCE_ADJUSTMENT",
+          title: "Absence Penalty Applied",
+          message: `Your timeline was updated to Absent on ${new Date(currentRecord.date).toLocaleDateString()}. ৳${absenceAdjustment.adjustedAmount.toFixed(2)} was deducted from your wallet.`,
+          relatedDate: currentRecord.date,
+        },
+      });
+    }
+  }
+
+  if (finalStatus === "ON_LEAVE" && !currentRecord.autoDeductedLeaveType) {
+    const leaveTypeName = finalAutoDeductedLeaveType;
+    if (!leaveTypeName) {
+      return { success: false, error: 'Leave type is required for On Leave status' };
+    }
+
+    const leaveType = await tx.leaveType.findFirst({
+      where: { name: leaveTypeName },
+      select: { id: true },
+    });
+
+    if (!leaveType) {
+      return { success: false, error: `Leave type not found: ${leaveTypeName}` };
+    }
+
+    const entitlement = await tx.userLeaveEntitlement.findFirst({
+      where: {
+        userId: currentRecord.userId,
+        leaveTypeId: leaveType.id,
+        year: currentRecord.date.getFullYear(),
+      },
+    });
+
+    if (!entitlement || entitlement.usedDays >= entitlement.allocatedDays) {
+      return { success: false, error: `No leave balance available for ${leaveTypeName}` };
+    }
+
+    await tx.userLeaveEntitlement.update({
+      where: { id: entitlement.id },
+      data: { usedDays: entitlement.usedDays + 1 },
+    });
+
+    await tx.leaveAuditLog.create({
+      data: {
+        userId: currentRecord.userId,
+        action: "MANUAL_LEAVE_DEDUCTION",
+        description: `Manual on-leave status applied for ${getDateKey(currentRecord.date)} using ${leaveTypeName}`,
+        affectedDate: currentRecord.date,
+        leaveTypeId: leaveType.id,
+        previousBalance: entitlement.allocatedDays - entitlement.usedDays,
+        newBalance: entitlement.allocatedDays - (entitlement.usedDays + 1),
+        deductedDays: 1,
+        processingSource: "MANUAL",
+        metadata: {
+          timelineRecordId: currentRecord.id,
+          status: "ON_LEAVE",
+        },
+      },
+    });
+
+    await tx.employeeNotification.create({
+      data: {
+        userId: currentRecord.userId,
+        type: "MANUAL_LEAVE_DEDUCTION",
+        title: "Leave Deducted",
+        message: `1 day was deducted from ${leaveTypeName} for ${new Date(currentRecord.date).toLocaleDateString()}.`,
+        relatedDate: currentRecord.date,
+      },
+    });
+  }
+
+  const updatedRecord = await tx.dailyTimeRecord.update({
+    where: { id: recordId },
+    data: updateData,
+    include: {
+      user: {
+        select: {
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+  });
+
+  let adjustment: PenaltyAdjustmentResult = {
+    applied: false,
+    adjustedAmount: 0,
+    direction: "DEBIT",
+  };
+
+  if (shouldReconcilePenalties && recalculatedLateMinutes > 0) {
+    adjustment = await reconcileLatePenaltyWalletOnTimelineEdit(
+      tx,
+      currentRecord.userId,
+      currentRecord.date,
+      recalculatedLateMinutes,
+      recalculatedPenaltyAmount,
+    );
+
+    if (adjustment.applied) {
+      if (leaveAdjustment.applied) {
+        await tx.employeeNotification.create({
+          data: {
+            userId: currentRecord.userId,
+            type: "MANUAL_LEAVE_ADJUSTMENT",
+            title: "Leave Adjustment Applied",
+            message: `Your manually corrected timeline on ${new Date(currentRecord.date).toLocaleDateString()} reversed the previously deducted ${leaveAdjustment.leaveTypeName || "leave"}.`,
+            relatedDate: currentRecord.date,
+          },
+        });
+      }
+
+      if (absenceAdjustment.applied) {
+        await tx.employeeNotification.create({
+          data: {
+            userId: currentRecord.userId,
+            type: "MANUAL_ABSENCE_ADJUSTMENT",
+            title: "Absence Penalty Reversed",
+            message: `Your manually corrected timeline on ${new Date(currentRecord.date).toLocaleDateString()} reversed the absence penalty adjustment.`,
+            relatedDate: currentRecord.date,
+          },
+        });
+      }
+
+      const message = adjustment.direction === "DEBIT"
+        ? `A penalty of ৳${adjustment.adjustedAmount.toFixed(2)} was applied after timeline update (${recalculatedLateMinutes} minutes late on ${new Date(currentRecord.date).toLocaleDateString()}).`
+        : `A penalty correction of ৳${adjustment.adjustedAmount.toFixed(2)} was credited after timeline update for ${new Date(currentRecord.date).toLocaleDateString()}.`;
+
+      await tx.employeeNotification.create({
+        data: {
+          userId: currentRecord.userId,
+          type: "LATE_CHECKIN_PENALTY",
+          title: "Late Check-in Penalty Updated",
+          message,
+          relatedDate: currentRecord.date,
+        },
+      });
+    }
+  }
+
+  return { success: true, record: updatedRecord, penaltyAdjustment: adjustment };
+}
+
 export async function updateTimelineRecord(
   recordId: string,
   data: {
