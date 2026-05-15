@@ -202,7 +202,7 @@ function startLeaveAutomationCron() {
 
   let lastRunDate = "";
 
-  const runIfDue = async () => {
+    const runIfDue = async () => {
     const runtime = await getRuntimeSystemControlConfig();
     if (!runtime.leaveAutomationCronEnabled) {
       return;
@@ -220,7 +220,7 @@ function startLeaveAutomationCron() {
     lastRunDate = todayKey;
     try {
         console.log("Starting leave automation cron job...");
-        const result = await runLeaveAutomationPipeline({ mode: "UNPROCESSED" });
+        const result = await runLeaveAutomationPipeline({ mode: "UNPROCESSED", skipIfWithinWindow: true, skipToday: true, now: new Date() });
       if (!result.success) {
           console.warn("Leave automation cron skipped:", result.sync.message || "Sync failed before automation");
         return;
