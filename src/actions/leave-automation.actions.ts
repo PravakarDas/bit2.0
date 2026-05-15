@@ -225,6 +225,7 @@ export async function runLeaveAutomationPipeline(options?: {
     now?: Date;
     employeeIds?: string[];
     continueOnSyncFailure?: boolean;
+    skipToday?: boolean;
 }): Promise<LeaveAutomationPipelineResult> {
     const mode = options?.mode ?? "UNPROCESSED";
     const now = options?.now ?? new Date();
@@ -232,6 +233,7 @@ export async function runLeaveAutomationPipeline(options?: {
     const employeeIds = normalizeEmployeeIds(options?.employeeIds);
     const continueOnSyncFailure = options?.continueOnSyncFailure ?? true;
 
+    const skipToday = options?.skipToday ?? false;
     const dateKeys = mode === "ALL_DATES"
         ? buildDateRange(
             options?.fromDate ?? new Date(0),
@@ -264,6 +266,20 @@ export async function runLeaveAutomationPipeline(options?: {
 
     for (const dateKey of dateKeys) {
         const processDate = startOfDay(new Date(dateKey));
+        const isToday = isSameDay(processDate, today);
+        if (isToday && skipToday) {
+            // skip today's date entirely when requested
+            dateResults.push({
+                date: dateKey,
+                syncSuccess: true,
+                syncMessage: 'Skipped (today)',
+                syncedRecords: 0,
+                skippedRecords: 0,
+                automationSuccess: true,
+                processedEmployees: 0,
+            });
+            continue;
+        }
 
         const syncResult = await syncAllEmployeesTimeDataForDate(processDate, employeeIds);
         aggregateSync.syncedRecords += syncResult.syncedRecords;
@@ -290,10 +306,9 @@ export async function runLeaveAutomationPipeline(options?: {
             }
         }
 
-        const isToday = isSameDay(processDate, today);
         const automationResult = await processDailyLeaveAutomation(processDate, {
-            skipIfWithinWindow: Boolean(options?.skipIfWithinWindow && isToday),
-            now: isToday ? now : undefined,
+            skipIfWithinWindow: Boolean(options?.skipIfWithinWindow && isSameDay(processDate, today)),
+            now: isSameDay(processDate, today) ? now : undefined,
             employeeIds,
         });
 
@@ -469,8 +484,7 @@ async function processEmployeeDailyRecord(record: UnprocessedTimelineRecord, opt
 
     const hasActualFilled = Boolean(
         isNonZeroTime(existingRecord?.actualCheckIn) &&
-        isNonZeroTime(existingRecord?.actualCheckOut) &&
-        isFilledString(existingRecord?.actualBreakTime)
+        isNonZeroTime(existingRecord?.actualCheckOut)
     );
 
     const isFullyFilled = hasRequiredFilled && hasActualFilled;
@@ -482,6 +496,19 @@ async function processEmployeeDailyRecord(record: UnprocessedTimelineRecord, opt
     // If record exists, is already processed, and fully filled, skip
     if (existingRecord?.isProcessed && isFullyFilled) {
         return;
+    }
+
+    // If actual check-in or check-out is missing, wait up to 4 days (including the date) for missing data.
+    // If within the 4-day window, skip processing. After >=4 days, proceed and mark absent/leave as needed.
+    if (!hasActualFilled) {
+        const now = options?.now ? startOfDay(options.now) : startOfDay(new Date());
+        const msPerDay = 1000 * 60 * 60 * 24;
+        const daysDiff = Math.floor((now.getTime() - processDate.getTime()) / msPerDay);
+
+        // daysDiff = 0 for same day. Wait for 4 days inclusive (0..3 wait, >=4 process)
+        if (daysDiff < 4) {
+            return;
+        }
     }
 
     const dayOfWeek = format(processDate, 'EEEE').toUpperCase();

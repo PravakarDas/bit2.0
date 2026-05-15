@@ -31,11 +31,14 @@ export async function POST(request: Request) {
                 result = await processBackfillLeaveAutomation(fromDate, undefined, undefined, employeeId ? [employeeId] : undefined);
             }
         } else {
-                // Sync missing ZKTeco data, then process all unprocessed dates (including today and yesterday)
-                result = await runLeaveAutomationPipeline({
-                    mode: 'UNPROCESSED',
-                    employeeIds: employeeId ? [employeeId] : undefined,
-                });
+            // Sync missing ZKTeco data, then process all unprocessed dates (excluding today)
+            result = await runLeaveAutomationPipeline({
+                mode: 'UNPROCESSED',
+                employeeIds: employeeId ? [employeeId] : undefined,
+                skipIfWithinWindow: true,
+                skipToday: true,
+                now: new Date(),
+            });
         }
         const resultSuccess = typeof result === 'object' && result !== null && 'success' in result
             ? Boolean((result as { success?: boolean }).success)
