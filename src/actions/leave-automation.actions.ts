@@ -226,6 +226,11 @@ export async function runLeaveAutomationPipeline(options?: {
     employeeIds?: string[];
     continueOnSyncFailure?: boolean;
     skipToday?: boolean;
+    /**
+     * When true, treat fully-missing actual check-in/out as immediately processable
+     * (do not wait the 4-day grace window). Intended for manual "Run" actions.
+     */
+    forceProcessMissing?: boolean;
 }): Promise<LeaveAutomationPipelineResult> {
     const mode = options?.mode ?? "UNPROCESSED";
     const now = options?.now ?? new Date();
@@ -310,6 +315,7 @@ export async function runLeaveAutomationPipeline(options?: {
             skipIfWithinWindow: Boolean(options?.skipIfWithinWindow && isSameDay(processDate, today)),
             now: isSameDay(processDate, today) ? now : undefined,
             employeeIds,
+            forceProcessMissing: Boolean(options?.forceProcessMissing),
         });
 
         const processedEmployees = automationResult.success ? (automationResult.processedEmployees || 0) : 0;
@@ -419,7 +425,7 @@ export async function processAllUnprocessedDates() {
  */
 export async function processDailyLeaveAutomation(
     targetDate?: Date,
-    options?: { skipIfWithinWindow?: boolean; now?: Date; employeeIds?: string[] }
+    options?: { skipIfWithinWindow?: boolean; now?: Date; employeeIds?: string[]; forceProcessMissing?: boolean }
 ) {
     const processDate = targetDate ? startOfDay(targetDate) : startOfDay(subDays(new Date(), 1)); // Yesterday by default
     const employeeIds = normalizeEmployeeIds(options?.employeeIds);
@@ -470,7 +476,7 @@ export async function processDailyLeaveAutomation(
 /**
  * Process daily record for a single employee
  */
-async function processEmployeeDailyRecord(record: UnprocessedTimelineRecord, options?: { skipIfWithinWindow?: boolean; now?: Date }) {
+async function processEmployeeDailyRecord(record: UnprocessedTimelineRecord, options?: { skipIfWithinWindow?: boolean; now?: Date; employeeIds?: string[]; forceProcessMissing?: boolean }) {
     const employee = record.user;
     const processDate = startOfDay(record.date);
     const existingRecord = record;
@@ -498,17 +504,35 @@ async function processEmployeeDailyRecord(record: UnprocessedTimelineRecord, opt
         return;
     }
 
-    // If actual check-in or check-out is missing, wait up to 4 days (including the date) for missing data.
-    // If within the 4-day window, skip processing. After >=4 days, proceed and mark absent/leave as needed.
-    if (!hasActualFilled) {
-        const now = options?.now ? startOfDay(options.now) : startOfDay(new Date());
-        const msPerDay = 1000 * 60 * 60 * 24;
-        const daysDiff = Math.floor((now.getTime() - processDate.getTime()) / msPerDay);
+    // Determine actual presence state.
+    const actualCheckIn = existingRecord?.actualCheckIn;
+    const actualCheckOut = existingRecord?.actualCheckOut;
+    const hasActualCheckIn = isNonZeroTime(actualCheckIn);
+    const hasActualCheckOut = isNonZeroTime(actualCheckOut);
+    const hasBothActuals = hasActualCheckIn && hasActualCheckOut;
+    const hasAnyActual = hasActualCheckIn || hasActualCheckOut;
 
-        // daysDiff = 0 for same day. Wait for 4 days inclusive (0..3 wait, >=4 process)
-        if (daysDiff < 4) {
+    // If both actual check-in and check-out are present, proceed with normal processing.
+    if (hasBothActuals) {
+        // continue with workday/penalty logic below
+    } else {
+        // If partial data exists (only one of check-in/out), skip processing for now.
+        if (hasAnyActual && !hasBothActuals) {
             return;
         }
+
+        // No actual data present. If not forced, wait up to 4 days for data to arrive.
+        if (!options?.forceProcessMissing) {
+            const now = options?.now ? startOfDay(options.now) : startOfDay(new Date());
+            const msPerDay = 1000 * 60 * 60 * 24;
+            const daysDiff = Math.floor((now.getTime() - processDate.getTime()) / msPerDay);
+
+            // daysDiff = 0 for same day. Wait for 4 days inclusive (0..3 wait, >=4 process)
+            if (daysDiff < 4) {
+                return;
+            }
+        }
+        // If forceProcessMissing is true or daysDiff >= 4, continue to mark absent/auto-leave below.
     }
 
     const dayOfWeek = format(processDate, 'EEEE').toUpperCase();
