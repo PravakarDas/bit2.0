@@ -1,5 +1,6 @@
 "use server";
 
+import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { createAdminNotification } from "./notification.actions";
@@ -726,9 +727,52 @@ async function createTimelineRecordForEmployee(
       }
     }
 
-    const isWeekend = await isWeekendForEmployee(employee.id, normalizedDate);
-    if (isWeekend) {
-      return { created: false, skippedReason: 'weekend' };
+    const isWeeklyOff = await isWeekendForEmployee(employee.id, normalizedDate);
+    if (isWeeklyOff) {
+      const recordData = {
+        userId: employee.id,
+        date: normalizedDate,
+        status: "WEEKLY_OFF" as const,
+        requiredCheckIn: null,
+        requiredCheckOut: null,
+        requiredBreakTime: "00:00",
+        actualCheckIn: null,
+        actualCheckOut: null,
+        actualBreakTime: "00:00",
+        requiredActiveTime: "00:00",
+        actualActiveTime: "00:00",
+        officialOvertimeundertime: "00:00",
+        requestedOvertime: "00:00",
+        overtimeUndertime: "00:00",
+        isProcessed: true,
+      };
+
+      await prisma.dailyTimeRecord.create({
+        data: recordData,
+      });
+
+      await prisma.leaveAuditLog.create({
+        data: {
+          userId: employee.id,
+          action: "WEEKLY_OFF_SET",
+          description: `Weekly off day automatically set for ${format(normalizedDate, 'EEEE, MMMM d, yyyy')}`,
+          affectedDate: normalizedDate,
+          processingSource: "SYSTEM",
+        },
+      });
+
+      await prisma.employeeNotification.create({
+        data: {
+          userId: employee.id,
+          type: "WEEKLY_OFF_SET",
+          title: "Weekly Off Day",
+          message: `${format(normalizedDate, 'EEEE, MMMM d, yyyy')} has been set as your weekly off day.`,
+          relatedDate: normalizedDate,
+        },
+      });
+
+      console.log(`Created weekly off record for ${employeeName} on ${normalizedDate.toDateString()}`);
+      return { created: true };
     }
 
     const isBranchHoliday = await isPublicHolidayForBranch(normalizedDate, employee.branchId);
