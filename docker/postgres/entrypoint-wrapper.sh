@@ -39,6 +39,9 @@ if [ -n "${S3_BUCKET:-}" ]; then
         printf 'SERVER_NAME=%q\n'           "$SERVER_NAME"
         printf 'RETENTION_DAYS=%q\n'        "$RETENTION_DAYS"
         printf 'COMPRESSION=%q\n'           "$COMPRESSION"
+        printf 'POSTGRES_USER=%q\n'         "${POSTGRES_USER:-postgres}"
+        printf 'POSTGRES_PASSWORD=%q\n'     "${POSTGRES_PASSWORD:-}"
+        printf 'POSTGRES_DB=%q\n'           "${POSTGRES_DB:-postgres}"
         printf 'PATH=%s\n' \
             "/opt/barman/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     } > "$CRON_ENV"
