@@ -35,6 +35,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env
 
+# Generated postgres bootstrap dump (produced by scripts/dump-neon.sh)
+docker/postgres/initdb/02-neon-dump.sql
+
 # vercel
 .vercel
 

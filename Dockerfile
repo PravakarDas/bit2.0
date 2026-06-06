@@ -1,24 +1,18 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:lts-slim AS builder
 
 WORKDIR /app
-
-RUN apk add --no-cache libc6-compat
-
-COPY package.json pnpm-lock.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile
 
 COPY . .
+RUN corepack enable && pnpm install --frozen-lockfile
 
-RUN pnpm prisma generate
-RUN pnpm build
+RUN env CI=true pnpm prisma generate
+RUN env CI=true pnpm build
 
 # Production stage
-FROM node:20-alpine AS runner
+FROM node:lts-slim AS runner
 
 WORKDIR /app
-
-RUN apk add --no-cache tzdata
 
 ENV NODE_ENV=production
 ENV TZ=Asia/Dhaka

@@ -1,5 +1,6 @@
 services:
   app:
+    image: bitcode-hrm:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,6 +14,9 @@ services:
     environment:
       - NODE_ENV=production
       - TZ=Asia/Dhaka
+    depends_on:
+      postgres:
+        condition: service_healthy
     labels:
       - traefik.enable=true
       - traefik.http.routers.hrm-app.rule=Host(`${DOMAIN}`)
@@ -24,10 +28,54 @@ services:
       - traefik.http.routers.hrm-app.priority=10
       - traefik.http.services.hrm-app.loadbalancer.server.port=3000
       - traefik.docker.network=traefik-public
-
     networks:
       - traefik-public
+      - hrm-internal
+
+  postgres:
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    image: bitcode-hrm-postgres:latest
+    container_name: bitcode-hrm-postgres
+    restart: unless-stopped
+    environment:
+      # --- Postgres ---
+      POSTGRES_DB: ${DB_NAME:-hrm}
+      POSTGRES_USER: ${DB_USER:-hrm}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      TZ: Asia/Dhaka
+
+      # --- Barman Cloud backup (omit S3_BUCKET to disable) ---
+      SERVER_NAME: bitcode-hrm
+      S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      S3_PATH_PREFIX: ${BACKUP_S3_PATH_PREFIX:-bitcode-hrm}
+      S3_ENDPOINT_URL: ${BACKUP_S3_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${BACKUP_AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${BACKUP_AWS_REGION:-auto}
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 2 * * *}
+      RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      COMPRESSION: ${BACKUP_COMPRESSION:-gzip}
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - hrm-internal
+
+volumes:
+  postgres_data:
 
 networks:
   traefik-public:
     external: true
+  hrm-internal:
+    driver: bridge

@@ -43,7 +43,31 @@ jobs:
           echo "echo $SSH_PASSPHRASE" > ~/.ssh_askpass && chmod +x ~/.ssh_askpass
           echo "$SSH_PRIVATE_KEY" | tr -d '\r' | DISPLAY=None SSH_ASKPASS=~/.ssh_askpass ssh-add - >/dev/null
 
-      - name: Deploy
+      - name: Build app image
+        run: docker build -t bitcode-hrm:latest .
+
+      - name: Build postgres image
+        run: docker build -t bitcode-hrm-postgres:latest ./docker/postgres
+
+      - name: Export images
         run: |
-          git remote add production ${{ secrets.REMOTE_SERVER_URL }}
-          git push -f production HEAD:main
+          docker save bitcode-hrm:latest bitcode-hrm-postgres:latest \
+            | gzip > bitcode-hrm-images.tar.gz
+
+      - name: Upload images to server
+        run: |
+          rsync -avz --progress -e "ssh -p ${{ secrets.SSH_PORT }}" \
+            bitcode-hrm-images.tar.gz \
+            git@${{ secrets.SSH_HOST }}:/tmp/bitcode-hrm-images.tar.gz
+
+      - name: Deploy with Docker Compose
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} git@${{ secrets.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+            cd ${{ secrets.SERVER_PROJECT_PATH }}
+            docker load < /tmp/bitcode-hrm-images.tar.gz
+            docker compose down
+            docker compose up -d --no-build
+            rm /tmp/bitcode-hrm-images.tar.gz
+            docker image prune -f
+          EOF
