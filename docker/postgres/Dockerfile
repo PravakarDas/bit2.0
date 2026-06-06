@@ -26,5 +26,5 @@ COPY barman-backup.sh      /usr/local/bin/barman-backup.sh
 
 RUN chmod 0755 /usr/local/bin/entrypoint-wrapper.sh /usr/local/bin/barman-backup.sh
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint-wrapper.sh"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint-wrapper.sh"]
 CMD ["postgres"]
