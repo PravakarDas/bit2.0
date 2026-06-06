@@ -9,9 +9,15 @@ RUN apk add --no-cache \
         tini \
         ca-certificates \
         su-exec \
+    && apk add --no-cache --virtual .build-deps \
+        gcc \
+        musl-dev \
+        python3-dev \
+        libpq-dev \
     && python3 -m venv /opt/barman \
     && /opt/barman/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/barman/bin/pip install --no-cache-dir 'barman[cloud]'
+    && /opt/barman/bin/pip install --no-cache-dir 'barman[cloud]' \
+    && apk del .build-deps
 
 ENV PATH="/opt/barman/bin:${PATH}"
 
