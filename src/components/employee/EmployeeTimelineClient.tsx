@@ -50,6 +50,10 @@ function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
   let totalOvertimeMinutes = 0;
 
   records.forEach(record => {
+    // Only include days that have been settled by the automation pipeline.
+    // Unprocessed days (today / within the grace window) are excluded from every total.
+    if (!record.isProcessed) return;
+
     // Count working days (records with required times - not weekends/holidays)
     if (record.requiredCheckIn && record.requiredCheckOut) {
       workingDays++;
