@@ -101,6 +101,11 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
   let totalActualActiveMinutes = 0;
 
   records.forEach(record => {
+    // Only include days that have been settled by the automation pipeline.
+    // Unprocessed days (today / within the grace window) are excluded from every total,
+    // including the overtime minutes that drive the calculated payout amount.
+    if (!record.isProcessed) return;
+
     // Count working days (records with required times - not weekends/holidays)
     if (record.requiredCheckIn && record.requiredCheckOut) {
       // Add required active time
