@@ -158,8 +158,10 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
     ? (user.baseSalary / workingDaysInMonth / dailyWorkingMinutes)
     : 0;
 
-  // Convert remaining leave days to minutes (1 day = 8 hours = 480 minutes)
-  const renewableLeaveMinutes = totalRenewableLeaveRemainingDays * 480;
+  // Convert remaining leave days to minutes using the same dynamic daily working
+  // minutes as the per-minute salary, so 1 leave day equals one full working day
+  // for this branch (check-out - check-in - break) instead of a fixed 8h.
+  const renewableLeaveMinutes = totalRenewableLeaveRemainingDays * dailyWorkingMinutes;
 
   // Calculate payable minutes = OT/UT + unused leave days
   const payableMinutes = totalOvertimeMinutes + renewableLeaveMinutes;
