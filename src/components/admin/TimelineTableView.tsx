@@ -23,13 +23,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Edit, 
+  ChevronLeft,
+  ChevronRight,
+  Edit,
   Calendar,
   User,
   Building2,
-  RefreshCw
+  RefreshCw,
+  Home
 } from "lucide-react";
 import { updateTimelineRecord, adjustLeaveType } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
@@ -51,6 +52,8 @@ interface TimeRecord {
   requiredActiveTime: string | null;
   actualActiveTime: string | null;
   overtimeUndertime: string | null;
+  officialOvertimeundertime: string | null;
+  requestedOvertime: string | null;
   user: {
     id: string;
     firstName: string | null;
@@ -285,13 +288,19 @@ export default function TimelineTableView({
               <TableHead>Actual</TableHead>
               <TableHead>Active Time</TableHead>
               <TableHead>OT/UT</TableHead>
+              <TableHead>
+                <span className="inline-flex items-center gap-1">
+                  OT/UT <Home className="h-3.5 w-3.5 text-green-600" />
+                </span>
+              </TableHead>
+              <TableHead>Total OT/UT</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {records.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                   No timeline records found
                 </TableCell>
               </TableRow>
@@ -363,6 +372,12 @@ export default function TimelineTableView({
                   </TableCell>
                   <TableCell>
                     {getOvertimeBadge(record.overtimeUndertime)}
+                  </TableCell>
+                  <TableCell>
+                    {getOvertimeBadge(record.requestedOvertime)}
+                  </TableCell>
+                  <TableCell>
+                    {getOvertimeBadge(record.officialOvertimeundertime)}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

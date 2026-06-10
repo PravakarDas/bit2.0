@@ -372,10 +372,11 @@ export async function approveOvertimeRequest(requestId: string) {
           timeRecord.requestedOvertime,
           request.totalOvertime
         );
-        
-        // Recalculate total overtimeUndertime
-        const newOvertimeUndertime = addTimeStrings(
-          timeRecord.officialOvertimeundertime,
+
+        // officialOvertimeundertime = overtimeUndertime (office) + requestedOvertime (grand total).
+        // The office piece (overtimeUndertime) is unaffected by approving overtime.
+        const newOfficialOvertimeundertime = addTimeStrings(
+          timeRecord.overtimeUndertime,
           newRequestedOvertime
         );
 
@@ -389,11 +390,12 @@ export async function approveOvertimeRequest(requestId: string) {
             requestedOTend: timeRecord.requestedOTend && request.requestedOTend
               ? maxDate(timeRecord.requestedOTend, request.requestedOTend)
               : (timeRecord.requestedOTend || request.requestedOTend),
-            overtimeUndertime: newOvertimeUndertime,
+            officialOvertimeundertime: newOfficialOvertimeundertime,
           },
         });
       } else {
-        // Create new record if it doesn't exist
+        // Create new record if it doesn't exist. No attendance yet, so the office
+        // piece is 0 and the total equals the requested (work-from-home) overtime.
         await tx.dailyTimeRecord.create({
           data: {
             userId: request.userId,
@@ -402,8 +404,8 @@ export async function approveOvertimeRequest(requestId: string) {
             requestedOvertime: request.totalOvertime,
             requestedOTstart: request.requestedOTstart,
             requestedOTend: request.requestedOTend,
-            overtimeUndertime: request.totalOvertime,
-            officialOvertimeundertime: "00:00",
+            overtimeUndertime: "00:00",
+            officialOvertimeundertime: request.totalOvertime,
           },
         });
       }

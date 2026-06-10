@@ -106,6 +106,7 @@ const employeeItems = [
     { title: "My Leaves", url: "/leaves", icon: ScrollText },
     { title: "Notices", url: "/notices", icon: Megaphone },
     { title: "Overtime Requests", url: "/overtime-requests", icon: ClipboardList },
+    { title: "OT/UT Payout", url: "/overtime-payouts", icon: CircleDollarSign },
     { title: "My Loans", url: "/loans", icon: Banknote },
     { title: "My Medical", url: "/medical", icon: Stethoscope },
     { title: "My Wallet", url: "/wallet", icon: Wallet },

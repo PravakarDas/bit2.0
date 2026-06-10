@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/currency";
 import { toast } from "sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import OvertimePayoutSummaryGrid from "@/components/shared/OvertimePayoutSummaryGrid";
 
 interface Branch {
   id: string;
@@ -44,6 +45,10 @@ interface Summary {
   totalRequiredActiveTime: string;
   totalActualActiveTime: string;
   totalRequiredBreakTime: string;
+  totalOfficeOvertimeUndertime: string;
+  totalOfficeOvertimeMinutes: number;
+  totalWorkFromHomeOvertime: string;
+  totalWorkFromHomeMinutes: number;
   totalOvertimeUndertime: string;
   totalRequiredMinutes: number;
   totalOvertimeMinutes: number;
@@ -86,15 +91,6 @@ interface LeaveEntitlementHistoryItem {
   };
   createdAt: Date;
   updatedAt: Date;
-}
-
-function minutesToTimeString(minutes: number): string {
-  if (minutes === 0) return "00:00";
-  const isNegative = minutes < 0;
-  const absolute = Math.abs(minutes);
-  const hours = Math.floor(absolute / 60);
-  const mins = absolute % 60;
-  return `${isNegative ? "-" : ""}${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
 }
 
 export default function OvertimePayoutClient() {
@@ -289,77 +285,7 @@ export default function OvertimePayoutClient() {
 
           {summary && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="font-semibold">
-                  {summary.user.firstName && summary.user.lastName
-                    ? `${summary.user.firstName} ${summary.user.lastName}`
-                    : summary.user.email}
-                </div>
-                {summary.isPaid && (
-                  <Badge variant="secondary">Already Paid</Badge>
-                )}
-                {!summary.isPaid && (
-                  <Badge variant="outline">Pending</Badge>
-                )}
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <div>
-                  <div className="text-xs text-muted-foreground">Base Salary (Monthly)</div>
-                  <div className="text-lg font-semibold">{formatCurrency(summary.user.baseSalary || 0)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Working Days in Month</div>
-                  <div className="text-lg font-semibold">{summary.workingDaysInMonth}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Daily Working Time</div>
-                  <div className="text-lg font-semibold">
-                    {minutesToTimeString(summary.dailyWorkingMinutes)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">({summary.dailyWorkingMinutes} min)</span>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Per Minute Salary Value</div>
-                  <div className="text-lg font-semibold">{formatCurrency(summary.perMinuteSalary)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Total Required Active Time</div>
-                  <div className="text-lg font-semibold">{summary.totalRequiredActiveTime}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Total Actual Active Time</div>
-                  <div className="text-lg font-semibold">{summary.totalActualActiveTime}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Total Required Break Time</div>
-                  <div className="text-lg font-semibold">{summary.totalRequiredBreakTime}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Total Required Minutes</div>
-                  <div className="text-lg font-semibold">{minutesToTimeString(summary.totalRequiredMinutes)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Total OT/UT</div>
-                  <div className={`text-lg font-semibold ${summary.totalOvertimeUndertime.startsWith("-") ? "text-red-600" : "text-green-600"}`}>
-                    {summary.totalOvertimeUndertime.startsWith("-") ? summary.totalOvertimeUndertime : `+${summary.totalOvertimeUndertime}`}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Remaining Renewable Leaves</div>
-                  <div className="text-lg font-semibold">{summary.totalRenewableLeaveRemainingDays} day(s) = {minutesToTimeString(summary.renewableLeaveMinutes)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Payable Minutes (OT/UT + Leaves)</div>
-                  <div className="text-lg font-semibold text-blue-600">{minutesToTimeString(summary.payableMinutes)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Calculated Amount</div>
-                  <div className={`text-lg font-semibold ${summary.calculatedAmount < 0 ? "text-red-600" : "text-green-600"}`}>
-                    {formatCurrency(summary.calculatedAmount)}
-                  </div>
-                </div>
-              </div>
+              <OvertimePayoutSummaryGrid summary={summary} />
 
               {summary.isPaid && (
                 <div className="text-sm text-amber-600">

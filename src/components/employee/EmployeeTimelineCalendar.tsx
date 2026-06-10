@@ -24,6 +24,7 @@ interface TimeRecord {
   requiredActiveTime: string | null;
   actualActiveTime: string | null;
   overtimeUndertime: string | null;
+  officialOvertimeundertime: string | null;
 }
 
 interface EmployeeTimelineCalendarProps {
@@ -108,12 +109,13 @@ export default function EmployeeTimelineCalendar({
   };
 
   const getOvertimeBadge = (record: TimeRecord) => {
-    if (!record.overtimeUndertime) return null;
-    
-    const isPositive = !record.overtimeUndertime.startsWith('-');
+    // Show the grand total OT/UT (office + work-from-home) for the day.
+    if (!record.officialOvertimeundertime) return null;
+
+    const isPositive = !record.officialOvertimeundertime.startsWith('-');
     return (
       <Badge variant={isPositive ? "default" : "destructive"} className="text-xs">
-        {isPositive ? '+' : ''}{record.overtimeUndertime}
+        {isPositive ? '+' : ''}{record.officialOvertimeundertime}
       </Badge>
     );
   };
@@ -309,7 +311,7 @@ export default function EmployeeTimelineCalendar({
                       </div>
 
                       {/* Overtime/Undertime */}
-                      {selectedDayRecord.overtimeUndertime && (
+                      {selectedDayRecord.officialOvertimeundertime && (
                         <div className="space-y-2">
                           <h4 className="text-sm font-medium text-muted-foreground">Summary</h4>
                           <div className="flex justify-between items-center">

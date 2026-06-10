@@ -22,6 +22,7 @@ interface WeeklyAttendanceRecord {
     status: string;
     actualActiveTime?: string | null;
     overtimeUndertime?: string | null;
+    officialOvertimeundertime?: string | null;
 }
 
 interface LoanRepaymentItem {
@@ -156,8 +157,12 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
             }, 0);
 
             const overtimeHours = dayRecords.reduce((sum, record) => {
-                if (record.overtimeUndertime && record.overtimeUndertime.startsWith('+')) {
-                    const timeStr = record.overtimeUndertime.slice(1);
+                // Grand total OT/UT (office + work-from-home). Positive values are
+                // stored without a leading '+', so treat any non-negative, non-zero
+                // value as overtime.
+                const value = record.officialOvertimeundertime;
+                if (value && value !== '00:00' && !value.startsWith('-')) {
+                    const timeStr = value.startsWith('+') ? value.slice(1) : value;
                     const [hours, minutes] = timeStr.split(':').map(Number);
                     return sum + hours + (minutes / 60);
                 }
@@ -165,8 +170,9 @@ export function EnhancedDashboard({ initialData, branches }: EnhancedDashboardPr
             }, 0);
 
             const undertimeHours = dayRecords.reduce((sum, record) => {
-                if (record.overtimeUndertime && record.overtimeUndertime.startsWith('-')) {
-                    const timeStr = record.overtimeUndertime.slice(1);
+                const value = record.officialOvertimeundertime;
+                if (value && value.startsWith('-')) {
+                    const timeStr = value.slice(1);
                     const [hours, minutes] = timeStr.split(':').map(Number);
                     return sum + hours + (minutes / 60);
                 }

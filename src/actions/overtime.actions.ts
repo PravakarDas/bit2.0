@@ -38,12 +38,7 @@ function calculateBranchDailyActiveMinutes(
   return Math.max(0, (checkOutMinutes - checkInMinutes) - breakMinutes);
 }
 
-export async function getOvertimePayoutSummary(userId: string, year: number) {
-  const admin = await getDbUser();
-  if (!admin || admin.role !== 'SUPERADMIN') {
-    throw new Error("Unauthorized");
-  }
-
+async function buildOvertimePayoutSummary(userId: string, year: number) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -97,13 +92,14 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
 
   let totalRequiredActiveMinutes = 0;
   let totalRequiredBreakMinutes = 0;
-  let totalOvertimeMinutes = 0;
   let totalActualActiveMinutes = 0;
+  let totalOfficeOvertimeMinutes = 0;     // Σ overtimeUndertime (office / clock-based)
+  let totalWorkFromHomeMinutes = 0;       // Σ requestedOvertime (work-from-home)
+  let totalCombinedOvertimeMinutes = 0;   // Σ officialOvertimeundertime (office + WFH)
 
   records.forEach(record => {
     // Only include days that have been settled by the automation pipeline.
-    // Unprocessed days (today / within the grace window) are excluded from every total,
-    // including the overtime minutes that drive the calculated payout amount.
+    // Unprocessed days (today / within the grace window) are excluded from every total.
     if (!record.isProcessed) return;
 
     // Count working days (records with required times - not weekends/holidays)
@@ -117,17 +113,22 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
       if (record.requiredBreakTime) {
         totalRequiredBreakMinutes += timeStringToMinutes(record.requiredBreakTime);
       }
-      
-      // Count present days and overtime (only if employee checked in)
-      if (record.actualCheckIn) {
-        if (record.actualActiveTime) {
-          totalActualActiveMinutes += timeStringToMinutes(record.actualActiveTime);
-        }
 
-        // Add overtime/undertime
-        if (record.overtimeUndertime) {
-          totalOvertimeMinutes += timeStringToMinutes(record.overtimeUndertime);
-        }
+      // Overtime sums are counted for every processed working day (including
+      // work-from-home days that have no office check-in). Office + WFH = Combined.
+      if (record.overtimeUndertime) {
+        totalOfficeOvertimeMinutes += timeStringToMinutes(record.overtimeUndertime);
+      }
+      if (record.requestedOvertime) {
+        totalWorkFromHomeMinutes += timeStringToMinutes(record.requestedOvertime);
+      }
+      if (record.officialOvertimeundertime) {
+        totalCombinedOvertimeMinutes += timeStringToMinutes(record.officialOvertimeundertime);
+      }
+
+      // Actual active time only applies to days the employee actually checked in.
+      if (record.actualCheckIn && record.actualActiveTime) {
+        totalActualActiveMinutes += timeStringToMinutes(record.actualActiveTime);
       }
     }
   });
@@ -158,11 +159,13 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
     ? (user.baseSalary / workingDaysInMonth / dailyWorkingMinutes)
     : 0;
 
-  // Convert remaining leave days to minutes (1 day = 8 hours = 480 minutes)
-  const renewableLeaveMinutes = totalRenewableLeaveRemainingDays * 480;
+  // Convert remaining leave days to minutes using the same dynamic daily working
+  // minutes as the per-minute salary, so 1 leave day equals one full working day
+  // for this branch (check-out - check-in - break) instead of a fixed 8h.
+  const renewableLeaveMinutes = totalRenewableLeaveRemainingDays * dailyWorkingMinutes;
 
-  // Calculate payable minutes = OT/UT + unused leave days
-  const payableMinutes = totalOvertimeMinutes + renewableLeaveMinutes;
+  // Payable minutes = combined OT/UT (office + WFH) + unused renewable leave days
+  const payableMinutes = totalCombinedOvertimeMinutes + renewableLeaveMinutes;
 
   // Calculate final amount
   const amount = Math.ceil(payableMinutes * perMinuteSalary);
@@ -170,7 +173,9 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
   const totalRequiredActiveTime = minutesToTimeString(totalRequiredActiveMinutes);
   const totalActualActiveTime = minutesToTimeString(totalActualActiveMinutes);
   const totalRequiredBreakTime = minutesToTimeString(totalRequiredBreakMinutes);
-  const totalOvertimeUndertime = minutesToTimeString(totalOvertimeMinutes);
+  const totalOfficeOvertimeUndertime = minutesToTimeString(totalOfficeOvertimeMinutes);
+  const totalWorkFromHomeOvertime = minutesToTimeString(totalWorkFromHomeMinutes);
+  const totalOvertimeUndertime = minutesToTimeString(totalCombinedOvertimeMinutes);
 
   const existingPayout = await prisma.overtimePayout.findUnique({
     where: { userId_year: { userId, year } }
@@ -182,9 +187,13 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
     totalRequiredActiveTime,
     totalActualActiveTime,
     totalRequiredBreakTime,
+    totalOfficeOvertimeUndertime,
+    totalOfficeOvertimeMinutes,
+    totalWorkFromHomeOvertime,
+    totalWorkFromHomeMinutes,
     totalOvertimeUndertime,
     totalRequiredMinutes,
-    totalOvertimeMinutes,
+    totalOvertimeMinutes: totalCombinedOvertimeMinutes,
     totalActualActiveMinutes,
     totalRenewableLeaveRemainingDays,
     renewableLeaveMinutes,
@@ -196,6 +205,49 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
     isPaid: existingPayout?.isPaid ?? false,
     paidAt: existingPayout?.paidAt ?? null,
   };
+}
+
+export async function getOvertimePayoutSummary(userId: string, year: number) {
+  const admin = await getDbUser();
+  if (!admin || admin.role !== 'SUPERADMIN') {
+    throw new Error("Unauthorized");
+  }
+  return buildOvertimePayoutSummary(userId, year);
+}
+
+// Self-scoped: an employee can only ever read their own payout summary.
+export async function getMyOvertimePayoutSummary(year: number) {
+  const user = await getDbUser();
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+  return buildOvertimePayoutSummary(user.id, year);
+}
+
+// Self-scoped: an employee's own yearly payout history.
+export async function getMyOvertimePayoutHistory() {
+  const user = await getDbUser();
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+  return prisma.overtimePayout.findMany({
+    where: { userId: user.id },
+    select: {
+      id: true,
+      year: true,
+      totalRequiredActiveTime: true,
+      totalRequiredBreakTime: true,
+      totalOvertimeUndertime: true,
+      totalRequiredMinutes: true,
+      totalOvertimeMinutes: true,
+      calculatedAmount: true,
+      isPaid: true,
+      paidAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: { year: 'desc' },
+  });
 }
 
 export async function getEligibleEmployeesForOvertime(branchId?: string) {

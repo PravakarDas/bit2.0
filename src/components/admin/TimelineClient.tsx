@@ -28,6 +28,8 @@ interface TimeRecord {
   requiredActiveTime: string | null;
   actualActiveTime: string | null;
   overtimeUndertime: string | null;
+  officialOvertimeundertime: string | null;
+  requestedOvertime: string | null;
   autoDeductedLeaveType: string | null;
   user: {
     id: string;
