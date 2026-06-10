@@ -10,7 +10,7 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { Calendar, Clock, TrendingUp } from "lucide-react";
+import { Calendar, Clock, TrendingUp, Home } from "lucide-react";
 import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
 import AttendanceSummaryCard, { type AttendanceSummaryData } from "@/components/employee/AttendanceSummaryCard";
 
@@ -28,6 +28,8 @@ interface TimeRecord {
   requiredActiveTime: string | null;
   actualActiveTime: string | null;
   overtimeUndertime: string | null;
+  officialOvertimeundertime: string | null;
+  requestedOvertime: string | null;
 }
 
 interface EmployeeTimelineTableProps {
@@ -83,12 +85,18 @@ export default function EmployeeTimelineTable({ records, summary, latestProcesse
               <TableHead>Actual Times</TableHead>
               <TableHead>Active Time</TableHead>
               <TableHead>Overtime/Undertime</TableHead>
+              <TableHead>
+                <span className="inline-flex items-center gap-1">
+                  OT/UT <Home className="h-3.5 w-3.5 text-green-600" />
+                </span>
+              </TableHead>
+              <TableHead>Total OT/UT</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sortedRecords.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                   No timeline records found
                 </TableCell>
               </TableRow>
@@ -169,6 +177,12 @@ export default function EmployeeTimelineTable({ records, summary, latestProcesse
                   
                   <TableCell>
                     {getOvertimeBadge(record.overtimeUndertime)}
+                  </TableCell>
+                  <TableCell>
+                    {getOvertimeBadge(record.requestedOvertime)}
+                  </TableCell>
+                  <TableCell>
+                    {getOvertimeBadge(record.officialOvertimeundertime)}
                   </TableCell>
                 </TableRow>
               ))
