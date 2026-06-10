@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Calendar, Clock, TrendingUp } from "lucide-react";
 import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
+import AttendanceSummaryCard, { type AttendanceSummaryData } from "@/components/employee/AttendanceSummaryCard";
 
 interface TimeRecord {
   id: string;
@@ -31,9 +32,11 @@ interface TimeRecord {
 
 interface EmployeeTimelineTableProps {
   records: TimeRecord[];
+  summary: AttendanceSummaryData | null;
+  latestProcessedDate: Date | null;
 }
 
-export default function EmployeeTimelineTable({ records }: EmployeeTimelineTableProps) {
+export default function EmployeeTimelineTable({ records, summary, latestProcessedDate }: EmployeeTimelineTableProps) {
   const getStatusBadge = (record: TimeRecord) => {
     const display = getTimelineStatusDisplay(record);
 
@@ -65,6 +68,9 @@ export default function EmployeeTimelineTable({ records }: EmployeeTimelineTable
 
   return (
     <div className="space-y-4">
+      {/* Attendance Summary (shared across all timeline views) */}
+      <AttendanceSummaryCard summary={summary} latestProcessedDate={latestProcessedDate} />
+
       {/* Table */}
       <div className="border rounded-lg overflow-hidden">
         <Table>
@@ -171,35 +177,6 @@ export default function EmployeeTimelineTable({ records }: EmployeeTimelineTable
         </Table>
       </div>
 
-      {/* Summary Footer */}
-      {records.length > 0 && (
-        <div className="bg-gray-50 rounded-lg p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-            <div className="text-center">
-              <div className="font-medium text-gray-600">Total Records</div>
-              <div className="text-2xl font-bold">{records.length}</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-gray-600">Working Days</div>
-              <div className="text-2xl font-bold">
-                {records.filter(r => r.requiredCheckIn || r.requiredCheckOut).length}
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-gray-600">Present Days</div>
-              <div className="text-2xl font-bold text-green-600">
-                {records.filter(r => r.actualCheckIn).length}
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-gray-600">Off Days</div>
-              <div className="text-2xl font-bold text-gray-500">
-                {records.filter(r => !r.requiredCheckIn && !r.requiredCheckOut).length}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
