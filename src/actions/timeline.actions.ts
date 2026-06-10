@@ -1437,6 +1437,47 @@ export async function getTimelineRecords(
 }
 
 /**
+ * Get the most recent date that has been processed (isProcessed = true) for a
+ * user, ignoring any period filter. Used on the employee timeline to show
+ * "data processed up to" so the employee knows how current the data is.
+ */
+export async function getLatestProcessedTimelineDate(userId?: string) {
+  try {
+    const actor = await getDbUser();
+    if (!actor) {
+      return { success: false, error: "Unauthorized", date: null as Date | null };
+    }
+
+    const isSelfTimelineView = actor.role === "EMPLOYEE" && !actor.isManager;
+    const canAccess =
+      actor.role === "SUPERADMIN" || actor.role === "HR" || actor.isManager || isSelfTimelineView;
+    if (!canAccess) {
+      return { success: false, error: "Unauthorized", date: null as Date | null };
+    }
+
+    // Employees can only ever read their own latest processed date.
+    const targetUserId = isSelfTimelineView ? actor.id : userId;
+    if (!targetUserId) {
+      return { success: false, error: "User not specified", date: null as Date | null };
+    }
+
+    // Weekly-off days are also marked isProcessed, but a processed weekly-off
+    // doesn't reflect how current the actual attendance data is. Exclude them so
+    // the reported date is the latest processed *attendance* day.
+    const latest = await prisma.dailyTimeRecord.findFirst({
+      where: { userId: targetUserId, isProcessed: true, status: { not: "WEEKLY_OFF" } },
+      orderBy: { date: "desc" },
+      select: { date: true },
+    });
+
+    return { success: true, date: latest?.date ?? null };
+  } catch (error) {
+    console.error("Error fetching latest processed timeline date:", error);
+    return { success: false, error: "Failed to fetch latest processed date", date: null as Date | null };
+  }
+}
+
+/**
  * Update a specific timeline record
  */
 type TimelineRecordTransactionInput = {

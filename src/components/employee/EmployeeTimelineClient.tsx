@@ -3,14 +3,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, Clock, TrendingUp, BarChart3, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import EmployeeTimelineCalendar from "@/components/employee/EmployeeTimelineCalendar";
 import EmployeeTimelineTable from "@/components/employee/EmployeeTimelineTable";
-import EmployeeTimelineCharts from "@/components/employee/EmployeeTimelineCharts";
-import { getTimelineRecords } from "@/actions/timeline.actions";
+import { getTimelineRecords, getLatestProcessedTimelineDate } from "@/actions/timeline.actions";
+import type { TimelineStatus } from "@/lib/timeline-status";
 
 /**
  * Convert time string (HH:MM) to minutes
@@ -42,8 +41,9 @@ function minutesToTimeString(minutes: number): string {
  * Calculate summary statistics from timeline records
  */
 function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
-  let workingDays = 0;
   let presentDays = 0;
+  let absentDays = 0;
+  let onLeaveDays = 0;
   let totalRequiredMinutes = 0;
   let totalRequiredBreakMinutes = 0;
   let totalActualMinutes = 0;
@@ -54,11 +54,18 @@ function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
     // Unprocessed days (today / within the grace window) are excluded from every total.
     if (!record.isProcessed) return;
 
-    // Count working days (records with required times - not weekends/holidays)
+    // Day-type counts by status. Weekly-offs (and holidays, which have no
+    // record) are intentionally excluded from the attendance breakdown.
+    if (record.status === 'PRESENT') {
+      presentDays++;
+    } else if (record.status === 'ABSENT') {
+      absentDays++;
+    } else if (record.status === 'ON_LEAVE') {
+      onLeaveDays++;
+    }
+
+    // Time totals (only meaningful for days that had required working hours)
     if (record.requiredCheckIn && record.requiredCheckOut) {
-      workingDays++;
-      
-      // Add required time
       if (record.requiredActiveTime) {
         totalRequiredMinutes += timeStringToMinutes(record.requiredActiveTime);
       }
@@ -66,17 +73,12 @@ function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
       if (record.requiredBreakTime) {
         totalRequiredBreakMinutes += timeStringToMinutes(record.requiredBreakTime);
       }
-      
-      // Count present days (records with actual check-in)
+
       if (record.actualCheckIn) {
-        presentDays++;
-        
-        // Add actual time
         if (record.actualActiveTime) {
           totalActualMinutes += timeStringToMinutes(record.actualActiveTime);
         }
-        
-        // Add overtime/undertime
+
         if (record.overtimeUndertime) {
           totalOvertimeMinutes += timeStringToMinutes(record.overtimeUndertime);
         }
@@ -84,13 +86,18 @@ function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
     }
   });
 
-  const attendancePercentage = workingDays > 0 
-    ? ((presentDays / workingDays) * 100).toFixed(1)
+  // Total Days = Present + Absent + On Leave (all settled, schedulable days).
+  const totalDays = presentDays + absentDays + onLeaveDays;
+  const attendancePercentage = totalDays > 0
+    ? ((presentDays / totalDays) * 100).toFixed(1)
     : '0.0';
 
   return {
-    workingDays,
+    workingDays: totalDays,
+    totalDays,
     presentDays,
+    absentDays,
+    onLeaveDays,
     totalRequiredTime: minutesToTimeString(totalRequiredMinutes),
     totalRequiredBreakTime: minutesToTimeString(totalRequiredBreakMinutes),
     totalActualTime: minutesToTimeString(totalActualMinutes),
@@ -102,6 +109,7 @@ function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
 interface TimeRecord {
   id: string;
   date: Date;
+  status?: TimelineStatus | null;
   isProcessed: boolean;
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
@@ -116,7 +124,10 @@ interface TimeRecord {
 
 interface TimelineSummary {
   workingDays: number;
+  totalDays: number;
   presentDays: number;
+  absentDays: number;
+  onLeaveDays: number;
   totalRequiredTime: string;
   totalRequiredBreakTime: string;
   totalActualTime: string;
@@ -131,12 +142,13 @@ interface EmployeeTimelineClientProps {
 
 export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeTimelineClientProps) {
   void baseSalary;
-  const [activeView, setActiveView] = useState<"calendar" | "table" | "charts">("calendar");
+  const [activeView, setActiveView] = useState<"calendar" | "table">("calendar");
   const [timeRecords, setTimeRecords] = useState<TimeRecord[]>([]);
   const [summary, setSummary] = useState<TimelineSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | undefined>(undefined);
+  const [latestProcessedDate, setLatestProcessedDate] = useState<Date | null>(null);
 
   // Generate years (2026-2030)
   const years = Array.from({ length: 5 }, (_, i) => 2026 + i);
@@ -164,7 +176,10 @@ export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeT
     } else {
       setSummary({
         workingDays: 0,
+        totalDays: 0,
         presentDays: 0,
+        absentDays: 0,
+        onLeaveDays: 0,
         totalRequiredTime: '00:00',
         totalActualTime: '00:00',
         totalOvertime: '00:00',
@@ -214,45 +229,24 @@ export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeT
     void loadTimelineData();
   }, [loadTimelineData]);
 
-  const getSummaryCards = () => {
-    const isLoading = loading || !summary;
-
-    return [
-      {
-        title: "Working Days",
-        value: isLoading ? "--" : summary?.workingDays || 0,
-        icon: CalendarDays,
-        description: "Total working days"
-      },
-      {
-        title: "Present Days",
-        value: isLoading ? "--" : summary?.presentDays || 0,
-        icon: Clock,
-        description: "Days attended"
-      },
-      {
-        title: "Attendance Rate",
-        value: isLoading ? "--" : `${summary?.attendancePercentage || 0}%`,
-        icon: TrendingUp,
-        description: "Overall attendance"
-      },
-      {
-        title: "Total Overtime",
-        value: isLoading ? "--" : (() => {
-          const overtime = summary?.totalOvertime || "00:00";
-          if (overtime === '00:00') return 'On Time';
-          return overtime.startsWith('-') ? overtime : `+${overtime}`;
-        })(),
-        icon: BarChart3,
-        description: "Extra hours worked",
-        variant: (() => {
-          const overtime = summary?.totalOvertime || "00:00";
-          if (overtime === '00:00') return 'secondary';
-          return overtime.startsWith('-') ? 'destructive' : 'default';
-        })()
+  // Absolute latest processed date (ignores the period filter) so the employee
+  // always knows how current the attendance data is.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await getLatestProcessedTimelineDate(userId);
+        if (!cancelled && result.success) {
+          setLatestProcessedDate(result.date ? new Date(result.date) : null);
+        }
+      } catch (error) {
+        console.error('Error loading latest processed date:', error);
       }
-    ];
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const getPeriodLabel = () => {
     if (selectedMonth !== undefined) {
@@ -327,22 +321,6 @@ export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeT
         </CardHeader>
       </Card>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {getSummaryCards().map((card, index) => (
-          <Card key={index}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-              <card.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{card.value}</div>
-              <p className="text-xs text-muted-foreground">{card.description}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
       {/* Main Content */}
       <Card>
         <CardHeader>
@@ -353,14 +331,13 @@ export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeT
                 {getPeriodLabel()} timeline view
               </CardDescription>
             </div>
-            <Tabs 
-              value={activeView} 
-              onValueChange={(value) => setActiveView(value as "calendar" | "table" | "charts")}
+            <Tabs
+              value={activeView}
+              onValueChange={(value) => setActiveView(value as "calendar" | "table")}
             >
               <TabsList>
                 <TabsTrigger value="calendar">Calendar</TabsTrigger>
                 <TabsTrigger value="table">Table</TabsTrigger>
-                <TabsTrigger value="charts">Charts</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -379,105 +356,22 @@ export default function EmployeeTimelineClient({ userId, baseSalary }: EmployeeT
                   records={timeRecords}
                   year={selectedYear}
                   month={selectedMonth}
+                  summary={summary}
+                  latestProcessedDate={latestProcessedDate}
                 />
               )}
-              
+
               {activeView === "table" && (
                 <EmployeeTimelineTable
                   records={timeRecords}
-                />
-              )}
-              
-              {activeView === "charts" && (
-                <EmployeeTimelineCharts
-                  records={timeRecords}
                   summary={summary}
-                  year={selectedYear}
+                  latestProcessedDate={latestProcessedDate}
                 />
               )}
             </>
           )}
         </CardContent>
       </Card>
-
-      {/* Additional Summary Details */}
-      {!loading && summary && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Time Summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span>Total Required Time:</span>
-                <span className="font-medium">{summary.totalRequiredTime}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Total Actual Time:</span>
-                <span className="font-medium">{summary.totalActualTime}</span>
-              </div>
-              <div className="flex justify-between text-sm border-t pt-2">
-                <span>Net Overtime/Undertime:</span>
-                <Badge variant={
-                  summary.totalOvertime === '00:00' ? 'secondary' : 
-                  summary.totalOvertime.startsWith('-') ? 'destructive' : 'default'
-                }>
-                  {summary.totalOvertime === '00:00' ? 'On Time' :
-                   summary.totalOvertime.startsWith('-') ? summary.totalOvertime : 
-                   `+${summary.totalOvertime}`}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Attendance Summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span>Working Days:</span>
-                <span className="font-medium">{summary.workingDays}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Present Days:</span>
-                <span className="font-medium text-green-600">{summary.presentDays}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Absent Days:</span>
-                <span className="font-medium text-red-600">{summary.workingDays - summary.presentDays}</span>
-              </div>
-              <div className="flex justify-between text-sm border-t pt-2">
-                <span>Attendance Rate:</span>
-                <Badge variant="secondary">
-                  {summary.attendancePercentage}%
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-      
-      {/* Show loading state for summary details */}
-      {loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[...Array(2)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader>
-                <div className="animate-pulse bg-gray-200 h-6 w-32 rounded"></div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[...Array(4)].map((_, j) => (
-                  <div key={j} className="flex justify-between">
-                    <div className="animate-pulse bg-gray-200 h-4 w-24 rounded"></div>
-                    <div className="animate-pulse bg-gray-200 h-4 w-16 rounded"></div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

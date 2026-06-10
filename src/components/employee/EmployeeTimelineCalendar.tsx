@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Calendar, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
+import AttendanceSummaryCard, { type AttendanceSummaryData } from "@/components/employee/AttendanceSummaryCard";
 
 interface TimeRecord {
   id: string;
@@ -29,12 +30,16 @@ interface EmployeeTimelineCalendarProps {
   records: TimeRecord[];
   year: number;
   month?: number;
+  summary: AttendanceSummaryData | null;
+  latestProcessedDate: Date | null;
 }
 
-export default function EmployeeTimelineCalendar({ 
-  records, 
-  year, 
-  month: selectedMonth 
+export default function EmployeeTimelineCalendar({
+  records,
+  year,
+  month: selectedMonth,
+  summary,
+  latestProcessedDate,
 }: EmployeeTimelineCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(
     selectedMonth !== undefined ? 
@@ -118,6 +123,9 @@ export default function EmployeeTimelineCalendar({
 
   return (
     <div className="space-y-4">
+      {/* Attendance Summary (shared across all timeline views) */}
+      <AttendanceSummaryCard summary={summary} latestProcessedDate={latestProcessedDate} />
+
       {/* Calendar Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -327,52 +335,6 @@ export default function EmployeeTimelineCalendar({
             </Card>
           )}
 
-          {/* Quick Stats */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Stats</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {(() => {
-                const monthRecords = records.filter(r => {
-                  const recordDate = new Date(r.date);
-                  return recordDate.getMonth() === currentMonth.getMonth() && 
-                         recordDate.getFullYear() === currentMonth.getFullYear();
-                });
-                
-                const totalWorkingDays = monthRecords.filter(r => r.requiredCheckIn || r.requiredCheckOut).length;
-                const presentDays = monthRecords.filter(r => r.actualCheckIn).length;
-                const offDays = monthRecords.filter(r => !r.requiredCheckIn && !r.requiredCheckOut).length;
-                
-                return (
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Working Days:</span>
-                      <span className="font-medium">{totalWorkingDays}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Present:</span>
-                      <span className="font-medium text-green-600">{presentDays}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Absent:</span>
-                      <span className="font-medium text-red-600">{totalWorkingDays - presentDays}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Off Days:</span>
-                      <span className="font-medium text-gray-600">{offDays}</span>
-                    </div>
-                    <div className="flex justify-between border-t pt-2">
-                      <span>Attendance:</span>
-                      <Badge variant="secondary">
-                        {totalWorkingDays > 0 ? ((presentDays / totalWorkingDays) * 100).toFixed(1) : '0'}%
-                      </Badge>
-                    </div>
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>
