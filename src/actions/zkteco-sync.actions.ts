@@ -273,14 +273,16 @@ export async function syncEmployeeTimeData(userId: string, date: Date): Promise<
       hasUpdates = true;
 
       if (timeRecord.requiredActiveTime) {
-        const officialOvertimeUndertime = calculateOvertimeUndertime(
+        // overtimeUndertime = actualActiveTime - requiredActiveTime (office/clock-based)
+        const officeOvertimeUndertime = calculateOvertimeUndertime(
           actualActiveTime,
           timeRecord.requiredActiveTime,
         );
 
-        updateData.officialOvertimeundertime = officialOvertimeUndertime;
-        updateData.overtimeUndertime = addTimeStrings(
-          officialOvertimeUndertime,
+        updateData.overtimeUndertime = officeOvertimeUndertime;
+        // officialOvertimeundertime = overtimeUndertime + requestedOvertime (grand total)
+        updateData.officialOvertimeundertime = addTimeStrings(
+          officeOvertimeUndertime,
           timeRecord.requestedOvertime || '00:00',
         );
       }

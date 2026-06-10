@@ -24,6 +24,7 @@ interface TimeRecord {
   requiredActiveTime: string | null;
   actualActiveTime: string | null;
   overtimeUndertime: string | null;
+  officialOvertimeundertime: string | null;
   autoDeductedLeaveType: string | null;
   user: {
     id: string;
@@ -272,15 +273,15 @@ export default function TimelineCalendarView({
                           </div>
                         </div>
 
-                        {record.overtimeUndertime && (
+                        {record.officialOvertimeundertime && (
                           <div className="pt-2 border-t">
                             <div className="flex items-center justify-between text-xs">
                               <span>Overtime/Undertime:</span>
-                              <Badge 
-                                variant={record.overtimeUndertime.startsWith('-') ? "destructive" : "default"}
+                              <Badge
+                                variant={record.officialOvertimeundertime.startsWith('-') ? "destructive" : "default"}
                               >
-                                {record.overtimeUndertime.startsWith('-') ? '' : '+'}
-                                {record.overtimeUndertime}
+                                {record.officialOvertimeundertime.startsWith('-') ? '' : '+'}
+                                {record.officialOvertimeundertime}
                               </Badge>
                             </div>
                           </div>

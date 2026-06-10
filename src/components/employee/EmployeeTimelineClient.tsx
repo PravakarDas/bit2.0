@@ -79,8 +79,9 @@ function calculateTimelineSummary(records: TimeRecord[]): TimelineSummary {
           totalActualMinutes += timeStringToMinutes(record.actualActiveTime);
         }
 
-        if (record.overtimeUndertime) {
-          totalOvertimeMinutes += timeStringToMinutes(record.overtimeUndertime);
+        // Use the grand total (office + work-from-home) for the net OT/UT summary.
+        if (record.officialOvertimeundertime) {
+          totalOvertimeMinutes += timeStringToMinutes(record.officialOvertimeundertime);
         }
       }
     }

@@ -1615,14 +1615,16 @@ export async function updateTimelineRecordInTransaction(
     const requiredActiveTime = updateData.requiredActiveTime || currentRecord.requiredActiveTime;
     const actualActiveTime = updateData.actualActiveTime;
     if (typeof requiredActiveTime === 'string' && typeof actualActiveTime === 'string') {
-      updateData.officialOvertimeundertime = calculateOvertimeUndertime(
+      // overtimeUndertime = actualActiveTime - requiredActiveTime (office/clock-based)
+      updateData.overtimeUndertime = calculateOvertimeUndertime(
         actualActiveTime,
         requiredActiveTime
       );
 
+      // officialOvertimeundertime = overtimeUndertime + requestedOvertime (grand total)
       const requestedOvertime = currentRecord.requestedOvertime || '00:00';
-      updateData.overtimeUndertime = addTimeStrings(
-        updateData.officialOvertimeundertime,
+      updateData.officialOvertimeundertime = addTimeStrings(
+        updateData.overtimeUndertime,
         requestedOvertime
       );
     }
@@ -1976,15 +1978,16 @@ export async function updateTimelineRecord(
       const requiredActiveTime = updateData.requiredActiveTime || currentRecord.requiredActiveTime;
       const actualActiveTime = updateData.actualActiveTime;
       if (typeof requiredActiveTime === 'string' && typeof actualActiveTime === 'string') {
-        updateData.officialOvertimeundertime = calculateOvertimeUndertime(
+        // overtimeUndertime = actualActiveTime - requiredActiveTime (office/clock-based)
+        updateData.overtimeUndertime = calculateOvertimeUndertime(
           actualActiveTime,
           requiredActiveTime
         );
-        
-        // Calculate total overtimeUndertime (official + requested)
+
+        // officialOvertimeundertime = overtimeUndertime + requestedOvertime (grand total)
         const requestedOvertime = currentRecord.requestedOvertime || '00:00';
-        updateData.overtimeUndertime = addTimeStrings(
-          updateData.officialOvertimeundertime,
+        updateData.officialOvertimeundertime = addTimeStrings(
+          updateData.overtimeUndertime,
           requestedOvertime
         );
       }
@@ -2295,7 +2298,7 @@ export async function backfillTimelineCalculations() {
         OR: [
           { requiredActiveTime: null },
           { actualActiveTime: null },
-          { officialOvertimeundertime: null }
+          { overtimeUndertime: null }
         ]
       }
     });
@@ -2329,16 +2332,17 @@ export async function backfillTimelineCalculations() {
       const finalRequiredActiveTime = updateData.requiredActiveTime || record.requiredActiveTime;
       const finalActualActiveTime = updateData.actualActiveTime || record.actualActiveTime;
       
-      if (typeof finalRequiredActiveTime === 'string' && typeof finalActualActiveTime === 'string' && !record.officialOvertimeundertime) {
-        updateData.officialOvertimeundertime = calculateOvertimeUndertime(
+      if (typeof finalRequiredActiveTime === 'string' && typeof finalActualActiveTime === 'string' && !record.overtimeUndertime) {
+        // overtimeUndertime = actualActiveTime - requiredActiveTime (office/clock-based)
+        updateData.overtimeUndertime = calculateOvertimeUndertime(
           finalActualActiveTime,
           finalRequiredActiveTime
         );
-        
-        // Calculate total overtimeUndertime (official + requested)
+
+        // officialOvertimeundertime = overtimeUndertime + requestedOvertime (grand total)
         const requestedOvertime = record.requestedOvertime || '00:00';
-        updateData.overtimeUndertime = addTimeStrings(
-          updateData.officialOvertimeundertime,
+        updateData.officialOvertimeundertime = addTimeStrings(
+          updateData.overtimeUndertime,
           requestedOvertime
         );
       }
