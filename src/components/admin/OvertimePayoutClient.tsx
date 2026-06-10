@@ -53,6 +53,7 @@ interface Summary {
   payableMinutes: number;
   perMinuteSalary: number;
   workingDaysInMonth: number;
+  dailyWorkingMinutes: number;
   calculatedAmount: number;
   isPaid: boolean;
   paidAt: Date | null;
@@ -310,6 +311,13 @@ export default function OvertimePayoutClient() {
                 <div>
                   <div className="text-xs text-muted-foreground">Working Days in Month</div>
                   <div className="text-lg font-semibold">{summary.workingDaysInMonth}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Daily Working Time</div>
+                  <div className="text-lg font-semibold">
+                    {minutesToTimeString(summary.dailyWorkingMinutes)}{" "}
+                    <span className="text-xs font-normal text-muted-foreground">({summary.dailyWorkingMinutes} min)</span>
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Per Minute Salary Value</div>

@@ -139,10 +139,23 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
   // Calculate total required minutes without leave deduction
   const totalRequiredMinutes = totalRequiredActiveMinutes + totalRequiredBreakMinutes;
 
-  // Calculate per-minute salary: baseSalary / workingDaysInMonth / 480 minutes (8 hours)
+  // Daily working minutes come from the employee's branch settings
+  // (required check-out - required check-in - break duration), so the per-minute
+  // salary tracks the branch's actual required working hours instead of a fixed 8h.
+  // Falls back to 480 (8h) when no branch is set or the settings are invalid.
+  const branchDailyWorkingMinutes = user.branch
+    ? calculateBranchDailyActiveMinutes(
+        user.branch.checkInTime,
+        user.branch.checkOutTime,
+        user.branch.breakDuration,
+      )
+    : 0;
+  const dailyWorkingMinutes = branchDailyWorkingMinutes > 0 ? branchDailyWorkingMinutes : 480;
+
+  // Calculate per-minute salary: baseSalary / workingDaysInMonth / dailyWorkingMinutes
   const workingDaysInMonth = user.workingDaysInMonth || 22;
-  const perMinuteSalary = workingDaysInMonth > 0 
-    ? (user.baseSalary / workingDaysInMonth / 480)
+  const perMinuteSalary = workingDaysInMonth > 0
+    ? (user.baseSalary / workingDaysInMonth / dailyWorkingMinutes)
     : 0;
 
   // Convert remaining leave days to minutes (1 day = 8 hours = 480 minutes)
@@ -178,6 +191,7 @@ export async function getOvertimePayoutSummary(userId: string, year: number) {
     payableMinutes,
     perMinuteSalary,
     workingDaysInMonth,
+    dailyWorkingMinutes,
     calculatedAmount: amount,
     isPaid: existingPayout?.isPaid ?? false,
     paidAt: existingPayout?.paidAt ?? null,
