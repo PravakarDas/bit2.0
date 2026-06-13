@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,6 +19,8 @@ type SettingsState = {
   timelineCronHour: number;
   timelineCronMinute: number;
   zktecoCronEnabled: boolean;
+  zktecoCronMode: string;
+  zktecoIntervalMinutes: number;
   zktecoCronHour: number;
   zktecoCronMinute: number;
   leaveAutomationCronEnabled: boolean;
@@ -70,6 +73,8 @@ function formatHistoryField(field: string) {
     timelineCronHour: "Timeline Hour",
     timelineCronMinute: "Timeline Minute",
     zktecoCronEnabled: "ZKTeco Sync Cron",
+    zktecoCronMode: "ZKTeco Sync Mode",
+    zktecoIntervalMinutes: "ZKTeco Interval (min)",
     zktecoCronHour: "ZKTeco Hour",
     zktecoCronMinute: "ZKTeco Minute",
     leaveAutomationCronEnabled: "Leave Automation Cron",
@@ -225,6 +230,7 @@ export default function SystemControlClient({
                           min={0}
                           max={23}
                           value={row.hour}
+                          disabled={row.key === "zkteco" && form.zktecoCronMode === "INTERVAL"}
                           onChange={(e) => setCronHour(row.key as "timeline" | "zkteco" | "leave", Number(e.target.value))}
                           className="w-24"
                         />
@@ -235,6 +241,7 @@ export default function SystemControlClient({
                           min={0}
                           max={59}
                           value={row.minute}
+                          disabled={row.key === "zkteco" && form.zktecoCronMode === "INTERVAL"}
                           onChange={(e) => setCronMinute(row.key as "timeline" | "zkteco" | "leave", Number(e.target.value))}
                           className="w-24"
                         />
@@ -244,6 +251,61 @@ export default function SystemControlClient({
                 </TableBody>
               </Table>
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label>ZKTeco Sync Schedule</Label>
+            <p className="text-xs text-muted-foreground">
+              Choose how the ZKTeco attendance sync is triggered. A new sync never overlaps a running one.
+            </p>
+            <RadioGroup
+              value={form.zktecoCronMode === "INTERVAL" ? "INTERVAL" : "DAILY"}
+              onValueChange={(value: string) => setForm((prev) => ({ ...prev, zktecoCronMode: value }))}
+              className="gap-3"
+            >
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <RadioGroupItem value="DAILY" id="zkteco-mode-daily" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <Label htmlFor="zkteco-mode-daily" className="font-medium">
+                    Once a day (fixed time)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Runs once daily at the ZKTeco Sync hour:minute set in the table above.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <RadioGroupItem value="INTERVAL" id="zkteco-mode-interval" className="mt-0.5" />
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="zkteco-mode-interval" className="font-medium">
+                    Every N minutes (no overlap)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Re-runs the sync repeatedly. If a sync is still running, the next one waits until it
+                    finishes, then starts again after the gap below.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="zkteco-interval-minutes" className="text-xs">
+                      Gap (minutes)
+                    </Label>
+                    <Input
+                      id="zkteco-interval-minutes"
+                      type="number"
+                      min={1}
+                      max={1440}
+                      value={form.zktecoIntervalMinutes}
+                      disabled={form.zktecoCronMode !== "INTERVAL"}
+                      onChange={(e) => {
+                        const next = Math.min(1440, Math.max(1, Number.isNaN(Number(e.target.value)) ? 1 : Number(e.target.value)));
+                        setForm((prev) => ({ ...prev, zktecoIntervalMinutes: next }));
+                      }}
+                      className="w-24"
+                    />
+                  </div>
+                </div>
+              </div>
+            </RadioGroup>
           </div>
 
           <div className="space-y-4">
@@ -312,7 +374,9 @@ export default function SystemControlClient({
               Timeline: {twoDigits(form.timelineCronHour)}:{twoDigits(form.timelineCronMinute)}
             </Badge>
             <Badge variant="outline">
-              ZKTeco: {twoDigits(form.zktecoCronHour)}:{twoDigits(form.zktecoCronMinute)}
+              ZKTeco: {form.zktecoCronMode === "INTERVAL"
+                ? `every ${form.zktecoIntervalMinutes} min`
+                : `${twoDigits(form.zktecoCronHour)}:${twoDigits(form.zktecoCronMinute)}`}
             </Badge>
             <Badge variant="outline">
               Leave: {twoDigits(form.leaveAutomationCronHour)}:{twoDigits(form.leaveAutomationCronMinute)}

@@ -7,6 +7,8 @@ function getEnvDefaults() {
     timelineCronHour: 1,
     timelineCronMinute: 24,
     zktecoCronEnabled: true,
+    zktecoCronMode: "DAILY",
+    zktecoIntervalMinutes: 15,
     zktecoCronHour: 11,
     zktecoCronMinute: 0,
     leaveAutomationCronEnabled: true,

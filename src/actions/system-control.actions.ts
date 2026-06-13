@@ -13,6 +13,8 @@ type UpdatePayload = {
   timelineCronHour?: number;
   timelineCronMinute?: number;
   zktecoCronEnabled?: boolean;
+  zktecoCronMode?: string;
+  zktecoIntervalMinutes?: number;
   zktecoCronHour?: number;
   zktecoCronMinute?: number;
   leaveAutomationCronEnabled?: boolean;
@@ -48,6 +50,8 @@ function sanitizePayload(user: NonNullable<Awaited<ReturnType<typeof getDbUser>>
   if (typeof payload.timelineCronMinute === "number") set("timelineCronMinute", normalizeCronPart(payload.timelineCronMinute, 0, 59, 24));
 
   if (typeof payload.zktecoCronEnabled === "boolean") set("zktecoCronEnabled", payload.zktecoCronEnabled);
+  if (typeof payload.zktecoCronMode === "string") set("zktecoCronMode", payload.zktecoCronMode === "INTERVAL" ? "INTERVAL" : "DAILY");
+  if (typeof payload.zktecoIntervalMinutes === "number") set("zktecoIntervalMinutes", normalizeCronPart(payload.zktecoIntervalMinutes, 1, 1440, 15));
   if (typeof payload.zktecoCronHour === "number") set("zktecoCronHour", normalizeCronPart(payload.zktecoCronHour, 0, 23, 11));
   if (typeof payload.zktecoCronMinute === "number") set("zktecoCronMinute", normalizeCronPart(payload.zktecoCronMinute, 0, 59, 0));
 
