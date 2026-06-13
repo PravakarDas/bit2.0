@@ -151,32 +151,29 @@ function startZKTecoSyncCron() {
 
   globalAny[ZKTECO_CRON_GLOBAL_FLAG] = true;
 
+  // DAILY mode: ensures the job only fires once per calendar day.
   let lastRunDate = "";
+  // INTERVAL mode: epoch ms when the previous sync finished (gap is measured from finish).
+  let lastRunFinishedAt = 0;
+  // Single-flight lock shared by both modes so two runs never overlap. A new tick that
+  // fires while a sync is still running is skipped; the next eligible tick picks it up.
+  let isSyncRunning = false;
 
-  const runIfDue = async () => {
-    const runtime = await getRuntimeSystemControlConfig();
-    if (!runtime.zktecoCronEnabled) {
-      return;
+  // Runs the actual sync once, guarded by the no-overlap lock and the base-URL health check.
+  // Returns true if the sync was attempted (so callers can mark progress), false if skipped.
+  const runSyncOnce = async (zkTecoBaseUrl: string): Promise<boolean> => {
+    if (isSyncRunning) {
+      return false;
     }
 
-    const timezone = runtime.appTimezone;
-    const zkTecoBaseUrl = runtime.zktecoBaseUrl;
-    const targetHour = getValidTime(String(runtime.zktecoCronHour), 11, 0, 23);
-    const targetMinute = getValidTime(String(runtime.zktecoCronMinute), 0, 0, 59);
-    const localNow = getLocalTimeParts(timezone);
-    const { shouldRun, todayKey } = shouldRunForToday(localNow, targetHour, targetMinute, lastRunDate);
-    if (!shouldRun) {
-      return;
+    const isBaseUrlUp = await isZKTecoBaseUrlReachable(zkTecoBaseUrl);
+    if (!isBaseUrlUp) {
+      console.warn(`Skipping ZKTeco sync cron: base URL is down or unreachable (${zkTecoBaseUrl})`);
+      return false;
     }
 
+    isSyncRunning = true;
     try {
-      const isBaseUrlUp = await isZKTecoBaseUrlReachable(zkTecoBaseUrl);
-      if (!isBaseUrlUp) {
-        console.warn(`Skipping ZKTeco sync cron: base URL is down or unreachable (${zkTecoBaseUrl})`);
-        return;
-      }
-
-      lastRunDate = todayKey;
       console.log("Starting ZKTeco sync cron job...");
       const result = await syncAllEmployeesTimeData(); // Sync all pending missing dates for every employee
       console.log("ZKTeco sync cron completed:", result.message);
@@ -185,7 +182,55 @@ function startZKTecoSyncCron() {
       }
     } catch (error) {
       console.error("ZKTeco sync cron failed:", error);
+    } finally {
+      isSyncRunning = false;
+      lastRunFinishedAt = Date.now();
     }
+
+    return true;
+  };
+
+  const runIfDue = async () => {
+    // Never start a second pass while one is in flight (sync may outlast the 60s tick).
+    if (isSyncRunning) {
+      return;
+    }
+
+    const runtime = await getRuntimeSystemControlConfig();
+    if (!runtime.zktecoCronEnabled) {
+      return;
+    }
+
+    const zkTecoBaseUrl = runtime.zktecoBaseUrl;
+    const mode = runtime.zktecoCronMode === "INTERVAL" ? "INTERVAL" : "DAILY";
+
+    if (mode === "INTERVAL") {
+      // Gap measured from the end of the previous run: wait N minutes after it finished.
+      const intervalMinutes = getValidTime(String(runtime.zktecoIntervalMinutes), 15, 1, 1440);
+      const intervalMs = intervalMinutes * 60_000;
+      const elapsed = Date.now() - lastRunFinishedAt;
+      // lastRunFinishedAt === 0 means we have never run yet → run immediately on startup.
+      if (lastRunFinishedAt !== 0 && elapsed < intervalMs) {
+        return;
+      }
+
+      await runSyncOnce(zkTecoBaseUrl);
+      return;
+    }
+
+    // DAILY mode: fire once per day at/after the configured hour:minute.
+    const timezone = runtime.appTimezone;
+    const targetHour = getValidTime(String(runtime.zktecoCronHour), 11, 0, 23);
+    const targetMinute = getValidTime(String(runtime.zktecoCronMinute), 0, 0, 59);
+    const localNow = getLocalTimeParts(timezone);
+    const { shouldRun, todayKey } = shouldRunForToday(localNow, targetHour, targetMinute, lastRunDate);
+    if (!shouldRun) {
+      return;
+    }
+
+    // Mark the day before awaiting so a long sync can't trigger a duplicate same-day run.
+    lastRunDate = todayKey;
+    await runSyncOnce(zkTecoBaseUrl);
   };
 
   runIfDue();
