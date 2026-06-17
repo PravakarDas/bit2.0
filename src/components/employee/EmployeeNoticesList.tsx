@@ -3,6 +3,7 @@
 import { AlertTriangle, Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { formatTime12 } from "@/lib/utils";
 
 interface Notice {
   id: string;
@@ -25,11 +26,7 @@ function formatDate(date: Date | string): string {
 }
 
 function formatTime(date: Date | string): string {
-  const d = new Date(date);
-  return d.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatTime12(date);
 }
 
 export function EmployeeNoticesList({ notices }: EmployeeNoticesListProps) {

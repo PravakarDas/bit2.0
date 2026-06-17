@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area"; 
 import type { AdminNotification } from "@prisma/client";
 import { NotificationStatus } from "@prisma/client";
+import { formatTime12 } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -245,7 +246,7 @@ export function NotificationBell() {
                             <div className="flex-1">
                               <CardTitle className="text-sm">{notification.title}</CardTitle>
                               <CardDescription className="text-xs">
-                                {new Date(notification.createdAt).toLocaleDateString()} at {new Date(notification.createdAt).toLocaleTimeString()}
+                                {new Date(notification.createdAt).toLocaleDateString()} at {formatTime12(notification.createdAt)}
                               </CardDescription>
                             </div>
                           </div>

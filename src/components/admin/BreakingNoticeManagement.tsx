@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar, Edit, Eye, Megaphone, Save, Trash2, User2, Users } from "lucide-react";
+import { formatDateTime12 } from "@/lib/utils";
 
 type TargetType = "ALL_EMPLOYEES" | "SINGLE_EMPLOYEE" | "SINGLE_BRANCH";
 
@@ -95,7 +96,7 @@ function formatDate(value: Date | string | null) {
     return "-";
   }
 
-  return new Date(value).toLocaleString();
+  return formatDateTime12(value);
 }
 
 export function BreakingNoticeManagement({

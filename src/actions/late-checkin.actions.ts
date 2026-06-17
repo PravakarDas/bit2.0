@@ -65,7 +65,7 @@ function formatClock(value: Date | null) {
     return "--";
   }
 
-  return format(value, "HH:mm");
+  return format(value, "h:mm a");
 }
 
 function buildLateRecordDateFilter(fromDate?: string, toDate?: string) {

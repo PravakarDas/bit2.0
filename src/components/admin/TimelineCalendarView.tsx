@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Calendar, Clock } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatTime12 } from "@/lib/utils";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
 
@@ -253,8 +253,8 @@ export default function TimelineCalendarView({
                             <div className="mt-1 space-y-1">
                               {record.requiredCheckIn ? (
                                 <>
-                                  <div>In: {format(new Date(record.requiredCheckIn), 'HH:mm')}</div>
-                                  <div>Out: {record.requiredCheckOut ? format(new Date(record.requiredCheckOut), 'HH:mm') : '--'}</div>
+                                  <div>In: {formatTime12(record.requiredCheckIn)}</div>
+                                  <div>Out: {formatTime12(record.requiredCheckOut)}</div>
                                   <div>Break: {record.requiredBreakTime || '--'}</div>
                                 </>
                               ) : (
@@ -266,8 +266,8 @@ export default function TimelineCalendarView({
                           <div>
                             <span className="font-medium">Actual:</span>
                             <div className="mt-1 space-y-1">
-                              <div>In: {record.actualCheckIn ? format(new Date(record.actualCheckIn), 'HH:mm') : '--'}</div>
-                              <div>Out: {record.actualCheckOut ? format(new Date(record.actualCheckOut), 'HH:mm') : '--'}</div>
+                              <div>In: {formatTime12(record.actualCheckIn)}</div>
+                              <div>Out: {formatTime12(record.actualCheckOut)}</div>
                               <div>Break: {record.actualBreakTime || '--'}</div>
                             </div>
                           </div>

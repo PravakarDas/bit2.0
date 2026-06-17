@@ -36,6 +36,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
+import { formatTime12 } from "@/lib/utils";
 import {
   Clock,
   Calendar,
@@ -297,8 +298,8 @@ export function TimelineModificationReviewClient({ initialRequests }: TimelineMo
                       </TableCell>
                       <TableCell>{format(new Date(request.requestedDate), "PPP")}</TableCell>
                       <TableCell className="text-sm">
-                        <div>In: {request.requestedCheckIn ? format(new Date(request.requestedCheckIn), "HH:mm") : "-"}</div>
-                        <div>Out: {request.requestedCheckOut ? format(new Date(request.requestedCheckOut), "HH:mm") : "-"}</div>
+                        <div>In: {formatTime12(request.requestedCheckIn)}</div>
+                        <div>Out: {formatTime12(request.requestedCheckOut)}</div>
                         <div>Break: {request.requestedBreakTime || "-"}</div>
                       </TableCell>
                       <TableCell>{getStatusBadge(request.status)}</TableCell>
@@ -357,8 +358,8 @@ export function TimelineModificationReviewClient({ initialRequests }: TimelineMo
               </div>
 
               <div className="rounded-lg border p-3 text-sm">
-                <p><span className="font-medium">Requested Check-In:</span> {selectedRequest.requestedCheckIn ? format(new Date(selectedRequest.requestedCheckIn), "HH:mm") : "-"}</p>
-                <p><span className="font-medium">Requested Check-Out:</span> {selectedRequest.requestedCheckOut ? format(new Date(selectedRequest.requestedCheckOut), "HH:mm") : "-"}</p>
+                <p><span className="font-medium">Requested Check-In:</span> {formatTime12(selectedRequest.requestedCheckIn)}</p>
+                <p><span className="font-medium">Requested Check-Out:</span> {formatTime12(selectedRequest.requestedCheckOut)}</p>
                 <p><span className="font-medium">Requested Break:</span> {selectedRequest.requestedBreakTime || "-"}</p>
               </div>
 

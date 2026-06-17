@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, Settings, AlertCircle, CheckCircle2, FileText, Info } from "lucide-react";
 import { toggleEmiCollection, skipEmiForMonth, recordManualPayment, getLoanActivityHistory } from "@/actions/loan.actions";
 import { toast } from "sonner";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDateTime12 } from "@/lib/utils";
 
 type LoanActivityHistory = Awaited<ReturnType<typeof getLoanActivityHistory>>;
 type LoanPayment = NonNullable<LoanActivityHistory["payments"]>[number];
@@ -496,7 +496,7 @@ export function EmiManageDialog({ loan }: EmiManageDialogProps) {
                           <div key={log.id} className="p-2 bg-muted rounded">
                             <p className="text-sm">{log.changeReason}</p>
                             <span className="text-xs text-muted-foreground">
-                              {new Date(log.createdAt).toLocaleString()}
+                              {formatDateTime12(log.createdAt)}
                             </span>
                           </div>
                         ))}

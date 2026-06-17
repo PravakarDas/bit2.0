@@ -35,6 +35,7 @@ import {
 import { updateTimelineRecord, adjustLeaveType } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
+import { formatTime12 } from "@/lib/utils";
 import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
 
 interface TimeRecord {
@@ -348,8 +349,8 @@ export default function TimelineTableView({
                     <div className="text-sm space-y-1">
                       {record.requiredCheckIn ? (
                         <>
-                          <div>In: {format(new Date(record.requiredCheckIn), 'HH:mm')}</div>
-                          <div>Out: {record.requiredCheckOut ? format(new Date(record.requiredCheckOut), 'HH:mm') : '--'}</div>
+                          <div>In: {formatTime12(record.requiredCheckIn)}</div>
+                          <div>Out: {formatTime12(record.requiredCheckOut)}</div>
                           <div>Break: {record.requiredBreakTime || '--'}</div>
                         </>
                       ) : (
@@ -359,8 +360,8 @@ export default function TimelineTableView({
                   </TableCell>
                   <TableCell>
                     <div className="text-sm space-y-1">
-                      <div>In: {record.actualCheckIn ? format(new Date(record.actualCheckIn), 'HH:mm') : '--'}</div>
-                      <div>Out: {record.actualCheckOut ? format(new Date(record.actualCheckOut), 'HH:mm') : '--'}</div>
+                      <div>In: {formatTime12(record.actualCheckIn)}</div>
+                      <div>Out: {formatTime12(record.actualCheckOut)}</div>
                       <div>Break: {record.actualBreakTime || '--'}</div>
                     </div>
                   </TableCell>

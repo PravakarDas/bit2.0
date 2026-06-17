@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Calendar, Clock } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatTime12 } from "@/lib/utils";
 import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
 import AttendanceSummaryCard, { type AttendanceSummaryData } from "@/components/employee/AttendanceSummaryCard";
 
@@ -210,13 +210,13 @@ export default function EmployeeTimelineCalendar({
                           
                           {record.actualCheckIn && (
                             <div className="text-xs text-muted-foreground">
-                              In: {format(new Date(record.actualCheckIn), 'HH:mm')}
+                              In: {formatTime12(record.actualCheckIn)}
                             </div>
                           )}
                           
                           {record.actualCheckOut && (
                             <div className="text-xs text-muted-foreground">
-                              Out: {format(new Date(record.actualCheckOut), 'HH:mm')}
+                              Out: {formatTime12(record.actualCheckOut)}
                             </div>
                           )}
                         </div>
@@ -258,13 +258,12 @@ export default function EmployeeTimelineCalendar({
                           <div className="space-y-1 text-sm">
                             <div className="flex justify-between">
                               <span>Check In:</span>
-                              <span>{format(new Date(selectedDayRecord.requiredCheckIn), 'HH:mm')}</span>
+                              <span>{formatTime12(selectedDayRecord.requiredCheckIn)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span>Check Out:</span>
                               <span>
-                                {selectedDayRecord.requiredCheckOut ? 
-                                  format(new Date(selectedDayRecord.requiredCheckOut), 'HH:mm') : '--'}
+                                {formatTime12(selectedDayRecord.requiredCheckOut)}
                               </span>
                             </div>
                             <div className="flex justify-between">
@@ -288,15 +287,13 @@ export default function EmployeeTimelineCalendar({
                           <div className="flex justify-between">
                             <span>Check In:</span>
                             <span>
-                              {selectedDayRecord.actualCheckIn ? 
-                                format(new Date(selectedDayRecord.actualCheckIn), 'HH:mm') : '--'}
+                              {formatTime12(selectedDayRecord.actualCheckIn)}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span>Check Out:</span>
                             <span>
-                              {selectedDayRecord.actualCheckOut ? 
-                                format(new Date(selectedDayRecord.actualCheckOut), 'HH:mm') : '--'}
+                              {formatTime12(selectedDayRecord.actualCheckOut)}
                             </span>
                           </div>
                           <div className="flex justify-between">

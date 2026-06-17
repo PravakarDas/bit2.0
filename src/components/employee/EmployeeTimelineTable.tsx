@@ -1,6 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
+import { formatTime12 } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { 
   Table, 
@@ -128,11 +129,11 @@ export default function EmployeeTimelineTable({ records, summary, latestProcesse
                         <>
                           <div className="flex items-center gap-2">
                             <Clock className="h-3 w-3 text-muted-foreground" />
-                            <span>In: {format(new Date(record.requiredCheckIn), 'HH:mm')}</span>
+                            <span>In: {formatTime12(record.requiredCheckIn)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Clock className="h-3 w-3 text-muted-foreground" />
-                            <span>Out: {record.requiredCheckOut ? format(new Date(record.requiredCheckOut), 'HH:mm') : '--'}</span>
+                            <span>Out: {formatTime12(record.requiredCheckOut)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <TrendingUp className="h-3 w-3 text-muted-foreground" />
@@ -149,11 +150,11 @@ export default function EmployeeTimelineTable({ records, summary, latestProcesse
                     <div className="text-sm space-y-1">
                       <div className="flex items-center gap-2">
                         <Clock className="h-3 w-3 text-muted-foreground" />
-                        <span>In: {record.actualCheckIn ? format(new Date(record.actualCheckIn), 'HH:mm') : '--'}</span>
+                        <span>In: {formatTime12(record.actualCheckIn)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Clock className="h-3 w-3 text-muted-foreground" />
-                        <span>Out: {record.actualCheckOut ? format(new Date(record.actualCheckOut), 'HH:mm') : '--'}</span>
+                        <span>Out: {formatTime12(record.actualCheckOut)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <TrendingUp className="h-3 w-3 text-muted-foreground" />
