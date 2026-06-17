@@ -1831,6 +1831,104 @@ export async function updateTimelineRecordInTransaction(
   return { success: true, record: updatedRecord, penaltyAdjustment: adjustment };
 }
 
+/**
+ * Admin/manager toggle of a record's processed status.
+ *
+ * - Marking PROCESSED simply flags the day as handled.
+ * - Marking UNPROCESSED performs a full reset so the server can re-fetch the day:
+ *   it nulls the actual check-in/out (+break) and their derived values, resets the
+ *   status to PRESENT with the branch's required times restored, clears any late
+ *   penalty, and reverses any wallet/leave effect that was applied for that day
+ *   (late penalty, absent penalty, or auto leave deduction). The ZKTeco sync /
+ *   leave automation then re-evaluates the day from scratch.
+ */
+export async function setTimelineRecordProcessed(recordId: string, isProcessed: boolean) {
+  try {
+    const actor = await getDbUser();
+    if (!actor) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const canUpdateTimeline = actor.role === "SUPERADMIN" || actor.role === "HR" || (actor.role === "EMPLOYEE" && actor.isManager);
+    if (!canUpdateTimeline) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const record = await prisma.dailyTimeRecord.findUnique({ where: { id: recordId } });
+    if (!record) {
+      return { success: false, error: 'Timeline record not found' };
+    }
+
+    if (record.isProcessed === isProcessed) {
+      return { success: true };
+    }
+
+    if (isProcessed) {
+      // Mark as processed (admin/manager asserts the day is handled).
+      await prisma.dailyTimeRecord.update({
+        where: { id: recordId },
+        data: { isProcessed: true, updatedAt: new Date() },
+      });
+    } else {
+      // Un-process → full reset to a re-fetchable PRESENT day.
+      const employee = await prisma.user.findUnique({
+        where: { id: record.userId },
+        select: { branch: { select: { checkInTime: true, checkOutTime: true, breakDuration: true } } },
+      });
+
+      const { year, month, day } = getBangladeshDateParts(record.date);
+      const [checkInHour, checkInMin] = (employee?.branch?.checkInTime || '09:00').split(':').map(Number);
+      const [checkOutHour, checkOutMin] = (employee?.branch?.checkOutTime || '18:00').split(':').map(Number);
+      const requiredCheckIn = createBangladeshDateTime(year, month, day, checkInHour, checkInMin);
+      const requiredCheckOut = createBangladeshDateTime(year, month, day, checkOutHour, checkOutMin);
+      const requiredBreakTime = employee?.branch?.breakDuration || '01:00';
+      const requiredActiveTime = calculateActiveTime(requiredCheckIn, requiredCheckOut, requiredBreakTime);
+
+      await prisma.$transaction(async (tx) => {
+        // Reverse any wallet/leave effect applied when this day was processed.
+        await reconcileLatePenaltyWalletOnTimelineEdit(tx, record.userId, record.date, 0, 0);
+        if (record.status === "ABSENT") {
+          await reverseAbsentPenaltyOnTimelineEdit(tx, record.userId, record.date);
+        }
+        if (record.status === "ON_LEAVE") {
+          await reverseAutoLeaveDeductionOnTimelineEdit(tx, record);
+        }
+
+        await tx.dailyTimeRecord.update({
+          where: { id: recordId },
+          data: {
+            isProcessed: false,
+            status: "PRESENT",
+            requiredCheckIn,
+            requiredCheckOut,
+            requiredBreakTime,
+            requiredActiveTime,
+            // Clear actuals + derived values so the server can re-fetch this day.
+            actualCheckIn: null,
+            actualCheckOut: null,
+            actualBreakTime: null,
+            actualActiveTime: null,
+            overtimeUndertime: null,
+            officialOvertimeundertime: null,
+            lateCheckInMinutes: 0,
+            lateCheckInPenalty: 0,
+            autoDeductedLeaveType: null,
+            updatedAt: new Date(),
+          },
+        });
+      });
+    }
+
+    revalidatePath('/admin/timeline');
+    revalidatePath('/manager/timeline');
+    revalidatePath('/timeline');
+    return { success: true };
+  } catch (error) {
+    console.error('Error setting timeline processed status:', error);
+    return { success: false, error: 'Failed to update processing status' };
+  }
+}
+
 export async function updateTimelineRecord(
   recordId: string,
   data: {
