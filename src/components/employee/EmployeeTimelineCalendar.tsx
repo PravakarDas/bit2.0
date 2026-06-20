@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Calendar, Clock } from "lucide-react";
 import { cn, formatTime12 } from "@/lib/utils";
 import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
-import AttendanceSummaryCard, { type AttendanceSummaryData } from "@/components/employee/AttendanceSummaryCard";
 
 interface TimeRecord {
   id: string;
@@ -31,16 +30,14 @@ interface EmployeeTimelineCalendarProps {
   records: TimeRecord[];
   year: number;
   month?: number;
-  summary: AttendanceSummaryData | null;
-  latestProcessedDate: Date | null;
+  summary?: any | null;
+  latestProcessedDate?: Date | null;
 }
 
 export default function EmployeeTimelineCalendar({
   records,
   year,
   month: selectedMonth,
-  summary,
-  latestProcessedDate,
 }: EmployeeTimelineCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(
     selectedMonth !== undefined ? 
@@ -125,9 +122,6 @@ export default function EmployeeTimelineCalendar({
 
   return (
     <div className="space-y-4">
-      {/* Attendance Summary (shared across all timeline views) */}
-      <AttendanceSummaryCard summary={summary} latestProcessedDate={latestProcessedDate} />
-
       {/* Calendar Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

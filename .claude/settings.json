@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pnpm add *)"
+      "Bash(pnpm add *)",
+      "Bash(curl -s http://localhost:3000/timeline)",
+      "Bash(npm run *)"
     ]
   }
 }
