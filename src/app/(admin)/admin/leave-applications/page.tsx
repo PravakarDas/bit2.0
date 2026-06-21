@@ -100,9 +100,15 @@ export default async function AdminLeaveApplicationsPage() {
                                                 {new Date(application.createdAt).toLocaleDateString()}
                                             </TableCell>
                                             <TableCell>
-                                                <Badge variant="secondary">
-                                                    Calculate remaining
-                                                </Badge>
+                                                {application.remainingDays !== null ? (
+                                                    <Badge variant="secondary">
+                                                        {application.remainingDays} {application.remainingDays === 1 ? "day" : "days"}
+                                                    </Badge>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-sm italic">
+                                                        No entitlement
+                                                    </span>
+                                                )}
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <ApprovalButtons applicationId={application.id} />

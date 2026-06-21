@@ -54,6 +54,11 @@ const managerNavItems = [
         icon: CalendarDays,
     },
     {
+        title: "Leave Applications",
+        url: "/manager/leave-applications",
+        icon: FileCheck,
+    },
+    {
         title: "Leave-board",
         url: "/manager/leave-board",
         icon: ScrollText,
