@@ -227,7 +227,7 @@ export default function EmployeeTimelineClient({
               setEndDate(endOfMonth(now));
             }}
           >
-            Today
+            This Month
           </Button>
           <Button
             variant="outline"

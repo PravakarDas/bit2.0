@@ -19,6 +19,17 @@ export interface AttendanceSummaryStatsData {
   totalOvertime: string;
 }
 
+function formatOvertimeDisplay(overtime: string): string {
+  if (!overtime) return "0h:00m";
+
+  const isNegative = overtime.startsWith("-");
+  const cleanTime = overtime.replace("-", "").replace("+", "");
+  const [hours, minutes] = cleanTime.split(":").map(Number);
+
+  const sign = isNegative ? "-" : "+";
+  return `${sign}${hours || 0}h:${(minutes || 0).toString().padStart(2, "0")}m`;
+}
+
 interface AttendanceSummaryStatsProps {
   data: AttendanceSummaryStatsData | null;
 }
@@ -92,7 +103,9 @@ export default function AttendanceSummaryStats({
                 <Icon className={`h-5 w-5 ${stat.textColor}`} />
               </div>
               <div className={`text-2xl font-bold ${stat.textColor} mb-1`}>
-                {stat.value}
+                {stat.label === "Net OT/UT"
+                  ? formatOvertimeDisplay(String(stat.value))
+                  : stat.value}
               </div>
               <div className="text-xs font-medium text-gray-600">
                 {stat.label}

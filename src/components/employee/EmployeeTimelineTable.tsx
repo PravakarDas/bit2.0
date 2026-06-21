@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Calendar, ChevronDown } from "lucide-react";
+import { Calendar, Eye } from "lucide-react";
 import {
   getTimelineStatusDisplay,
   type TimelineStatus,
@@ -157,12 +157,12 @@ export default function EmployeeTimelineTable({
     }
 
     if (lateMinutes < 60) {
-      return `+${lateMinutes}m`;
+      return `${lateMinutes}m`;
     }
 
     const hours = Math.floor(lateMinutes / 60);
     const minutes = lateMinutes % 60;
-    return `+${hours}h:${minutes.toString().padStart(2, "0")}m`;
+    return `${hours}h:${minutes.toString().padStart(2, "0")}m`;
   };
 
   const formatTimeWithLabels = (timeStr: string | null): string => {
@@ -184,26 +184,25 @@ export default function EmployeeTimelineTable({
     <div className="space-y-4">
       {/* Table */}
       <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
+        <div className="overflow-x-auto w-full">
+          <Table className="w-full">
             <TableHeader>
               <TableRow className="bg-gray-50 border-b border-gray-200">
-                <TableHead className="w-32">Date</TableHead>
-                <TableHead className="w-20">Status</TableHead>
-                <TableHead className="w-32">Schedule</TableHead>
-                <TableHead className="w-24">In</TableHead>
-                <TableHead className="w-24">Out</TableHead>
-                <TableHead className="w-24">Late (min)</TableHead>
-                <TableHead className="w-40">Active Time</TableHead>
-                <TableHead className="w-24">OT/UT</TableHead>
-                <TableHead className="w-12">Details</TableHead>
+                <TableHead className="w-28 px-2 py-2">Date</TableHead>
+                <TableHead className="w-20 px-2 py-2">Status</TableHead>
+                <TableHead className="w-20 px-2 py-2">In</TableHead>
+                <TableHead className="w-20 px-2 py-2">Out</TableHead>
+                <TableHead className="w-20 px-2 py-2">Late (min)</TableHead>
+                <TableHead className="w-32 px-2 py-2">Active Time</TableHead>
+                <TableHead className="w-20 px-2 py-2">OT/UT</TableHead>
+                <TableHead className="w-12 px-2 py-2 text-center">Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedRecords.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={7}
                     className="text-center py-8 text-gray-500"
                   >
                     No timeline records found
@@ -213,14 +212,14 @@ export default function EmployeeTimelineTable({
                 sortedRecords.map((record) => (
                   <TableRow
                     key={record.id}
-                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors h-16"
                   >
                     {/* Date */}
-                    <TableCell>
-                      <div className="flex items-start gap-2">
-                        <Calendar className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                    <TableCell className="px-2 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
                         <div className="flex-1">
-                          <div className="font-medium text-gray-900">
+                          <div className="font-medium text-gray-900 text-sm">
                             {format(new Date(record.date), "MMM dd, yyyy")}
                           </div>
                           <div className="text-xs text-gray-500">
@@ -231,29 +230,10 @@ export default function EmployeeTimelineTable({
                     </TableCell>
 
                     {/* Status */}
-                    <TableCell>{getStatusBadge(record)}</TableCell>
-
-                    {/* Schedule */}
-                    <TableCell className="p-2">
-                      {record.requiredCheckIn ? (
-                        <div className="text-xs space-y-0.5">
-                          <div className="text-gray-700 font-medium">
-                            {formatTime12(record.requiredCheckIn)} -{" "}
-                            {formatTime12(record.requiredCheckOut)}
-                          </div>
-                          <div className="text-gray-500">
-                            Br: {record.requiredBreakTime || "—"}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-500 italic">
-                          Off Day
-                        </span>
-                      )}
-                    </TableCell>
+                    <TableCell className="px-2 py-3">{getStatusBadge(record)}</TableCell>
 
                     {/* In Time */}
-                    <TableCell className="text-sm p-2">
+                    <TableCell className="px-2 py-3 text-sm">
                       {record.actualCheckIn ? (
                         <div className="text-gray-900 font-medium">
                           {formatTime12(record.actualCheckIn)}
@@ -264,7 +244,7 @@ export default function EmployeeTimelineTable({
                     </TableCell>
 
                     {/* Out Time */}
-                    <TableCell className="text-sm p-2">
+                    <TableCell className="px-2 py-3 text-sm">
                       {record.actualCheckOut ? (
                         <div className="text-gray-900 font-medium">
                           {formatTime12(record.actualCheckOut)}
@@ -275,7 +255,7 @@ export default function EmployeeTimelineTable({
                     </TableCell>
 
                     {/* Late Check-in (Calculated) */}
-                    <TableCell className="text-sm p-2">
+                    <TableCell className="px-2 py-3 text-sm">
                       {calculateLateCheckIn(record) > 0 ? (
                         <span className="text-red-600 font-medium">
                           {formatLateCheckIn(record)}
@@ -286,16 +266,16 @@ export default function EmployeeTimelineTable({
                     </TableCell>
 
                     {/* Active Time Only */}
-                    <TableCell className="p-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
+                    <TableCell className="px-2 py-3">
+                      <div className="text-xs space-y-0">
+                        <div className="flex items-center gap-1">
                           <span className="text-gray-600">Active:</span>
                           <span className="text-gray-900 font-medium">
                             {formatTimeWithLabels(record.actualActiveTime)}
                           </span>
                         </div>
                         {record.requiredActiveTime && (
-                          <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1">
                             <span className="text-gray-500">Req:</span>
                             <span className="text-gray-700">
                               {formatTimeWithLabels(record.requiredActiveTime)}
@@ -306,16 +286,13 @@ export default function EmployeeTimelineTable({
                     </TableCell>
 
                     {/* OT/UT */}
-                    <TableCell className="p-2">
+                    <TableCell className="px-2 py-3">
                       {record.officialOvertimeundertime ? (
                         <div
-                          className={`text-sm font-medium px-2 py-1 rounded inline-block ${getOvertimeColor(
+                          className={`text-sm font-medium px-1.5 py-0.5 rounded inline-block whitespace-nowrap ${getOvertimeColor(
                             record.officialOvertimeundertime
                           )}`}
                         >
-                          {record.officialOvertimeundertime.startsWith("-")
-                            ? "-"
-                            : "+"}
                           {formatTimeWithLabels(record.officialOvertimeundertime)}
                         </div>
                       ) : (
@@ -323,15 +300,16 @@ export default function EmployeeTimelineTable({
                       )}
                     </TableCell>
 
-                    {/* Details Button */}
-                    <TableCell className="text-center">
+                    {/* Details Button - Eye Icon */}
+                    <TableCell className="px-2 py-3 text-center">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-8 p-0"
+                        className="h-8 w-8 p-0 mx-auto"
                         onClick={() => setSelectedRecord(record)}
+                        title="View Details"
                       >
-                        <ChevronDown className="h-4 w-4" />
+                        <Eye className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
