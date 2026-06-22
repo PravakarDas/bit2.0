@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatDateTime12 } from "@/lib/utils";
 
 interface Employee {
   id: string;
@@ -217,7 +218,7 @@ export function EmployeeNotesBoard({ users, employeeProfileBasePath }: Props) {
                             <div className="text-xs text-muted-foreground">
                               {n.createdByUser ? `${n.createdByUser.firstName ?? ""} ${n.createdByUser.lastName ?? ""}`.trim() || "Unknown" : "Unknown"}
                               {" • "}
-                              {new Date(n.createdAt).toLocaleString()}
+                              {formatDateTime12(n.createdAt)}
                             </div>
                           </div>
                           <div>

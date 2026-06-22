@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
+import { formatTime12 } from "@/lib/utils";
 
 interface OvertimeRequest {
   id: string;
@@ -210,7 +211,7 @@ export default function ManagerOvertimeVerificationClient() {
                   <p>
                     <strong>Requested Time:</strong>{" "}
                     {request.requestedOTstart && request.requestedOTend
-                      ? `${new Date(request.requestedOTstart).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${new Date(request.requestedOTend).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                      ? `${formatTime12(request.requestedOTstart)} - ${formatTime12(request.requestedOTend)}`
                       : "N/A"}
                   </p>
                   <p><strong>Duration:</strong> {request.totalOvertime}</p>

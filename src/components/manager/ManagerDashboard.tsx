@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { CalendarIcon, Filter, TrendingUp, Users, Building, UserCheck, ClipboardList } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatTime12 } from "@/lib/utils";
 import { 
     Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell
@@ -277,12 +277,12 @@ export function ManagerDashboard({ initialData, branches }: ManagerDashboardProp
                                         <div className="text-right">
                                             {activity.checkIn && (
                                                 <p className="text-sm">
-                                                    In: {new Date(activity.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    In: {formatTime12(activity.checkIn)}
                                                 </p>
                                             )}
                                             {activity.checkOut && (
                                                 <p className="text-sm">
-                                                    Out: {new Date(activity.checkOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    Out: {formatTime12(activity.checkOut)}
                                                 </p>
                                             )}
                                         </div>

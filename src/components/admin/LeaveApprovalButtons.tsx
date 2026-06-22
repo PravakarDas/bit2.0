@@ -8,16 +8,17 @@ import { CheckCircle, XCircle } from "lucide-react";
 
 interface ApprovalButtonsProps {
     applicationId: string;
+    approverRole?: "admin" | "manager";
 }
 
-export function ApprovalButtons({ applicationId }: ApprovalButtonsProps) {
+export function ApprovalButtons({ applicationId, approverRole = "admin" }: ApprovalButtonsProps) {
     const [loading, setLoading] = useState(false);
 
     const handleApprove = async () => {
         setLoading(true);
-        
+
         try {
-            const result = await approveLeaveApplication(applicationId, "admin");
+            const result = await approveLeaveApplication(applicationId, approverRole);
             
             if (result.success) {
                 toast.success("Leave application approved successfully");
@@ -41,7 +42,7 @@ export function ApprovalButtons({ applicationId }: ApprovalButtonsProps) {
         setLoading(true);
         
         try {
-            const result = await rejectLeaveApplication(applicationId, "admin");
+            const result = await rejectLeaveApplication(applicationId, approverRole);
             
             if (result.success) {
                 toast.success("Leave application rejected");

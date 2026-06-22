@@ -41,6 +41,7 @@ import {
   markNotificationAsUnread,
   markAllNotificationsAsRead,
 } from "@/actions/notification.actions";
+import { formatDateTime12 } from "@/lib/utils";
 
 /* ===============================
    ✅ Proper Metadata Type
@@ -397,7 +398,7 @@ export default function NotificationsPage() {
               </DialogTitle>
               <DialogDescription>
                 {selectedNotification
-                  ? new Date(selectedNotification.createdAt).toLocaleString()
+                  ? formatDateTime12(selectedNotification.createdAt)
                   : ""}
               </DialogDescription>
             </DialogHeader>
@@ -416,7 +417,7 @@ export default function NotificationsPage() {
                   ) : null}
                   {(selectedNotification.metadata as NotificationMetadata).processedAt ? (
                     <p>
-                      Processed: {new Date((selectedNotification.metadata as NotificationMetadata).processedAt as string | Date).toLocaleString()}
+                      Processed: {formatDateTime12((selectedNotification.metadata as NotificationMetadata).processedAt as string | Date)}
                     </p>
                   ) : null}
                 </div>

@@ -32,9 +32,10 @@ import {
   RefreshCw,
   Home
 } from "lucide-react";
-import { updateTimelineRecord, adjustLeaveType } from "@/actions/timeline.actions";
+import { updateTimelineRecord, adjustLeaveType, setTimelineRecordProcessed } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
+import { formatTime12 } from "@/lib/utils";
 import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
 
 interface TimeRecord {
@@ -109,7 +110,37 @@ export default function TimelineTableView({
     actualBreakTime: ''
   });
   const [saving, setSaving] = useState(false);
+  const [processedSaving, setProcessedSaving] = useState(false);
   const [syncingUsers, setSyncingUsers] = useState<Set<string>>(new Set());
+
+  const handleToggleProcessed = async (target: boolean) => {
+    if (!editingRecord) return;
+
+    if (
+      target === false &&
+      !window.confirm(
+        "Mark this day as UNPROCESSED?\n\nThis clears the actual check-in/out, resets the day to Present with the branch's required times, reverses any wallet penalty applied for this day, and lets the server re-fetch attendance on the next sync.",
+      )
+    ) {
+      return;
+    }
+
+    setProcessedSaving(true);
+    try {
+      const result = await setTimelineRecordProcessed(editingRecord.id, target);
+      if (result.success) {
+        setEditingRecord(null);
+        onRecordUpdate();
+      } else {
+        alert(result.error || "Failed to update processing status");
+      }
+    } catch (error) {
+      console.error("Error updating processing status:", error);
+      alert("Failed to update processing status");
+    } finally {
+      setProcessedSaving(false);
+    }
+  };
 
   const availableLeaveTypes = (editingRecord?.user.leaveEntitlements || []).filter(
     (entitlement) => entitlement.allocatedDays - entitlement.usedDays > 0,
@@ -348,8 +379,8 @@ export default function TimelineTableView({
                     <div className="text-sm space-y-1">
                       {record.requiredCheckIn ? (
                         <>
-                          <div>In: {format(new Date(record.requiredCheckIn), 'HH:mm')}</div>
-                          <div>Out: {record.requiredCheckOut ? format(new Date(record.requiredCheckOut), 'HH:mm') : '--'}</div>
+                          <div>In: {formatTime12(record.requiredCheckIn)}</div>
+                          <div>Out: {formatTime12(record.requiredCheckOut)}</div>
                           <div>Break: {record.requiredBreakTime || '--'}</div>
                         </>
                       ) : (
@@ -359,8 +390,8 @@ export default function TimelineTableView({
                   </TableCell>
                   <TableCell>
                     <div className="text-sm space-y-1">
-                      <div>In: {record.actualCheckIn ? format(new Date(record.actualCheckIn), 'HH:mm') : '--'}</div>
-                      <div>Out: {record.actualCheckOut ? format(new Date(record.actualCheckOut), 'HH:mm') : '--'}</div>
+                      <div>In: {formatTime12(record.actualCheckIn)}</div>
+                      <div>Out: {formatTime12(record.actualCheckOut)}</div>
                       <div>Break: {record.actualBreakTime || '--'}</div>
                     </div>
                   </TableCell>
@@ -607,9 +638,45 @@ export default function TimelineTableView({
                             )}
                           </div>
                           
+                          {/* Processing Status */}
+                          <div className="rounded-md border p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <div className="text-sm font-medium">Processing Status</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {editingRecord?.isProcessed
+                                    ? "Unprocessing clears the actual check-in/out and lets the server re-fetch this day."
+                                    : "Not processed yet — the server will auto-fill this day on the next sync."}
+                                </div>
+                              </div>
+                              {editingRecord?.isProcessed
+                                ? <Badge variant="secondary">Processed</Badge>
+                                : <Badge variant="outline">Not processed</Badge>}
+                            </div>
+                            {editingRecord?.isProcessed ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={processedSaving}
+                                onClick={() => handleToggleProcessed(false)}
+                              >
+                                {processedSaving ? "Working..." : "Mark as Unprocessed & Re-fetch"}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={processedSaving}
+                                onClick={() => handleToggleProcessed(true)}
+                              >
+                                {processedSaving ? "Working..." : "Mark as Processed"}
+                              </Button>
+                            )}
+                          </div>
+
                           <div className="flex justify-end gap-2">
-                            <Button 
-                              onClick={handleSave} 
+                            <Button
+                              onClick={handleSave}
                               disabled={saving}
                             >
                               {saving ? 'Saving...' : 'Save Changes'}

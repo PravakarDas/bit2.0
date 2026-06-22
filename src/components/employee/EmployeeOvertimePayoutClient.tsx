@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/currency";
+import { formatDateTime12 } from "@/lib/utils";
 import { toast } from "sonner";
 import OvertimePayoutSummaryGrid from "@/components/shared/OvertimePayoutSummaryGrid";
 
@@ -118,7 +119,7 @@ export default function EmployeeOvertimePayoutClient() {
                       <TableCell>
                         {item.isPaid ? <Badge variant="secondary">Paid</Badge> : <Badge variant="outline">Pending</Badge>}
                       </TableCell>
-                      <TableCell>{item.paidAt ? new Date(item.paidAt).toLocaleString() : "--"}</TableCell>
+                      <TableCell>{formatDateTime12(item.paidAt)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

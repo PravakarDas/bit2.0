@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { format } from "date-fns";
+import { formatDateTime12 } from "@/lib/utils";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -412,7 +412,7 @@ export default function SystemControlClient({
                         <span>{log.actorName}</span>
                       </div>
                     </TableCell>
-                    <TableCell>{format(new Date(log.createdAt), "yyyy-MM-dd HH:mm")}</TableCell>
+                    <TableCell>{formatDateTime12(log.createdAt)}</TableCell>
                     <TableCell className="text-sm space-y-1">
                       {log.changedFields
                         .filter((field) => {

@@ -577,13 +577,42 @@ export async function applyForLeave(data: {
 }
 
 export async function getPendingLeaveApplications() {
-    return await prisma.leaveApplication.findMany({
+    const applications = await prisma.leaveApplication.findMany({
         where: { status: "PENDING" },
         include: {
             user: true,
             leaveType: true
         },
         orderBy: { createdAt: "asc" }
+    });
+
+    if (applications.length === 0) {
+        return [];
+    }
+
+    // Fetch the matching entitlement for each application (per user / leave type / year)
+    const entitlements = await prisma.userLeaveEntitlement.findMany({
+        where: {
+            OR: applications.map((a) => ({
+                userId: a.userId,
+                leaveTypeId: a.leaveTypeId,
+                year: a.leaveDate.getFullYear()
+            }))
+        }
+    });
+
+    const entitlementMap = new Map(
+        entitlements.map((e) => [`${e.userId}_${e.leaveTypeId}_${e.year}`, e])
+    );
+
+    return applications.map((application) => {
+        const entitlement = entitlementMap.get(
+            `${application.userId}_${application.leaveTypeId}_${application.leaveDate.getFullYear()}`
+        );
+        const remainingDays = entitlement
+            ? entitlement.allocatedDays - entitlement.usedDays
+            : null;
+        return { ...application, remainingDays };
     });
 }
 
@@ -604,6 +633,47 @@ export async function getUserLeaveApplications(userId: string, year: number = ne
         },
         orderBy: { leaveDate: "desc" }
     });
+}
+
+// Notify admins whenever a leave application is approved/declined (by admin or manager)
+async function notifyLeaveDecision(
+    application: {
+        id: string;
+        userId: string;
+        leaveDate: Date;
+        user: { firstName: string | null; lastName: string | null; email: string };
+        leaveType: { name: string };
+    },
+    decision: "APPROVED" | "REJECTED",
+    decidedBy: string
+) {
+    try {
+        const employeeName = application.user.firstName && application.user.lastName
+            ? `${application.user.firstName} ${application.user.lastName}`
+            : application.user.email;
+        const actor = decidedBy === "manager" ? "Manager" : decidedBy === "admin" ? "Admin" : decidedBy;
+        const verb = decision === "APPROVED" ? "approved" : "declined";
+
+        await prisma.adminNotification.create({
+            data: {
+                type: "SYSTEM_ALERT",
+                title: decision === "APPROVED" ? "Leave Application Approved" : "Leave Application Declined",
+                message: `${actor} ${verb} ${employeeName}'s ${application.leaveType.name} leave on ${application.leaveDate.toLocaleDateString()}`,
+                metadata: {
+                    applicationId: application.id,
+                    userId: application.userId,
+                    userName: employeeName,
+                    leaveType: application.leaveType.name,
+                    leaveDate: application.leaveDate.toISOString(),
+                    decision,
+                    decidedBy,
+                },
+            },
+        });
+    } catch (error) {
+        // Don't fail the approval/decline if the notification can't be created
+        console.error("Error creating leave decision notification:", error);
+    }
 }
 
 export async function approveLeaveApplication(applicationId: string, approvedBy: string = "SYSTEM", _adminNote?: string) {
@@ -660,10 +730,13 @@ export async function approveLeaveApplication(applicationId: string, approvedBy:
                 data: { usedDays: entitlement.usedDays + 1 }
             })
         ]);
-        
+
+        await notifyLeaveDecision(application, "APPROVED", approvedBy);
+
         revalidatePath("/admin/leave-applications");
+        revalidatePath("/manager/leave-applications");
         revalidatePath("/leaves");
-        
+
         return { success: true };
     } catch (error) {
         console.error("Error approving leave application:", error);
@@ -675,17 +748,21 @@ export async function rejectLeaveApplication(applicationId: string, approvedBy: 
     void _adminNote;
     try {
         const application = await prisma.leaveApplication.findUnique({
-            where: { id: applicationId }
+            where: { id: applicationId },
+            include: {
+                user: true,
+                leaveType: true
+            }
         });
-        
+
         if (!application) {
             return { success: false, error: "Leave application not found" };
         }
-        
+
         if (application.status !== "PENDING") {
             return { success: false, error: "Leave application is not pending" };
         }
-        
+
         await prisma.leaveApplication.update({
             where: { id: applicationId },
             data: {
@@ -694,10 +771,13 @@ export async function rejectLeaveApplication(applicationId: string, approvedBy: 
                 approvedAt: new Date()
             }
         });
-        
+
+        await notifyLeaveDecision(application, "REJECTED", approvedBy);
+
         revalidatePath("/admin/leave-applications");
+        revalidatePath("/manager/leave-applications");
         revalidatePath("/leaves");
-        
+
         return { success: true };
     } catch (error) {
         console.error("Error rejecting leave application:", error);

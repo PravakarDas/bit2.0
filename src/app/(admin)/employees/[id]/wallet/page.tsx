@@ -17,9 +17,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getUserProfileById } from "@/actions/profile.actions";
 import { getWalletTransactionsForUser, getWalletRequestsForUser, updateWalletRequestStatus } from "@/actions/wallet.actions";
 import { User, WalletTransaction, WalletRequest } from "@prisma/client";
-import { 
-  ArrowLeft, 
-  Wallet, 
+import { formatDateTime12 } from "@/lib/utils";
+import {
+  ArrowLeft,
+  Wallet,
   TrendingUp, 
   TrendingDown, 
   Clock, 
@@ -392,7 +393,7 @@ export default function EmployeeWalletPage() {
                           {transactionType === "CREDIT" ? "+" : transactionType === "DEBIT" ? "-" : "±"}
                           ৳{Math.abs(transaction.amount).toLocaleString("en-BD")}
                         </TableCell>
-                        <TableCell>{new Date(transaction.createdAt).toLocaleString()}</TableCell>
+                        <TableCell>{formatDateTime12(transaction.createdAt)}</TableCell>
                         <TableCell>
                           <Badge variant="default">COMPLETED</Badge>
                         </TableCell>
@@ -436,7 +437,7 @@ export default function EmployeeWalletPage() {
                             </div>
                             <div className="text-sm text-muted-foreground">{request.description}</div>
                             <div className="text-xs text-muted-foreground">
-                              Requested on {new Date(request.createdAt).toLocaleString()}
+                              Requested on {formatDateTime12(request.createdAt)}
                             </div>
                           </div>
                           <div className="flex gap-2">

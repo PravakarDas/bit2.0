@@ -19,6 +19,27 @@ export function formatDate(date: Date | string | null | undefined): string {
 }
 
 /**
+ * Format a clock time as 12-hour with AM/PM, e.g. "2:30 PM".
+ * For real clock timestamps only — NOT for duration strings (active time, OT/UT, break).
+ */
+export function formatTime12(date: Date | string | null | undefined): string {
+  if (!date) return "--";
+  const value = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(value.getTime())) return "--";
+  return format(value, "h:mm a");
+}
+
+/**
+ * Format a date together with a 12-hour clock time, e.g. "Jun 11, 2026, 2:30 PM".
+ */
+export function formatDateTime12(date: Date | string | null | undefined): string {
+  if (!date) return "--";
+  const value = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(value.getTime())) return "--";
+  return format(value, "MMM d, yyyy, h:mm a");
+}
+
+/**
  * Parse a date string or Date object to a proper Date object at midnight local time
  * Handles YYYY-MM-DD format from HTML date inputs
  */

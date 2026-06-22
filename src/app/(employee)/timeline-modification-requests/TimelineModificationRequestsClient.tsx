@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
+import { formatTime12 } from "@/lib/utils";
 import { CheckCircle2, Clock, Loader2, XCircle, Trash2 } from "lucide-react";
 import { cancelTimelineModificationRequest } from "@/actions/timeline-modification-request.actions";
 import { toast } from "sonner";
@@ -141,11 +142,11 @@ export function TimelineModificationRequestsClient({ initialRequests }: Timeline
                       <div className="text-sm space-y-1">
                         <p>
                           <span className="font-medium">Check-In:</span>{" "}
-                          {request.requestedCheckIn ? format(new Date(request.requestedCheckIn), "HH:mm") : "-"}
+                          {formatTime12(request.requestedCheckIn)}
                         </p>
                         <p>
                           <span className="font-medium">Check-Out:</span>{" "}
-                          {request.requestedCheckOut ? format(new Date(request.requestedCheckOut), "HH:mm") : "-"}
+                          {formatTime12(request.requestedCheckOut)}
                         </p>
                         <p>
                           <span className="font-medium">Break:</span> {request.requestedBreakTime || "-"}
