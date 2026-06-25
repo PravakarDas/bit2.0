@@ -245,17 +245,14 @@ class ZKTecoService {
           actualCheckOut = punchTime; // Last check-out of the day (will be overwritten if there are multiple)
           break;
 
-        case '2': // Break Out (returning from break)
-          // When employee returns from break, close the break session
+        case '2': // Break Out (going for break - start of break)
+        case '3': // Break In (returning from break - end of break)
           if (activeBreakStart) {
+            // If already on break, this event closes it
             breakSessions.push({ breakIn: activeBreakStart, breakOut: punchTime });
             activeBreakStart = null;
-          }
-          break;
-
-        case '3': // Break In (going for break)
-          // If not already on break, mark the start of break
-          if (!activeBreakStart) {
+          } else {
+            // If not on break, this event starts it
             activeBreakStart = punchTime;
           }
           break;
@@ -276,6 +273,8 @@ class ZKTecoService {
         totalBreakMinutes += Math.floor(breakDuration / (1000 * 60)); // Convert to minutes
       }
     }
+
+    totalBreakMinutes = Math.max(0, totalBreakMinutes);
 
     // Format break time as HH:MM
     const actualBreakTime = totalBreakMinutes > 0 
