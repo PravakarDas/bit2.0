@@ -1,71 +1,23 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Clock, Users, Download, RefreshCw, RotateCcw } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RefreshCw, RotateCcw, X } from "lucide-react";
 import TimelineTableView from "@/components/admin/TimelineTableView";
-import TimelineCalendarView from "@/components/admin/TimelineCalendarView";
-import TimelineFilters from "@/components/admin/TimelineFilters";
 import { getTimelineRecords } from "@/actions/timeline.actions";
 import { getBranches } from "@/actions/branch.actions";
 import { getUsers } from "@/actions/user.actions";
 import { toast } from "sonner";
-
-interface TimeRecord {
-  id: string;
-  date: Date;
-  isProcessed: boolean;
-  status: "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF";
-  requiredCheckIn: Date | null;
-  requiredCheckOut: Date | null;
-  requiredBreakTime: string | null;
-  actualCheckIn: Date | null;
-  actualCheckOut: Date | null;
-  actualBreakTime: string | null;
-  requiredActiveTime: string | null;
-  actualActiveTime: string | null;
-  overtimeUndertime: string | null;
-  officialOvertimeundertime: string | null;
-  requestedOvertime: string | null;
-  autoDeductedLeaveType: string | null;
-  user: {
-    id: string;
-    firstName: string | null;
-    lastName: string | null;
-    email: string;
-    leaveEntitlements?: Array<{
-      id: string;
-      allocatedDays: number;
-      usedDays: number;
-      leaveType: {
-        id: string;
-        name: string;
-      };
-    }>;
-    branch: {
-      name: string;
-      weeklyOffDays: string[];
-      checkInTime: string;
-      checkOutTime: string;
-    } | null;
-  };
-}
-
-interface FilterOptions {
-  branchId: string;
-  userId: string;
-  startDate: string;
-  endDate: string;
-  employeeName: string;
-}
-
-interface BranchOption {
-  id: string;
-  name: string;
-}
+import {
+  type TimeRecord,
+  type BranchOption,
+  type SortState,
+  type ColumnFilters,
+  type TimelineSortField,
+  EMPTY_COLUMN_FILTERS
+} from "@/components/admin/timeline-types";
 
 interface UserOption {
   id: string;
@@ -75,8 +27,16 @@ interface UserOption {
   email: string;
 }
 
+const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
+
+function hasActiveFilters(filters: ColumnFilters): boolean {
+  return (Object.keys(filters) as (keyof ColumnFilters)[]).some((key) => {
+    const value = filters[key];
+    return Array.isArray(value) ? value.length > 0 : value !== "";
+  });
+}
+
 export default function TimelineClient() {
-  const [activeView, setActiveView] = useState<"table" | "calendar">("table");
   const [timeRecords, setTimeRecords] = useState<TimeRecord[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -85,44 +45,59 @@ export default function TimelineClient() {
   const [leaveBackfillRunning, setLeaveBackfillRunning] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 60,
+    limit: 10,
     total: 0,
     totalPages: 0
   });
 
-  const [filters, setFilters] = useState<FilterOptions>({
-    branchId: "",
-    userId: "",
-    startDate: "",
-    endDate: "",
-    employeeName: ""
-  });
+  const [filters, setFilters] = useState<ColumnFilters>(EMPTY_COLUMN_FILTERS);
+  const [sort, setSort] = useState<SortState>({ field: null, order: "asc" });
 
-  const [appliedFilters, setAppliedFilters] = useState<FilterOptions>({
-    branchId: "",
-    userId: "",
-    startDate: "",
-    endDate: "",
-    employeeName: ""
-  });
+  const employees = useMemo(
+    () => users.map((user) => ({
+      id: user.id,
+      name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.email
+    })),
+    [users]
+  );
 
   const loadTimeRecords = useCallback(async () => {
     setLoading(true);
     try {
+      // If only one side of the date range is set, treat it as a single-day filter
+      // rather than an open-ended range. Raw "YYYY-MM-DD" strings are passed through
+      // (not wrapped in `new Date(...)`) so the server parses them as local midnight
+      // instead of UTC midnight — see buildDateRangeFilter/parseFilterDate in lib/utils.ts.
+      const effectiveDateFrom = filters.dateFrom || filters.dateTo || undefined;
+      const effectiveDateTo = filters.dateTo || filters.dateFrom || undefined;
+
       const result = await getTimelineRecords(
-        appliedFilters.userId || undefined,
-        appliedFilters.startDate ? new Date(appliedFilters.startDate) : undefined,
-        appliedFilters.endDate ? new Date(appliedFilters.endDate) : undefined,
+        undefined,
+        effectiveDateFrom,
+        effectiveDateTo,
         {
-          branchId: appliedFilters.branchId || undefined,
-          employeeName: appliedFilters.employeeName || undefined,
+          branchIds: filters.branchIds.length > 0 ? filters.branchIds : undefined,
+          employeeIds: filters.employeeIds.length > 0 ? filters.employeeIds : undefined,
+          statuses: filters.statuses.length > 0 ? filters.statuses : undefined,
           page: pagination.page,
-          limit: pagination.limit
+          limit: pagination.limit,
+          sortBy: sort.field || undefined,
+          sortOrder: sort.order,
+          lateMinutesMin: filters.lateMin ? Number(filters.lateMin) : undefined,
+          lateMinutesMax: filters.lateMax ? Number(filters.lateMax) : undefined,
+          checkInFrom: filters.checkInFrom || undefined,
+          checkInTo: filters.checkInTo || undefined,
+          checkOutFrom: filters.checkOutFrom || undefined,
+          checkOutTo: filters.checkOutTo || undefined,
+          activeTimeMin: filters.activeTimeMin ? Number(filters.activeTimeMin) : undefined,
+          activeTimeMax: filters.activeTimeMax ? Number(filters.activeTimeMax) : undefined,
+          otUtMin: filters.otUtMin ? Number(filters.otUtMin) : undefined,
+          otUtMax: filters.otUtMax ? Number(filters.otUtMax) : undefined,
         }
       );
 
       if (result.success) {
-        setTimeRecords(result.records || []);
+        setTimeRecords((result.records as TimeRecord[]) || []);
         setPagination(prev => {
           const serverPagination = result.pagination;
           return {
@@ -137,15 +112,7 @@ export default function TimelineClient() {
     } finally {
       setLoading(false);
     }
-  }, [
-    appliedFilters.branchId,
-    appliedFilters.employeeName,
-    appliedFilters.endDate,
-    appliedFilters.startDate,
-    appliedFilters.userId,
-    pagination.limit,
-    pagination.page,
-  ]);
+  }, [filters, pagination.page, pagination.limit, sort]);
 
   const loadInitialData = useCallback(async () => {
     try {
@@ -153,93 +120,45 @@ export default function TimelineClient() {
         getBranches(),
         getUsers()
       ]);
-      
+
       setBranches(branchesResult || []);
       setUsers(usersResult || []);
-      
-      await loadTimeRecords();
     } catch (error) {
       console.error('Error loading initial data:', error);
     }
-  }, [loadTimeRecords]);
+  }, []);
 
-  // Load initial data
   useEffect(() => {
     void loadInitialData();
   }, [loadInitialData]);
 
-  // Load time records when filters change
   useEffect(() => {
     void loadTimeRecords();
   }, [loadTimeRecords]);
 
-  const clearFilters = () => {
-    const clearedFilters = {
-      branchId: "",
-      userId: "",
-      startDate: "",
-      endDate: "",
-      employeeName: ""
-    };
-    setFilters(clearedFilters);
-    setAppliedFilters(clearedFilters);
-    setPagination(prev => ({
-      ...prev,
-      page: 1
-    }));
+  const handleFiltersChange = (patch: Partial<ColumnFilters>) => {
+    setFilters(prev => ({ ...prev, ...patch }));
+    setPagination(prev => ({ ...prev, page: 1 }));
   };
 
-  const handleFilterChange = (key: keyof FilterOptions, value: string) => {
-    if (key === "branchId") {
-      const normalizedValue = value === "all-branches" ? "" : value;
-      setFilters(prev => {
-        const nextFilters = {
-          ...prev,
-          branchId: normalizedValue,
-          userId: normalizedValue && prev.userId
-            ? (users.find(user => user.id === prev.userId && user.branchId === normalizedValue) ? prev.userId : "")
-            : prev.userId
-        };
-        setAppliedFilters(nextFilters);
-        return nextFilters;
-      });
-      setPagination(prev => ({
-        ...prev,
-        page: 1
-      }));
-      return;
-    }
-
-    if (key === "userId") {
-      const normalizedValue = value === "all-employees" ? "" : value;
-      setFilters(prev => {
-        const nextFilters = {
-          ...prev,
-          userId: normalizedValue
-        };
-        setAppliedFilters(nextFilters);
-        return nextFilters;
-      });
-      setPagination(prev => ({
-        ...prev,
-        page: 1
-      }));
-      return;
-    }
-
-    setFilters(prev => ({
-      ...prev,
-      [key]: value
-    }));
+  const handleClearAllFilters = () => {
+    setFilters(EMPTY_COLUMN_FILTERS);
+    setPagination(prev => ({ ...prev, page: 1 }));
   };
 
-  const applyFilters = () => {
-    setAppliedFilters(filters);
-    setPagination(prev => ({
-      ...prev,
-      page: 1
-    }));
+  const handleSortChange = (field: TimelineSortField) => {
+    setSort(prev => {
+      if (prev.field !== field) return { field, order: "asc" };
+      if (prev.order === "asc") return { field, order: "desc" };
+      return { field: null, order: "asc" };
+    });
+    setPagination(prev => ({ ...prev, page: 1 }));
   };
+
+  const handleLimitChange = (limit: number) => {
+    setPagination(prev => ({ ...prev, limit, page: 1 }));
+  };
+
   const handleGenerateTimeline = async () => {
     setGenerating(true);
     try {
@@ -249,18 +168,18 @@ export default function TimelineClient() {
           'Content-Type': 'application/json'
         }
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
-        alert(`Successfully generated ${result.recordsCreated} timeline records!`);
-        void loadTimeRecords(); // Refresh the data
+        toast.success(`Successfully generated ${result.recordsCreated} timeline records!`);
+        void loadTimeRecords();
       } else {
-        alert(`Failed to generate timeline: ${result.error}`);
+        toast.error(`Failed to generate timeline: ${result.error}`);
       }
     } catch (error) {
       console.error('Error generating timeline:', error);
-      alert('Error generating timeline records');
+      toast.error('Error generating timeline records');
     } finally {
       setGenerating(false);
     }
@@ -269,19 +188,7 @@ export default function TimelineClient() {
   const handleLeaveAutomationBackfill = async () => {
     setLeaveBackfillRunning(true);
     try {
-      const selectedEmployeeId = filters.userId || (() => {
-        const query = filters.employeeName.trim().toLowerCase();
-        if (!query) return '';
-
-        const matchingUsers = users.filter((user) => {
-          const fullName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim().toLowerCase();
-          const email = user.email.toLowerCase();
-          return fullName.includes(query) || email.includes(query);
-        });
-
-        return matchingUsers.length === 1 ? matchingUsers[0].id : '';
-      })();
-
+      const selectedEmployeeId = filters.employeeIds.length === 1 ? filters.employeeIds[0] : '';
       const employeeQuery = selectedEmployeeId ? `&employeeId=${encodeURIComponent(selectedEmployeeId)}` : '';
 
       const response = await fetch(`/api/leave-automation${employeeQuery}`, {
@@ -309,141 +216,85 @@ export default function TimelineClient() {
       setLeaveBackfillRunning(false);
     }
   };
-  // Calculate summary stats
-  const summaryStats = {
-    totalEmployees: new Set(timeRecords.map(r => r.user.id)).size,
-    totalRecords: pagination.total,
-    presentToday: timeRecords.filter(r => {
-      const today = new Date();
-      const recordDate = new Date(r.date);
-      return recordDate.toDateString() === today.toDateString() && r.actualCheckIn;
-    }).length,
-    avgAttendance: timeRecords.length > 0 ? 
-      (timeRecords.filter(r => r.actualCheckIn).length / timeRecords.length * 100).toFixed(1) : '0'
-  };
+
+  const filtersActive = hasActiveFilters(filters);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Timeline Management</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Timeline Management</h1>
           <p className="text-muted-foreground">
-            Track and manage employee attendance and working hours
+            View and manage employee attendance and working hours.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={handleLeaveAutomationBackfill}
             disabled={leaveBackfillRunning}
+            className="rounded-full"
           >
-            <RotateCcw className={`h-4 w-4 mr-2 ${leaveBackfillRunning ? 'animate-spin' : ''}`} />
+            <RotateCcw className={`h-4 w-4 ${leaveBackfillRunning ? 'animate-spin' : ''}`} />
             {leaveBackfillRunning ? 'Processing...' : 'Run Leave Automation'}
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
             size="sm"
             onClick={handleGenerateTimeline}
             disabled={generating}
+            className="rounded-full"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${generating ? 'animate-spin' : ''}`} />
-            {generating ? 'Generating...' : 'Generate Today\'s Timeline'}
-          </Button>
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
+            <RefreshCw className={`h-4 w-4 ${generating ? 'animate-spin' : ''}`} />
+            {generating ? 'Generating...' : "Generate Today's Timeline"}
           </Button>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summaryStats.totalEmployees}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Records</CardTitle>
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summaryStats.totalRecords}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Present Today</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summaryStats.presentToday}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Attendance</CardTitle>
-            <Badge variant="secondary">{summaryStats.avgAttendance}%</Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm text-muted-foreground">Current Period</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <TimelineFilters
-        filters={filters}
-        branches={branches}
-        users={users}
-        onFilterChange={handleFilterChange}
-        onApplyFilters={applyFilters}
-        onClearFilters={clearFilters}
-      />
-
-      {/* Main Content */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Employee Timeline</CardTitle>
-              <CardDescription>
-                View and manage employee attendance records
-              </CardDescription>
-            </div>
-            <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "table" | "calendar")}>
-              <TabsList>
-                <TabsTrigger value="table">Table View</TabsTrigger>
-                <TabsTrigger value="calendar">Calendar View</TabsTrigger>
-              </TabsList>
-            </Tabs>
+      <Card className="rounded-2xl border shadow-sm">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b pb-4">
+          <div>
+            <h2 className="text-lg font-semibold">Employee Timeline</h2>
+            <p className="text-sm text-muted-foreground">Showing attendance records</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {filtersActive && (
+              <Button variant="ghost" size="sm" onClick={handleClearAllFilters} className="text-muted-foreground">
+                <X className="h-3.5 w-3.5" />
+                Clear filters
+              </Button>
+            )}
+            <span className="text-sm text-muted-foreground">
+              Total Records: <span className="font-medium text-foreground">{pagination.total}</span>
+            </span>
+            <Select value={String(pagination.limit)} onValueChange={(v) => handleLimitChange(Number(v))}>
+              <SelectTrigger className="h-8 w-27.5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ROWS_PER_PAGE_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={String(option)}>
+                    {option} per page
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
-        <CardContent>
-          {activeView === "table" ? (
-            <TimelineTableView
-              records={timeRecords}
-              loading={loading}
-              pagination={pagination}
-              onPageChange={(page: number) => setPagination(prev => ({ ...prev, page }))}
-              onRecordUpdate={loadTimeRecords}
-            />
-          ) : (
-            <TimelineCalendarView
-              records={timeRecords}
-              loading={loading}
-            />
-          )}
+        <CardContent className="pt-4">
+          <TimelineTableView
+            records={timeRecords}
+            loading={loading}
+            pagination={pagination}
+            onPageChange={(page: number) => setPagination(prev => ({ ...prev, page }))}
+            onRecordUpdate={loadTimeRecords}
+            branches={branches}
+            employees={employees}
+            sort={sort}
+            onSortChange={handleSortChange}
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+          />
         </CardContent>
       </Card>
     </div>

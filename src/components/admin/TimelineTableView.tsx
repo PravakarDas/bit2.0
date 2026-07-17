@@ -2,81 +2,68 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "@/components/ui/calendar";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
+import {
   ChevronLeft,
   ChevronRight,
-  Edit,
-  Calendar,
-  User,
-  Building2,
+  Eye,
+  MoreVertical,
   RefreshCw,
-  Home
+  Filter,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  CalendarX
 } from "lucide-react";
 import { updateTimelineRecord, adjustLeaveType, setTimelineRecordProcessed } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 import { formatTime12 } from "@/lib/utils";
-import { getTimelineStatusDisplay, type TimelineStatus } from "@/lib/timeline-status";
-
-interface TimeRecord {
-  id: string;
-  date: Date;
-  status?: TimelineStatus | null;
-  isProcessed: boolean;
-  autoDeductedLeaveType: string | null;
-  requiredCheckIn: Date | null;
-  requiredCheckOut: Date | null;
-  requiredBreakTime: string | null;
-  actualCheckIn: Date | null;
-  actualCheckOut: Date | null;
-  actualBreakTime: string | null;
-  requiredActiveTime: string | null;
-  actualActiveTime: string | null;
-  overtimeUndertime: string | null;
-  officialOvertimeundertime: string | null;
-  requestedOvertime: string | null;
-  user: {
-    id: string;
-    firstName: string | null;
-    lastName: string | null;
-    email: string;
-    leaveEntitlements?: Array<{
-      id: string;
-      allocatedDays: number;
-      usedDays: number;
-      leaveType: {
-        id: string;
-        name: string;
-      };
-    }>;
-    branch: {
-      name: string;
-      weeklyOffDays: string[];
-      checkInTime: string;
-      checkOutTime: string;
-    } | null;
-  };
-}
+import { getTimelineStatusDisplay } from "@/lib/timeline-status";
+import { formatDurationPill, parseDurationToMinutes } from "@/lib/duration";
+import {
+  type TimeRecord,
+  type BranchOption,
+  type EmployeeOption,
+  type SortState,
+  type ColumnFilters,
+  type TimelineSortField,
+  type TimelineStatusValue,
+  STATUS_OPTIONS
+} from "@/components/admin/timeline-types";
 
 interface TimelineTableViewProps {
   records: TimeRecord[];
@@ -89,6 +76,313 @@ interface TimelineTableViewProps {
   };
   onPageChange: (page: number) => void;
   onRecordUpdate: () => void;
+  branches: BranchOption[];
+  employees: EmployeeOption[];
+  sort: SortState;
+  onSortChange: (field: TimelineSortField) => void;
+  filters: ColumnFilters;
+  onFiltersChange: (patch: Partial<ColumnFilters>) => void;
+}
+
+const COLUMN_COUNT = 10;
+
+function OtUtPill({ value }: { value: string | null }) {
+  const minutes = parseDurationToMinutes(value);
+  if (minutes === null) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
+  const display = formatDurationPill(value);
+  const colorClass =
+    minutes > 0
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : minutes < 0
+      ? "bg-red-50 text-red-700 border-red-200"
+      : "bg-gray-50 text-gray-600 border-gray-200";
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", colorClass)}>
+      {minutes > 0 ? "+" : ""}
+      {display}
+    </span>
+  );
+}
+
+function otUtTextColor(value: string | null): string {
+  const minutes = parseDurationToMinutes(value);
+  if (minutes === null || minutes === 0) return "text-muted-foreground";
+  return minutes > 0 ? "text-emerald-600" : "text-red-600";
+}
+
+function SortButton({
+  active,
+  order,
+  onClick,
+  label
+}: {
+  active: boolean;
+  order: "asc" | "desc";
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Sort by ${label}`}
+      className={cn(
+        "rounded p-0.5 transition-colors hover:bg-accent",
+        active ? "text-foreground" : "text-muted-foreground/60"
+      )}
+    >
+      {active ? (
+        order === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+      ) : (
+        <ArrowUpDown className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+}
+
+function FilterPopoverButton({
+  active,
+  label,
+  contentClassName,
+  children
+}: {
+  active: boolean;
+  label: string;
+  contentClassName?: string;
+  children: (close: () => void) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Filter ${label}`}
+          className={cn(
+            "relative rounded p-0.5 transition-colors hover:bg-accent",
+            active ? "text-primary" : "text-muted-foreground/60"
+          )}
+        >
+          <Filter className="h-3.5 w-3.5" />
+          {active && <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-primary" />}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className={contentClassName ?? "w-64"} align="start">
+        {children(() => setOpen(false))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ColumnHeaderCell({
+  label,
+  className,
+  children
+}: {
+  label: string;
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <TableHead className={className}>
+      <div className="flex items-center gap-1">
+        <span>{label}</span>
+        {children}
+      </div>
+    </TableHead>
+  );
+}
+
+function RangeFilterBody({
+  label,
+  minValue,
+  maxValue,
+  onApply,
+  onClose
+}: {
+  label: string;
+  minValue: string;
+  maxValue: string;
+  onApply: (min: string, max: string) => void;
+  onClose: () => void;
+}) {
+  const [min, setMin] = useState(minValue);
+  const [max, setMax] = useState(maxValue);
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="flex items-center gap-2">
+        <Input type="number" placeholder="Min" value={min} onChange={(e) => setMin(e.target.value)} />
+        <span className="text-xs text-muted-foreground">to</span>
+        <Input type="number" placeholder="Max" value={max} onChange={(e) => setMax(e.target.value)} />
+      </div>
+      <Button size="sm" className="w-full" onClick={() => { onApply(min, max); onClose(); }}>
+        Apply
+      </Button>
+    </div>
+  );
+}
+
+function TimeRangeFilterBody({
+  fromValue,
+  toValue,
+  onApply,
+  onClose
+}: {
+  fromValue: string;
+  toValue: string;
+  onApply: (from: string, to: string) => void;
+  onClose: () => void;
+}) {
+  const [from, setFrom] = useState(fromValue);
+  const [to, setTo] = useState(toValue);
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">Time range</Label>
+      <div className="flex items-center gap-2">
+        <Input type="time" value={from} onChange={(e) => setFrom(e.target.value)} />
+        <span className="text-xs text-muted-foreground">to</span>
+        <Input type="time" value={to} onChange={(e) => setTo(e.target.value)} />
+      </div>
+      <Button size="sm" className="w-full" onClick={() => { onApply(from, to); onClose(); }}>
+        Apply
+      </Button>
+    </div>
+  );
+}
+
+function parseLocalDateString(value: string): Date | undefined {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+  return new Date(year, month - 1, day);
+}
+
+function DateRangeFilterBody({
+  fromValue,
+  toValue,
+  onApply,
+  onClose
+}: {
+  fromValue: string;
+  toValue: string;
+  onApply: (from: string, to: string) => void;
+  onClose: () => void;
+}) {
+  const [from, setFrom] = useState(fromValue);
+  const [to, setTo] = useState(toValue);
+
+  const selectedRange: DateRange | undefined = (from || to)
+    ? { from: parseLocalDateString(from), to: parseLocalDateString(to) }
+    : undefined;
+
+  const handleCalendarSelect = (range: DateRange | undefined) => {
+    setFrom(range?.from ? format(range.from, "yyyy-MM-dd") : "");
+    setTo(range?.to ? format(range.to, "yyyy-MM-dd") : "");
+  };
+
+  return (
+    <div className="space-y-3">
+      <Label className="text-xs text-muted-foreground">Date range</Label>
+      <Calendar
+        mode="range"
+        selected={selectedRange}
+        onSelect={handleCalendarSelect}
+        defaultMonth={selectedRange?.from ?? new Date()}
+        numberOfMonths={1}
+        className="rounded-md border p-2"
+      />
+      <div className="flex items-center gap-2">
+        <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        <span className="text-xs text-muted-foreground">to</span>
+        <Input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1"
+          onClick={() => { setFrom(""); setTo(""); onApply("", ""); onClose(); }}
+        >
+          Clear
+        </Button>
+        <Button size="sm" className="flex-1" onClick={() => { onApply(from, to); onClose(); }}>
+          Apply
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CheckboxListFilterBody<T extends string>({
+  label,
+  options,
+  selected,
+  onApply,
+  onClose,
+  searchPlaceholder
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  selected: T[];
+  onApply: (values: T[]) => void;
+  onClose: () => void;
+  /** When provided, shows a search input above the list that narrows the visible options client-side. */
+  searchPlaceholder?: string;
+}) {
+  const [draft, setDraft] = useState<T[]>(selected);
+  const [query, setQuery] = useState("");
+  const toggle = (value: T) => {
+    setDraft((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
+  };
+  const visibleOptions = query.trim()
+    ? options.filter((opt) => opt.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : options;
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {searchPlaceholder !== undefined && (
+        <Input
+          value={query}
+          placeholder={searchPlaceholder}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      )}
+      <div className="max-h-48 space-y-1.5 overflow-y-auto">
+        {visibleOptions.length === 0 ? (
+          <p className="py-2 text-xs text-muted-foreground">No matches</p>
+        ) : (
+          visibleOptions.map((opt) => (
+            <label key={opt.value} className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox checked={draft.includes(opt.value)} onCheckedChange={() => toggle(opt.value)} />
+              {opt.label}
+            </label>
+          ))
+        )}
+      </div>
+      {draft.length > 0 && (
+        <p className="text-xs text-muted-foreground">{draft.length} selected</p>
+      )}
+      <Button size="sm" className="w-full" onClick={() => { onApply(draft); onClose(); }}>
+        Apply
+      </Button>
+    </div>
+  );
+}
+
+function getPageNumbers(current: number, total: number): (number | "ellipsis")[] {
+  if (total <= 0) return [];
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | "ellipsis")[] = [1];
+  if (current > 3) pages.push("ellipsis");
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (current < total - 2) pages.push("ellipsis");
+  pages.push(total);
+  return pages;
 }
 
 export default function TimelineTableView({
@@ -96,11 +390,17 @@ export default function TimelineTableView({
   loading,
   pagination,
   onPageChange,
-  onRecordUpdate
+  onRecordUpdate,
+  branches,
+  employees,
+  sort,
+  onSortChange,
+  filters,
+  onFiltersChange
 }: TimelineTableViewProps) {
   const [editingRecord, setEditingRecord] = useState<TimeRecord | null>(null);
   const [editForm, setEditForm] = useState({
-    status: 'PRESENT' as "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF",
+    status: 'PRESENT' as TimelineStatusValue,
     autoDeductedLeaveType: '',
     requiredCheckIn: '',
     requiredCheckOut: '',
@@ -110,12 +410,10 @@ export default function TimelineTableView({
     actualBreakTime: ''
   });
   const [saving, setSaving] = useState(false);
-  const [processedSaving, setProcessedSaving] = useState(false);
+  const [processedSavingId, setProcessedSavingId] = useState<string | null>(null);
   const [syncingUsers, setSyncingUsers] = useState<Set<string>>(new Set());
 
-  const handleToggleProcessed = async (target: boolean) => {
-    if (!editingRecord) return;
-
+  const handleToggleProcessed = async (record: TimeRecord, target: boolean) => {
     if (
       target === false &&
       !window.confirm(
@@ -125,11 +423,10 @@ export default function TimelineTableView({
       return;
     }
 
-    setProcessedSaving(true);
+    setProcessedSavingId(record.id);
     try {
-      const result = await setTimelineRecordProcessed(editingRecord.id, target);
+      const result = await setTimelineRecordProcessed(record.id, target);
       if (result.success) {
-        setEditingRecord(null);
         onRecordUpdate();
       } else {
         alert(result.error || "Failed to update processing status");
@@ -138,7 +435,7 @@ export default function TimelineTableView({
       console.error("Error updating processing status:", error);
       alert("Failed to update processing status");
     } finally {
-      setProcessedSaving(false);
+      setProcessedSavingId(null);
     }
   };
 
@@ -157,14 +454,14 @@ export default function TimelineTableView({
     setEditForm({
       status: record.status || 'PRESENT',
       autoDeductedLeaveType: record.autoDeductedLeaveType || '',
-      requiredCheckIn: record.requiredCheckIn ? 
+      requiredCheckIn: record.requiredCheckIn ?
         format(new Date(record.requiredCheckIn), 'yyyy-MM-dd\'T\'HH:mm') : '',
-      requiredCheckOut: record.requiredCheckOut ? 
+      requiredCheckOut: record.requiredCheckOut ?
         format(new Date(record.requiredCheckOut), 'yyyy-MM-dd\'T\'HH:mm') : '',
       requiredBreakTime: record.requiredBreakTime || '',
-      actualCheckIn: record.actualCheckIn ? 
+      actualCheckIn: record.actualCheckIn ?
         format(new Date(record.actualCheckIn), 'yyyy-MM-dd\'T\'HH:mm') : '',
-      actualCheckOut: record.actualCheckOut ? 
+      actualCheckOut: record.actualCheckOut ?
         format(new Date(record.actualCheckOut), 'yyyy-MM-dd\'T\'HH:mm') : '',
       actualBreakTime: record.actualBreakTime || ''
     });
@@ -175,23 +472,19 @@ export default function TimelineTableView({
 
     setSaving(true);
     try {
-      // Check if this is a leave type switch scenario
       const isCurrentlyOnLeave = editingRecord.status === 'ON_LEAVE';
       const isBeingChangedToOnLeave = editForm.status === 'ON_LEAVE';
       const leaveTypeChanged = editingRecord.autoDeductedLeaveType !== editForm.autoDeductedLeaveType;
 
-      // Validation: When changing to PRESENT, require check-in and check-out times
       if (editForm.status === 'PRESENT' && (!editForm.actualCheckIn || !editForm.actualCheckOut)) {
         alert('Check-in and Check-out times are required when setting status to Present');
         setSaving(false);
         return;
       }
 
-      // Scenario: Switching from one leave type to another (both records are ON_LEAVE with different types)
       if (isCurrentlyOnLeave && isBeingChangedToOnLeave && leaveTypeChanged && editingRecord.autoDeductedLeaveType && editForm.autoDeductedLeaveType) {
-        // Use the dedicated leave type adjustment action
         const adjustResult = await adjustLeaveType(editingRecord.id, editForm.autoDeductedLeaveType);
-        
+
         if (adjustResult.success) {
           setEditingRecord(null);
           onRecordUpdate();
@@ -199,7 +492,6 @@ export default function TimelineTableView({
           alert(`Failed to switch leave type: ${adjustResult.error}`);
         }
       } else {
-        // Standard timeline update (status change, time adjustments, etc.)
         const result = await updateTimelineRecord(editingRecord.id, {
           status: editForm.status,
           autoDeductedLeaveType: editForm.status === 'ON_LEAVE' ? editForm.autoDeductedLeaveType || null : null,
@@ -229,33 +521,18 @@ export default function TimelineTableView({
   const handleSync = async (userId: string, date: Date) => {
     setSyncingUsers(prev => new Set(prev).add(userId));
     try {
-      console.log(`Starting manual sync for user: ${userId} on ${format(new Date(date), 'yyyy-MM-dd')}`);
       const result = await manualSyncEmployee(userId, date);
-      
-      console.log(`Manual sync completed:`, result);
-      
+
       if (result.success) {
-        // Show success message
         if (result.syncedRecords > 0) {
           alert(`✅ Successfully synced ${result.syncedRecords} record(s)!\n\nThe timeline should now show updated check-in/out times.`);
         } else {
           alert(`ℹ️ ${result.message}\n\nNote: Records may already be complete or no new data available.`);
         }
-        
-        // Force refresh the table data
-        console.log('Refreshing table data after sync...');
         onRecordUpdate();
-        
-        // Force a small delay and refresh again to ensure UI updates
-        setTimeout(() => {
-          console.log('Secondary refresh after sync...');
-          onRecordUpdate();
-        }, 500);
+        setTimeout(() => onRecordUpdate(), 500);
       } else {
         alert(`❌ Sync failed: ${result.message}${result.errors.length > 0 ? '\n\nErrors:\n' + result.errors.join('\n') : ''}`);
-        if (result.errors.length > 0) {
-          console.error('Sync errors:', result.errors);
-        }
       }
     } catch (error) {
       console.error('Error syncing employee data:', error);
@@ -269,24 +546,9 @@ export default function TimelineTableView({
     }
   };
 
-  const getOvertimeBadge = (overtime: string | null) => {
-    if (!overtime) return null;
-    
-    const isPositive = !overtime.startsWith('-');
-    return (
-      <Badge variant={isPositive ? "default" : "destructive"}>
-        {isPositive ? '+' : ''}{overtime}
-      </Badge>
-    );
-  };
-
   const getAttendanceStatus = (record: TimeRecord) => {
     const display = getTimelineStatusDisplay(record);
-
-    if (!display) {
-      return null;
-    }
-
+    if (!display) return null;
     return (
       <Badge variant={display.variant} className={display.className}>
         {display.label}
@@ -296,9 +558,20 @@ export default function TimelineTableView({
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="animate-pulse bg-gray-200 h-16 rounded"></div>
+      <div className="space-y-3 rounded-xl border p-4">
+        {[...Array(8)].map((_, i) => (
+          <div key={i} className="flex items-center gap-6">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-4 w-14" />
+            <Skeleton className="h-4 w-14" />
+            <Skeleton className="h-4 w-8" />
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="ml-auto h-8 w-16" />
+          </div>
         ))}
       </div>
     );
@@ -306,68 +579,182 @@ export default function TimelineTableView({
 
   return (
     <div className="space-y-4">
-      {/* Table */}
-      <div className="border rounded-lg overflow-hidden">
+      <div className="overflow-x-auto rounded-xl border">
         <Table>
-          <TableHeader>
-            <TableRow className="bg-gray-50">
-              <TableHead>Employee</TableHead>
-              <TableHead>Branch</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Required</TableHead>
-              <TableHead>Actual</TableHead>
-              <TableHead>Active Time</TableHead>
-              <TableHead>OT/UT</TableHead>
-              <TableHead>
-                <span className="inline-flex items-center gap-1">
-                  OT/UT <Home className="h-3.5 w-3.5 text-green-600" />
-                </span>
-              </TableHead>
-              <TableHead>Total OT/UT</TableHead>
-              <TableHead>Actions</TableHead>
+          <TableHeader className="sticky top-0 z-20 bg-gray-50">
+            <TableRow className="hover:bg-transparent">
+              <ColumnHeaderCell label="Employee" className="sticky left-0 z-10 min-w-50 bg-gray-50">
+                <SortButton label="Employee" active={sort.field === "employee"} order={sort.order} onClick={() => onSortChange("employee")} />
+                <FilterPopoverButton active={filters.employeeIds.length > 0} label="Employee">
+                  {(close) => (
+                    <CheckboxListFilterBody
+                      label="Employee"
+                      searchPlaceholder="Search employees…"
+                      options={employees.map((e) => ({ value: e.id, label: e.name }))}
+                      selected={filters.employeeIds}
+                      onApply={(v) => onFiltersChange({ employeeIds: v })}
+                      onClose={close}
+                    />
+                  )}
+                </FilterPopoverButton>
+              </ColumnHeaderCell>
+
+              <ColumnHeaderCell label="Branch">
+                <SortButton label="Branch" active={sort.field === "branch"} order={sort.order} onClick={() => onSortChange("branch")} />
+                <FilterPopoverButton active={filters.branchIds.length > 0} label="Branch">
+                  {(close) => (
+                    <CheckboxListFilterBody
+                      label="Branch"
+                      options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                      selected={filters.branchIds}
+                      onApply={(v) => onFiltersChange({ branchIds: v })}
+                      onClose={close}
+                    />
+                  )}
+                </FilterPopoverButton>
+              </ColumnHeaderCell>
+
+              <ColumnHeaderCell label="Date">
+                <SortButton label="Date" active={sort.field === "date"} order={sort.order} onClick={() => onSortChange("date")} />
+                <FilterPopoverButton active={!!(filters.dateFrom || filters.dateTo)} label="Date" contentClassName="w-auto">
+                  {(close) => (
+                    <DateRangeFilterBody
+                      fromValue={filters.dateFrom}
+                      toValue={filters.dateTo}
+                      onApply={(from, to) => onFiltersChange({ dateFrom: from, dateTo: to })}
+                      onClose={close}
+                    />
+                  )}
+                </FilterPopoverButton>
+              </ColumnHeaderCell>
+
+              <ColumnHeaderCell label="Status">
+                <SortButton label="Status" active={sort.field === "status"} order={sort.order} onClick={() => onSortChange("status")} />
+                <FilterPopoverButton active={filters.statuses.length > 0} label="Status">
+                  {(close) => (
+                    <CheckboxListFilterBody
+                      label="Status"
+                      options={STATUS_OPTIONS}
+                      selected={filters.statuses}
+                      onApply={(v) => onFiltersChange({ statuses: v })}
+                      onClose={close}
+                    />
+                  )}
+                </FilterPopoverButton>
+              </ColumnHeaderCell>
+
+              <ColumnHeaderCell label="In">
+                <SortButton label="In" active={sort.field === "checkIn"} order={sort.order} onClick={() => onSortChange("checkIn")} />
+                <FilterPopoverButton active={!!(filters.checkInFrom || filters.checkInTo)} label="Check-in time">
+                  {(close) => (
+                    <TimeRangeFilterBody
+                      fromValue={filters.checkInFrom}
+                      toValue={filters.checkInTo}
+                      onApply={(from, to) => onFiltersChange({ checkInFrom: from, checkInTo: to })}
+                      onClose={close}
+                    />
+                  )}
+                </FilterPopoverButton>
+              </ColumnHeaderCell>
+
+              <ColumnHeaderCell label="Out">
+                <SortButton label="Out" active={sort.field === "checkOut"} order={sort.order} onClick={() => onSortChange("checkOut")} />
+                <FilterPopoverButton active={!!(filters.checkOutFrom || filters.checkOutTo)} label="Check-out time">
+                  {(close) => (
+                    <TimeRangeFilterBody
+                      fromValue={filters.checkOutFrom}
+                      toValue={filters.checkOutTo}
+                      onApply={(from, to) => onFiltersChange({ checkOutFrom: from, checkOutTo: to })}
+                      onClose={close}
+                    />
+                  )}
+                </FilterPopoverButton>
+              </ColumnHeaderCell>
+
+              <ColumnHeaderCell label="Late (min)">
+                <SortButton label="Late minutes" active={sort.field === "lateMinutes"} order={sort.order} onClick={() => onSortChange("lateMinutes")} />
+                <FilterPopoverButton active={!!(filters.lateMin || filters.lateMax)} label="Late minutes">
+                  {(close) => (
+                    <RangeFilterBody
+                      label="Late minutes"
+                      minValue={filters.lateMin}
+                      maxValue={filters.lateMax}
+                      onApply={(min, max) => onFiltersChange({ lateMin: min, lateMax: max })}
+                      onClose={close}
+                    />
+                  )}
+                </FilterPopoverButton>
+              </ColumnHeaderCell>
+
+              <ColumnHeaderCell label="Active Time">
+                <SortButton label="Active time" active={sort.field === "activeTime"} order={sort.order} onClick={() => onSortChange("activeTime")} />
+                <FilterPopoverButton active={!!(filters.activeTimeMin || filters.activeTimeMax)} label="Active time">
+                  {(close) => (
+                    <RangeFilterBody
+                      label="Active time (minutes)"
+                      minValue={filters.activeTimeMin}
+                      maxValue={filters.activeTimeMax}
+                      onApply={(min, max) => onFiltersChange({ activeTimeMin: min, activeTimeMax: max })}
+                      onClose={close}
+                    />
+                  )}
+                </FilterPopoverButton>
+              </ColumnHeaderCell>
+
+              <ColumnHeaderCell label="OT/UT">
+                <SortButton label="OT/UT" active={sort.field === "otUt"} order={sort.order} onClick={() => onSortChange("otUt")} />
+                <FilterPopoverButton active={!!(filters.otUtMin || filters.otUtMax)} label="OT/UT">
+                  {(close) => (
+                    <RangeFilterBody
+                      label="OT/UT (minutes)"
+                      minValue={filters.otUtMin}
+                      maxValue={filters.otUtMax}
+                      onApply={(min, max) => onFiltersChange({ otUtMin: min, otUtMax: max })}
+                      onClose={close}
+                    />
+                  )}
+                </FilterPopoverButton>
+              </ColumnHeaderCell>
+
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {records.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                  No timeline records found
+                <TableCell colSpan={COLUMN_COUNT} className="py-16 text-center">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <CalendarX className="h-8 w-8" />
+                    <p className="text-sm font-medium">No attendance records found.</p>
+                    <Button variant="outline" size="sm" className="mt-1" onClick={onRecordUpdate}>
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Refresh Timeline
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
               records.map((record) => (
-                <TableRow key={record.id} className="hover:bg-gray-50">
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">
-                          <EmployeeProfileLink
-                            employeeId={record.user.id}
-                            name={record.user.firstName && record.user.lastName
-                              ? `${record.user.firstName} ${record.user.lastName}`
-                              : undefined}
-                            email={record.user.email}
-                          />
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {record.user.email}
-                        </div>
-                      </div>
+                <TableRow key={record.id} className="hover:bg-gray-50/80">
+                  <TableCell className="sticky left-0 z-10 bg-white group-hover:bg-gray-50/80">
+                    <div className="font-medium text-foreground">
+                      <EmployeeProfileLink
+                        employeeId={record.user.id}
+                        name={record.user.firstName && record.user.lastName
+                          ? `${record.user.firstName} ${record.user.lastName}`
+                          : undefined}
+                        email={record.user.email}
+                        className="hover:underline"
+                      />
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      {record.user.branch?.name || 'No Branch'}
-                    </div>
+                  <TableCell className="text-sm">
+                    {record.user.branch?.name || 'No Branch'}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex items-center gap-2 text-sm">
                       {format(new Date(record.date), 'MMM dd, yyyy')}
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="outline" className="text-xs font-normal">
                         {format(new Date(record.date), 'EEE')}
                       </Badge>
                     </div>
@@ -375,316 +762,284 @@ export default function TimelineTableView({
                   <TableCell>
                     {getAttendanceStatus(record)}
                   </TableCell>
-                  <TableCell>
-                    <div className="text-sm space-y-1">
-                      {record.requiredCheckIn ? (
-                        <>
-                          <div>In: {formatTime12(record.requiredCheckIn)}</div>
-                          <div>Out: {formatTime12(record.requiredCheckOut)}</div>
-                          <div>Break: {record.requiredBreakTime || '--'}</div>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">--</span>
-                      )}
+                  <TableCell className="text-sm">
+                    {formatTime12(record.actualCheckIn)}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {formatTime12(record.actualCheckOut)}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {record.lateCheckInMinutes && record.lateCheckInMinutes > 0 ? (
+                      <span className="font-medium text-red-600">{record.lateCheckInMinutes}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    <div className="space-y-0.5">
+                      <div>Active: <span className="font-medium">{formatDurationPill(record.actualActiveTime)}</span></div>
+                      <div className="text-muted-foreground">Req: {formatDurationPill(record.requiredActiveTime)}</div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm space-y-1">
-                      <div>In: {formatTime12(record.actualCheckIn)}</div>
-                      <div>Out: {formatTime12(record.actualCheckOut)}</div>
-                      <div>Break: {record.actualBreakTime || '--'}</div>
-                    </div>
+                    <OtUtPill value={record.overtimeUndertime} />
                   </TableCell>
-                  <TableCell>
-                    <div className="text-sm space-y-1">
-                      <div>Req: {record.requiredActiveTime || '--'}</div>
-                      <div>Act: {record.actualActiveTime || '--'}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {getOvertimeBadge(record.overtimeUndertime)}
-                  </TableCell>
-                  <TableCell>
-                    {getOvertimeBadge(record.requestedOvertime)}
-                  </TableCell>
-                  <TableCell>
-                    {getOvertimeBadge(record.officialOvertimeundertime)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSync(record.user.id, record.date)}
-                        disabled={syncingUsers.has(record.user.id)}
-                        title="Sync attendance data from ZKTeco"
-                      >
-                        <RefreshCw 
-                          className={`h-4 w-4 ${syncingUsers.has(record.user.id) ? 'animate-spin' : ''}`} 
-                        />
-                      </Button>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
                       <Dialog>
-                        <DialogTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => openEditDialog(record)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </DialogTrigger>
-                      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
-                          <DialogTitle>Edit Time Record</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <div className="text-sm text-muted-foreground">
-                            <EmployeeProfileLink
-                              employeeId={record.user.id}
-                              name={record.user.firstName && record.user.lastName
-                                ? `${record.user.firstName} ${record.user.lastName}`
-                                : undefined}
-                              email={record.user.email}
-                            /> - {format(new Date(record.date), 'MMM dd, yyyy')}
-                          </div>
-                          
-                          <div className="grid gap-4">
-                            <div>
-                              <Label htmlFor="status">Status</Label>
-                              <Select
-                                value={editForm.status}
-                                onValueChange={(value) => setEditForm({
-                                  ...editForm,
-                                  status: value as "PRESENT" | "ABSENT" | "ON_LEAVE" | "WEEKLY_OFF",
-                                  autoDeductedLeaveType: value === 'ON_LEAVE' ? editForm.autoDeductedLeaveType : ''
-                                })}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => openEditDialog(record)}
+                                aria-label="View / edit record"
                               >
-                                <SelectTrigger id="status">
-                                  <SelectValue placeholder="Select status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="PRESENT">Present</SelectItem>
-                                  <SelectItem value="ABSENT">Absent</SelectItem>
-                                  <SelectItem value="ON_LEAVE" disabled={availableLeaveTypes.length === 0}>On Leave</SelectItem>
-                                  <SelectItem value="WEEKLY_OFF">Weekly Off</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              {availableLeaveTypes.length === 0 && (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  No leave balance available for this employee.
-                                </p>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent>View / edit record</TooltipContent>
+                        </Tooltip>
+                        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+                          <DialogHeader>
+                            <DialogTitle>Time Record Details</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div className="text-sm text-muted-foreground">
+                              <EmployeeProfileLink
+                                employeeId={record.user.id}
+                                name={record.user.firstName && record.user.lastName
+                                  ? `${record.user.firstName} ${record.user.lastName}`
+                                  : undefined}
+                                email={record.user.email}
+                              /> - {format(new Date(record.date), 'MMM dd, yyyy')}
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-3 rounded-md border p-3">
+                              <div>
+                                <div className="text-xs text-muted-foreground">System OT/UT</div>
+                                <div className={cn("text-sm font-medium", otUtTextColor(record.officialOvertimeundertime))}>
+                                  {formatDurationPill(record.officialOvertimeundertime)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-muted-foreground">Requested OT</div>
+                                <div className={cn("text-sm font-medium", otUtTextColor(record.requestedOvertime))}>
+                                  {formatDurationPill(record.requestedOvertime)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-muted-foreground">Total OT/UT</div>
+                                <div className={cn("text-sm font-medium", otUtTextColor(record.overtimeUndertime))}>
+                                  {formatDurationPill(record.overtimeUndertime)}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid gap-4">
+                              <div>
+                                <Label htmlFor="status">Status</Label>
+                                <Select
+                                  value={editForm.status}
+                                  onValueChange={(value) => setEditForm({
+                                    ...editForm,
+                                    status: value as TimelineStatusValue,
+                                    autoDeductedLeaveType: value === 'ON_LEAVE' ? editForm.autoDeductedLeaveType : ''
+                                  })}
+                                >
+                                  <SelectTrigger id="status">
+                                    <SelectValue placeholder="Select status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="PRESENT">Present</SelectItem>
+                                    <SelectItem value="ABSENT">Absent</SelectItem>
+                                    <SelectItem value="ON_LEAVE" disabled={availableLeaveTypes.length === 0}>On Leave</SelectItem>
+                                    <SelectItem value="WEEKLY_OFF">Weekly Off</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                {availableLeaveTypes.length === 0 && (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    No leave balance available for this employee.
+                                  </p>
+                                )}
+                              </div>
+
+                              {editingRecord?.status === 'ON_LEAVE' && editForm.status === 'PRESENT' && editingRecord?.autoDeductedLeaveType && (
+                                <div className="rounded border border-green-200 bg-green-50 p-3">
+                                  <p className="mb-2 text-xs font-semibold text-green-800">✓ Leave Balance Restoration</p>
+                                  <p className="text-sm text-green-700">
+                                    Transitioning from <strong>ON_LEAVE</strong> to <strong>PRESENT</strong>:
+                                  </p>
+                                  <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-green-700">
+                                    <li>1 day will be restored to <strong>{editingRecord.autoDeductedLeaveType}</strong></li>
+                                    <li>Check-in and Check-out times will be required</li>
+                                    <li>All changes will be logged in audit trail</li>
+                                  </ul>
+                                </div>
+                              )}
+
+                              {editForm.status === 'ON_LEAVE' && (
+                                <div className="space-y-3 rounded border border-blue-200 bg-blue-50 p-3">
+                                  {editingRecord?.status === 'ON_LEAVE' && editingRecord?.autoDeductedLeaveType && (
+                                    <div>
+                                      <Label className="text-xs font-semibold text-blue-900">Current Leave Type</Label>
+                                      <div className="py-2 text-sm font-medium text-blue-800">
+                                        {editingRecord.autoDeductedLeaveType}
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <Label htmlFor="autoDeductedLeaveType" className="text-sm font-semibold">
+                                      {editingRecord?.status === 'ON_LEAVE' ? 'Switch to Leave Type' : 'Select Leave Type'}
+                                    </Label>
+                                    <Select
+                                      value={editForm.autoDeductedLeaveType || undefined}
+                                      onValueChange={(value) => setEditForm({
+                                        ...editForm,
+                                        autoDeductedLeaveType: value
+                                      })}
+                                    >
+                                      <SelectTrigger id="autoDeductedLeaveType">
+                                        <SelectValue placeholder="Select leave type" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {availableLeaveTypes.map((entitlement) => {
+                                          const isCurrentLeaveType = editingRecord?.autoDeductedLeaveType === entitlement.leaveType.name;
+                                          const balance = entitlement.allocatedDays - entitlement.usedDays;
+                                          return (
+                                            <SelectItem
+                                              key={entitlement.id}
+                                              value={entitlement.leaveType.name}
+                                              disabled={isCurrentLeaveType}
+                                            >
+                                              {entitlement.leaveType.name} ({balance} available)
+                                              {isCurrentLeaveType && ' - Current'}
+                                            </SelectItem>
+                                          );
+                                        })}
+                                      </SelectContent>
+                                    </Select>
+                                    {editForm.autoDeductedLeaveType && editingRecord?.autoDeductedLeaveType && editForm.autoDeductedLeaveType !== editingRecord.autoDeductedLeaveType && (
+                                      <p className="mt-2 rounded bg-blue-100 p-2 text-xs text-blue-700">
+                                        ℹ️ Switching from <strong>{editingRecord.autoDeductedLeaveType}</strong> to <strong>{editForm.autoDeductedLeaveType}</strong>: +1 day restored, -1 day deducted. All changes will be logged.
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {shouldShowManualTimeEditors && (
+                                <>
+                                  <div className="border-b pb-4">
+                                    <h4 className="mb-3 text-sm font-medium text-muted-foreground">Required Times</h4>
+                                    <div className="grid gap-3">
+                                      <div>
+                                        <Label htmlFor="requiredCheckIn">Required Check In</Label>
+                                        <Input
+                                          id="requiredCheckIn"
+                                          type="datetime-local"
+                                          value={editForm.requiredCheckIn}
+                                          onChange={(e) => setEditForm({ ...editForm, requiredCheckIn: e.target.value })}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor="requiredCheckOut">Required Check Out</Label>
+                                        <Input
+                                          id="requiredCheckOut"
+                                          type="datetime-local"
+                                          value={editForm.requiredCheckOut}
+                                          onChange={(e) => setEditForm({ ...editForm, requiredCheckOut: e.target.value })}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor="requiredBreakTime">Required Break Time (HH:MM)</Label>
+                                        <Input
+                                          id="requiredBreakTime"
+                                          type="text"
+                                          placeholder="01:00"
+                                          value={editForm.requiredBreakTime}
+                                          onChange={(e) => setEditForm({ ...editForm, requiredBreakTime: e.target.value })}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <h4 className="mb-3 text-sm font-medium text-muted-foreground">Actual Times</h4>
+                                    <div className="grid gap-3">
+                                      <div>
+                                        <Label htmlFor="actualCheckIn">Actual Check In</Label>
+                                        <Input
+                                          id="actualCheckIn"
+                                          type="datetime-local"
+                                          value={editForm.actualCheckIn}
+                                          onChange={(e) => setEditForm({ ...editForm, actualCheckIn: e.target.value })}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor="actualCheckOut">Actual Check Out</Label>
+                                        <Input
+                                          id="actualCheckOut"
+                                          type="datetime-local"
+                                          value={editForm.actualCheckOut}
+                                          onChange={(e) => setEditForm({ ...editForm, actualCheckOut: e.target.value })}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor="actualBreakTime">Actual Break Time (HH:MM)</Label>
+                                        <Input
+                                          id="actualBreakTime"
+                                          type="text"
+                                          placeholder="01:00"
+                                          value={editForm.actualBreakTime}
+                                          onChange={(e) => setEditForm({ ...editForm, actualBreakTime: e.target.value })}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </>
                               )}
                             </div>
 
-                            {/* Status Transition from ON_LEAVE to PRESENT */}
-                            {editingRecord?.status === 'ON_LEAVE' && editForm.status === 'PRESENT' && editingRecord?.autoDeductedLeaveType && (
-                              <div className="border border-green-200 bg-green-50 p-3 rounded">
-                                <p className="text-xs text-green-800 font-semibold mb-2">✓ Leave Balance Restoration</p>
-                                <p className="text-sm text-green-700">
-                                  Transitioning from <strong>ON_LEAVE</strong> to <strong>PRESENT</strong>:
-                                </p>
-                                <ul className="text-sm text-green-700 list-disc list-inside mt-2 space-y-1">
-                                  <li>1 day will be restored to <strong>{editingRecord.autoDeductedLeaveType}</strong></li>
-                                  <li>Check-in and Check-out times will be required</li>
-                                  <li>All changes will be logged in audit trail</li>
-                                </ul>
-                              </div>
-                            )}
-
-                            {editForm.status === 'ON_LEAVE' && (
-                              <div className="space-y-3 border border-blue-200 bg-blue-50 p-3 rounded">
-                                {editingRecord?.status === 'ON_LEAVE' && editingRecord?.autoDeductedLeaveType && (
-                                  <div>
-                                    <Label className="text-xs font-semibold text-blue-900">Current Leave Type</Label>
-                                    <div className="text-sm font-medium text-blue-800 py-2">
-                                      {editingRecord.autoDeductedLeaveType}
-                                    </div>
-                                  </div>
-                                )}
-                                <div>
-                                  <Label htmlFor="autoDeductedLeaveType" className="text-sm font-semibold">
-                                    {editingRecord?.status === 'ON_LEAVE' ? 'Switch to Leave Type' : 'Select Leave Type'}
-                                  </Label>
-                                  <Select
-                                    value={editForm.autoDeductedLeaveType || undefined}
-                                    onValueChange={(value) => setEditForm({
-                                      ...editForm,
-                                      autoDeductedLeaveType: value
-                                    })}
-                                  >
-                                    <SelectTrigger id="autoDeductedLeaveType">
-                                      <SelectValue placeholder="Select leave type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {availableLeaveTypes.map((entitlement) => {
-                                        const isCurrentLeaveType = editingRecord?.autoDeductedLeaveType === entitlement.leaveType.name;
-                                        const balance = entitlement.allocatedDays - entitlement.usedDays;
-                                        return (
-                                          <SelectItem 
-                                            key={entitlement.id} 
-                                            value={entitlement.leaveType.name}
-                                            disabled={isCurrentLeaveType}
-                                          >
-                                            {entitlement.leaveType.name} ({balance} available)
-                                            {isCurrentLeaveType && ' - Current'}
-                                          </SelectItem>
-                                        );
-                                      })}
-                                    </SelectContent>
-                                  </Select>
-                                  {editForm.autoDeductedLeaveType && editingRecord?.autoDeductedLeaveType && editForm.autoDeductedLeaveType !== editingRecord.autoDeductedLeaveType && (
-                                    <p className="mt-2 text-xs text-blue-700 bg-blue-100 p-2 rounded">
-                                      ℹ️ Switching from <strong>{editingRecord.autoDeductedLeaveType}</strong> to <strong>{editForm.autoDeductedLeaveType}</strong>: +1 day restored, -1 day deducted. All changes will be logged.
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {shouldShowManualTimeEditors && (
-                              <>
-                                {/* Required Times Section */}
-                                <div className="border-b pb-4">
-                                  <h4 className="font-medium text-sm text-muted-foreground mb-3">Required Times</h4>
-                                  <div className="grid gap-3">
-                                    <div>
-                                      <Label htmlFor="requiredCheckIn">Required Check In</Label>
-                                      <Input
-                                        id="requiredCheckIn"
-                                        type="datetime-local"
-                                        value={editForm.requiredCheckIn}
-                                        onChange={(e) => setEditForm({
-                                          ...editForm,
-                                          requiredCheckIn: e.target.value
-                                        })}
-                                      />
-                                    </div>
-                                    
-                                    <div>
-                                      <Label htmlFor="requiredCheckOut">Required Check Out</Label>
-                                      <Input
-                                        id="requiredCheckOut"
-                                        type="datetime-local"
-                                        value={editForm.requiredCheckOut}
-                                        onChange={(e) => setEditForm({
-                                          ...editForm,
-                                          requiredCheckOut: e.target.value
-                                        })}
-                                      />
-                                    </div>
-                                    
-                                    <div>
-                                      <Label htmlFor="requiredBreakTime">Required Break Time (HH:MM)</Label>
-                                      <Input
-                                        id="requiredBreakTime"
-                                        type="text"
-                                        placeholder="01:00"
-                                        value={editForm.requiredBreakTime}
-                                        onChange={(e) => setEditForm({
-                                          ...editForm,
-                                          requiredBreakTime: e.target.value
-                                        })}
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Actual Times Section */}
-                                <div>
-                                  <h4 className="font-medium text-sm text-muted-foreground mb-3">Actual Times</h4>
-                                  <div className="grid gap-3">
-                                    <div>
-                                      <Label htmlFor="actualCheckIn">Actual Check In</Label>
-                                      <Input
-                                        id="actualCheckIn"
-                                        type="datetime-local"
-                                        value={editForm.actualCheckIn}
-                                        onChange={(e) => setEditForm({
-                                          ...editForm,
-                                          actualCheckIn: e.target.value
-                                        })}
-                                      />
-                                    </div>
-                                    
-                                    <div>
-                                      <Label htmlFor="actualCheckOut">Actual Check Out</Label>
-                                      <Input
-                                        id="actualCheckOut"
-                                        type="datetime-local"
-                                        value={editForm.actualCheckOut}
-                                        onChange={(e) => setEditForm({
-                                          ...editForm,
-                                          actualCheckOut: e.target.value
-                                        })}
-                                      />
-                                    </div>
-                                    
-                                    <div>
-                                      <Label htmlFor="actualBreakTime">Actual Break Time (HH:MM)</Label>
-                                      <Input
-                                        id="actualBreakTime"
-                                        type="text"
-                                        placeholder="01:00"
-                                        value={editForm.actualBreakTime}
-                                        onChange={(e) => setEditForm({
-                                          ...editForm,
-                                          actualBreakTime: e.target.value
-                                        })}
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                          
-                          {/* Processing Status */}
-                          <div className="rounded-md border p-3 space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <div>
-                                <div className="text-sm font-medium">Processing Status</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {editingRecord?.isProcessed
-                                    ? "Unprocessing clears the actual check-in/out and lets the server re-fetch this day."
-                                    : "Not processed yet — the server will auto-fill this day on the next sync."}
-                                </div>
-                              </div>
-                              {editingRecord?.isProcessed
-                                ? <Badge variant="secondary">Processed</Badge>
-                                : <Badge variant="outline">Not processed</Badge>}
+                            <div className="flex justify-end gap-2">
+                              <Button onClick={handleSave} disabled={saving}>
+                                {saving ? 'Saving...' : 'Save Changes'}
+                              </Button>
                             </div>
-                            {editingRecord?.isProcessed ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={processedSaving}
-                                onClick={() => handleToggleProcessed(false)}
-                              >
-                                {processedSaving ? "Working..." : "Mark as Unprocessed & Re-fetch"}
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={processedSaving}
-                                onClick={() => handleToggleProcessed(true)}
-                              >
-                                {processedSaving ? "Working..." : "Mark as Processed"}
-                              </Button>
-                            )}
                           </div>
+                        </DialogContent>
+                      </Dialog>
 
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              onClick={handleSave}
-                              disabled={saving}
-                            >
-                              {saving ? 'Saving...' : 'Save Changes'}
-                            </Button>
-                          </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                      <DropdownMenu>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon-sm" aria-label="More actions">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent>More actions</TooltipContent>
+                        </Tooltip>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            disabled={syncingUsers.has(record.user.id)}
+                            onSelect={() => handleSync(record.user.id, record.date)}
+                          >
+                            <RefreshCw className={cn("h-4 w-4", syncingUsers.has(record.user.id) && "animate-spin")} />
+                            {syncingUsers.has(record.user.id) ? "Syncing…" : "Sync from ZKTeco"}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            disabled={processedSavingId === record.id}
+                            onSelect={() => handleToggleProcessed(record, !record.isProcessed)}
+                          >
+                            {record.isProcessed ? "Mark as Unprocessed & Re-fetch" : "Mark as Processed"}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -694,41 +1049,49 @@ export default function TimelineTableView({
         </Table>
       </div>
 
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
-            {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
-            {pagination.total} results
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(pagination.page - 1)}
-              disabled={pagination.page === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Previous
-            </Button>
-            
-            <span className="px-4 py-2 text-sm">
-              Page {pagination.page} of {pagination.totalPages}
-            </span>
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(pagination.page + 1)}
-              disabled={pagination.page === pagination.totalPages}
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <div className="text-sm text-muted-foreground">
+          Showing {pagination.total === 0 ? 0 : ((pagination.page - 1) * pagination.limit) + 1} to{' '}
+          {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+          {pagination.total} records
         </div>
-      )}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(pagination.page - 1)}
+            disabled={pagination.page === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </Button>
+
+          {getPageNumbers(pagination.page, pagination.totalPages).map((p, idx) =>
+            p === "ellipsis" ? (
+              <span key={`ellipsis-${idx}`} className="px-2 text-sm text-muted-foreground">…</span>
+            ) : (
+              <Button
+                key={p}
+                variant={p === pagination.page ? "default" : "outline"}
+                size="icon-sm"
+                onClick={() => onPageChange(p)}
+              >
+                {p}
+              </Button>
+            )
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(pagination.page + 1)}
+            disabled={pagination.page === pagination.totalPages || pagination.totalPages === 0}
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
