@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RefreshCw, RotateCcw, X } from "lucide-react";
 import TimelineTableView from "@/components/admin/TimelineTableView";
-import { getTimelineRecords } from "@/actions/timeline.actions";
+import { getTimelineRecords, getTimelineEmployeeOptions } from "@/actions/timeline.actions";
 import { getBranches } from "@/actions/branch.actions";
 import { getUsers } from "@/actions/user.actions";
 import { toast } from "sonner";
 import {
   type TimeRecord,
   type BranchOption,
+  type EmployeeOption,
   type SortState,
   type ColumnFilters,
   type TimelineSortField,
@@ -25,6 +26,14 @@ interface UserOption {
   firstName: string | null;
   lastName: string | null;
   email: string;
+}
+
+interface TimelineEmployeeOption {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+  isArchived: boolean;
 }
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -40,6 +49,7 @@ export default function TimelineClient() {
   const [timeRecords, setTimeRecords] = useState<TimeRecord[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [employeeOptions, setEmployeeOptions] = useState<TimelineEmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [leaveBackfillRunning, setLeaveBackfillRunning] = useState(false);
@@ -53,12 +63,13 @@ export default function TimelineClient() {
   const [filters, setFilters] = useState<ColumnFilters>(EMPTY_COLUMN_FILTERS);
   const [sort, setSort] = useState<SortState>({ field: null, order: "asc" });
 
-  const employees = useMemo(
-    () => users.map((user) => ({
+  const employees: EmployeeOption[] = useMemo(
+    () => employeeOptions.map((user) => ({
       id: user.id,
-      name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.email
+      name: (user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.email)
+        + (user.isArchived ? " (Archived)" : "")
     })),
-    [users]
+    [employeeOptions]
   );
 
   const loadTimeRecords = useCallback(async () => {
@@ -116,13 +127,17 @@ export default function TimelineClient() {
 
   const loadInitialData = useCallback(async () => {
     try {
-      const [branchesResult, usersResult] = await Promise.all([
+      const [branchesResult, usersResult, employeeOptionsResult] = await Promise.all([
         getBranches(),
-        getUsers()
+        getUsers(),
+        getTimelineEmployeeOptions()
       ]);
 
       setBranches(branchesResult || []);
       setUsers(usersResult || []);
+      if (employeeOptionsResult.success) {
+        setEmployeeOptions(employeeOptionsResult.employees || []);
+      }
     } catch (error) {
       console.error('Error loading initial data:', error);
     }
