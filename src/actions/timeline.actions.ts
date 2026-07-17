@@ -4,10 +4,11 @@ import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { createAdminNotification } from "./notification.actions";
-import { Prisma, type DailyTimeRecord } from "@prisma/client";
+import { Prisma, type DailyTimeRecord, type DailyRecordStatus } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 import { buildDateRangeFilter } from "@/lib/utils";
 import { isArchivedStatus } from "@/lib/employee-status";
+import { parseDurationToMinutes } from "@/lib/duration";
 
 /**
  * Convert time string (HH:MM) to minutes
@@ -1304,18 +1305,77 @@ export async function checkAndGenerateToday(): Promise<TimelineGenerationResult>
   }
 }
 
+export type TimelineSortField =
+  | "employee"
+  | "branch"
+  | "date"
+  | "status"
+  | "checkIn"
+  | "checkOut"
+  | "lateMinutes"
+  | "activeTime"
+  | "otUt";
+
+const DB_NATIVE_SORT_FIELDS: readonly TimelineSortField[] = [
+  "employee",
+  "branch",
+  "date",
+  "status",
+  "lateMinutes",
+];
+
+function timeOfDayMinutes(date: Date | null): number | null {
+  if (!date) return null;
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function parseTimeOfDay(value: string | undefined): number | null {
+  if (!value) return null;
+  const [hoursStr, minutesStr] = value.split(":");
+  const hours = Number(hoursStr);
+  const minutes = Number(minutesStr);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
 /**
- * Get timeline records for a specific user and date range
+ * Get timeline records for a specific user and date range.
+ *
+ * Sorting/filtering runs in two tiers:
+ *  - DB-native tier (branch/employee/date/status/lateMinutes): applied via
+ *    Prisma where/orderBy with DB-level pagination — same performance as before.
+ *  - In-memory tier (checkIn/checkOut time-of-day, activeTime/otUt ranges,
+ *    and sorting by any of those): engaged only when actually requested,
+ *    since those values aren't stored as directly comparable DB columns
+ *    (durations are "HH:MM" strings; check-in/out time-of-day ignores the
+ *    date part). This fetches the DB-filtered set without skip/take and
+ *    paginates in Node. Acceptable for this tool's realistic data volumes
+ *    (a filtered branch/date range), not intended for unbounded datasets.
  */
 export async function getTimelineRecords(
   userId?: string,
-  startDate?: Date,
-  endDate?: Date,
+  startDate?: string | Date,
+  endDate?: string | Date,
   options?: {
     branchId?: string;
+    branchIds?: string[];
     employeeName?: string;
+    employeeIds?: string[];
+    statuses?: (DailyRecordStatus | "BLANK")[];
     page?: number;
     limit?: number;
+    sortBy?: TimelineSortField;
+    sortOrder?: "asc" | "desc";
+    lateMinutesMin?: number;
+    lateMinutesMax?: number;
+    checkInFrom?: string;
+    checkInTo?: string;
+    checkOutFrom?: string;
+    checkOutTo?: string;
+    activeTimeMin?: number;
+    activeTimeMax?: number;
+    otUtMin?: number;
+    otUtMax?: number;
   }
 ) {
   try {
@@ -1331,13 +1391,15 @@ export async function getTimelineRecords(
     }
 
     const where: Prisma.DailyTimeRecordWhereInput = {};
-    
+
     if (isSelfTimelineView) {
       where.userId = actor.id;
+    } else if (options?.employeeIds && options.employeeIds.length > 0) {
+      where.userId = { in: options.employeeIds };
     } else if (userId) {
       where.userId = userId;
     }
-    
+
     if (startDate || endDate) {
       const dateFilter = buildDateRangeFilter(startDate, endDate);
       if (dateFilter) {
@@ -1345,13 +1407,17 @@ export async function getTimelineRecords(
       }
     }
 
-    if (options?.branchId || options?.employeeName) {
+    const branchIds = options?.branchIds && options.branchIds.length > 0
+      ? options.branchIds
+      : (options?.branchId ? [options.branchId] : undefined);
+
+    if (branchIds || options?.employeeName) {
       where.user = {};
-      if (options.branchId) {
-        where.user.branchId = options.branchId;
+      if (branchIds) {
+        where.user.branchId = { in: branchIds };
       }
 
-      if (options.employeeName) {
+      if (options?.employeeName) {
         const searchTerm = options.employeeName.trim();
         if (searchTerm) {
           where.user.OR = [
@@ -1363,69 +1429,198 @@ export async function getTimelineRecords(
       }
     }
 
+    if (options?.statuses && options.statuses.length > 0) {
+      const includeBlank = options.statuses.includes("BLANK");
+      const realStatuses = options.statuses.filter((s): s is DailyRecordStatus => s !== "BLANK");
+
+      if (includeBlank && realStatuses.length > 0) {
+        where.OR = [
+          { status: { in: realStatuses } },
+          { isProcessed: false },
+        ];
+      } else if (includeBlank) {
+        where.isProcessed = false;
+      } else {
+        where.status = { in: realStatuses };
+      }
+    }
+
+    if (options?.lateMinutesMin !== undefined || options?.lateMinutesMax !== undefined) {
+      where.lateCheckInMinutes = {
+        ...(options.lateMinutesMin !== undefined ? { gte: options.lateMinutesMin } : {}),
+        ...(options.lateMinutesMax !== undefined ? { lte: options.lateMinutesMax } : {}),
+      };
+    }
+
     const page = Math.max(options?.page || 1, 1);
     const limit = Math.max(options?.limit || 0, 0);
     const usePagination = limit > 0;
+    const sortBy = options?.sortBy;
+    const sortOrder = options?.sortOrder || "asc";
 
-    const total = await prisma.dailyTimeRecord.count({ where });
+    const needsInMemoryTier = Boolean(
+      (sortBy && !DB_NATIVE_SORT_FIELDS.includes(sortBy)) ||
+      options?.checkInFrom || options?.checkInTo ||
+      options?.checkOutFrom || options?.checkOutTo ||
+      options?.activeTimeMin !== undefined || options?.activeTimeMax !== undefined ||
+      options?.otUtMin !== undefined || options?.otUtMax !== undefined
+    );
 
-    const records = await prisma.dailyTimeRecord.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            branch: {
-              select: {
-                name: true,
-                weeklyOffDays: true,
-                checkInTime: true,
-                checkOutTime: true
-              }
+    const include = {
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          branch: {
+            select: {
+              name: true,
+              weeklyOffDays: true,
+              checkInTime: true,
+              checkOutTime: true
+            }
+          },
+          leaveEntitlements: {
+            where: {
+              year: new Date().getFullYear()
             },
-            leaveEntitlements: {
-              where: {
-                year: new Date().getFullYear()
-              },
-              select: {
-                id: true,
-                allocatedDays: true,
-                usedDays: true,
-                leaveType: {
-                  select: {
-                    id: true,
-                    name: true
-                  }
+            select: {
+              id: true,
+              allocatedDays: true,
+              usedDays: true,
+              leaveType: {
+                select: {
+                  id: true,
+                  name: true
                 }
               }
             }
           }
         }
-      },
-      orderBy: [
-        { date: 'desc' },
-        { user: { firstName: 'asc' } }
-      ],
-      ...(usePagination
-        ? {
-            skip: (page - 1) * limit,
-            take: limit
-          }
-        : {})
+      }
+    } satisfies Prisma.DailyTimeRecordInclude;
+
+    const dbOrderBy: Prisma.DailyTimeRecordOrderByWithRelationInput[] = (() => {
+      if (!sortBy || !DB_NATIVE_SORT_FIELDS.includes(sortBy)) {
+        return [{ date: 'desc' }, { user: { firstName: 'asc' } }];
+      }
+      switch (sortBy) {
+        case "employee":
+          return [{ user: { firstName: sortOrder } }, { user: { lastName: sortOrder } }];
+        case "branch":
+          return [{ user: { branch: { name: sortOrder } } }];
+        case "status":
+          return [{ status: sortOrder }, { date: 'desc' }];
+        case "lateMinutes":
+          return [{ lateCheckInMinutes: sortOrder }, { date: 'desc' }];
+        case "date":
+        default:
+          return [{ date: sortOrder }, { user: { firstName: 'asc' } }];
+      }
+    })();
+
+    const total = await prisma.dailyTimeRecord.count({ where });
+
+    if (!needsInMemoryTier) {
+      const records = await prisma.dailyTimeRecord.findMany({
+        where,
+        include,
+        orderBy: dbOrderBy,
+        ...(usePagination
+          ? {
+              skip: (page - 1) * limit,
+              take: limit
+            }
+          : {})
+      });
+
+      const totalPages = usePagination ? Math.max(Math.ceil(total / limit), 1) : (total > 0 ? 1 : 0);
+
+      return {
+        success: true,
+        records,
+        pagination: {
+          page: usePagination ? page : 1,
+          limit: usePagination ? limit : total,
+          total,
+          totalPages
+        }
+      };
+    }
+
+    // In-memory tier: fetch the full DB-filtered set, then filter/sort/paginate in Node.
+    const allRecords = await prisma.dailyTimeRecord.findMany({
+      where,
+      include,
+      orderBy: [{ date: 'desc' }, { user: { firstName: 'asc' } }]
     });
 
-    const totalPages = usePagination ? Math.max(Math.ceil(total / limit), 1) : (total > 0 ? 1 : 0);
+    const checkInFromMin = parseTimeOfDay(options?.checkInFrom);
+    const checkInToMin = parseTimeOfDay(options?.checkInTo);
+    const checkOutFromMin = parseTimeOfDay(options?.checkOutFrom);
+    const checkOutToMin = parseTimeOfDay(options?.checkOutTo);
+
+    let filtered = allRecords.filter((record) => {
+      if (checkInFromMin !== null || checkInToMin !== null) {
+        const minutes = timeOfDayMinutes(record.actualCheckIn);
+        if (minutes === null) return false;
+        if (checkInFromMin !== null && minutes < checkInFromMin) return false;
+        if (checkInToMin !== null && minutes > checkInToMin) return false;
+      }
+      if (checkOutFromMin !== null || checkOutToMin !== null) {
+        const minutes = timeOfDayMinutes(record.actualCheckOut);
+        if (minutes === null) return false;
+        if (checkOutFromMin !== null && minutes < checkOutFromMin) return false;
+        if (checkOutToMin !== null && minutes > checkOutToMin) return false;
+      }
+      if (options?.activeTimeMin !== undefined || options?.activeTimeMax !== undefined) {
+        const minutes = parseDurationToMinutes(record.actualActiveTime);
+        if (minutes === null) return false;
+        if (options.activeTimeMin !== undefined && minutes < options.activeTimeMin) return false;
+        if (options.activeTimeMax !== undefined && minutes > options.activeTimeMax) return false;
+      }
+      if (options?.otUtMin !== undefined || options?.otUtMax !== undefined) {
+        const minutes = parseDurationToMinutes(record.overtimeUndertime);
+        if (minutes === null) return false;
+        if (options.otUtMin !== undefined && minutes < options.otUtMin) return false;
+        if (options.otUtMax !== undefined && minutes > options.otUtMax) return false;
+      }
+      return true;
+    });
+
+    if (sortBy && !DB_NATIVE_SORT_FIELDS.includes(sortBy)) {
+      const direction = sortOrder === "desc" ? -1 : 1;
+      const key = (record: DailyTimeRecord): number => {
+        switch (sortBy) {
+          case "checkIn":
+            return timeOfDayMinutes(record.actualCheckIn) ?? -Infinity;
+          case "checkOut":
+            return timeOfDayMinutes(record.actualCheckOut) ?? -Infinity;
+          case "activeTime":
+            return parseDurationToMinutes(record.actualActiveTime) ?? -Infinity;
+          case "otUt":
+            return parseDurationToMinutes(record.overtimeUndertime) ?? -Infinity;
+          default:
+            return 0;
+        }
+      };
+      filtered = [...filtered].sort((a, b) => (key(a) - key(b)) * direction);
+    }
+
+    const filteredTotal = filtered.length;
+    const pagedRecords = usePagination
+      ? filtered.slice((page - 1) * limit, (page - 1) * limit + limit)
+      : filtered;
+    const totalPages = usePagination ? Math.max(Math.ceil(filteredTotal / limit), 1) : (filteredTotal > 0 ? 1 : 0);
 
     return {
       success: true,
-      records,
+      records: pagedRecords,
       pagination: {
         page: usePagination ? page : 1,
-        limit: usePagination ? limit : total,
-        total,
+        limit: usePagination ? limit : filteredTotal,
+        total: filteredTotal,
         totalPages
       }
     };
