@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { checkZktecoServer, updateSystemControlConfig } from "@/actions/system-control.actions";
+import EmailConfigCard from "@/components/system/EmailConfigCard";
 
 type SettingsState = {
   appTimezone: string;
@@ -43,11 +44,21 @@ type ChangeLog = {
   newValues?: Record<string, unknown> | null;
 };
 
+type EmailConfigState = {
+  provider: string;
+  smtpHost: string;
+  smtpPort: number;
+  secure: boolean;
+  senderEmail: string;
+  hasAppPassword: boolean;
+};
+
 interface SystemControlClientProps {
   initialSettings: SettingsState;
   canEditSensitive: boolean;
   isManager: boolean;
   logs: ChangeLog[];
+  emailConfig?: EmailConfigState;
 }
 
 function twoDigits(value: number) {
@@ -93,6 +104,7 @@ export default function SystemControlClient({
   canEditSensitive,
   isManager,
   logs,
+  emailConfig,
 }: SystemControlClientProps) {
   const [form, setForm] = useState<SettingsState>(initialSettings);
   const [isSaving, startSave] = useTransition();
@@ -384,6 +396,8 @@ export default function SystemControlClient({
           </div>
         </CardContent>
       </Card>
+
+      {emailConfig && <EmailConfigCard initialConfig={emailConfig} />}
 
       <Card>
         <CardHeader>

@@ -608,6 +608,21 @@ model SystemControlChangeLog {
   createdAt     DateTime @default(now())
 }
 
+model EmailConfig {
+  id                   String   @id @default("global")
+  provider             String   @default("GMAIL")
+  smtpHost             String   @default("smtp.gmail.com")
+  smtpPort             Int      @default(587)
+  secure               Boolean  @default(false)
+  senderEmail          String   @default("")
+  appPasswordEncrypted String   @default("")
+  updatedById          String?
+  updatedByEmail       String?
+  updatedByRole        String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
 // Leave Management Models
 model LeaveType {
   id                String   @id @default(cuid())
