@@ -1,0 +1,19 @@
+-- RECONSTRUCTED PLACEHOLDER — see MigrationRecoveryReport.md ("20260401230630_y").
+--
+-- This migration was applied directly to the shared database on 2026-04-01T23:06:30Z
+-- (recorded successfully in `_prisma_migrations`, checksum c75246db...), but its folder
+-- was never committed to any branch in this repository (verified via `git log --all` and
+-- inspection of the backup-before-reset / backup-main-before-reset / rollback-branch
+-- branches — the folder does not exist in any of them). Its original SQL content is
+-- unrecoverable.
+--
+-- This placeholder is intentionally EMPTY. This is not a guess: a full authoritative diff
+-- between the live database and the current prisma/schema.prisma
+-- (`prisma migrate diff --from-url <DATABASE_URL> --to-schema-datamodel prisma/schema.prisma`)
+-- returned zero differences, meaning whatever this migration originally changed has since
+-- been superseded, duplicated, or reverted by later (properly tracked) changes — replaying
+-- it as a no-op is the only content consistent with the database's verified current state.
+--
+-- Do not add speculative SQL here. If the original intent of this migration is ever
+-- recovered (e.g. from a teammate's local history), replace this file's content and
+-- re-verify with the same `migrate diff` command before assuming it is safe to apply.

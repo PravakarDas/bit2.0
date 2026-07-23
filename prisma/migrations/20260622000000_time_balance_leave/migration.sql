@@ -1,0 +1,26 @@
+-- RECONSTRUCTED PLACEHOLDER — see MigrationRecoveryReport.md ("20260622000000_time_balance_leave").
+--
+-- This migration is recorded as applied in `_prisma_migrations` (resolved directly via
+-- `prisma migrate resolve --applied`, not a real execution — its row has
+-- applied_steps_count=0 and empty logs, the same signature as this project's other
+-- known resolve-only entries), but its folder was never committed to any branch in this
+-- repository (verified via `git log --all` and inspection of the backup-before-reset /
+-- backup-main-before-reset / rollback-branch branches).
+--
+-- This corresponds to the "Time Balance Leave" (OT/UT-to-leave conversion) feature noted
+-- in project memory as designed but not yet implemented, whose database data was wiped by
+-- a prior destructive `db push`/`migrate reset` incident (see CLAUDE.md's
+-- "What Should NOT Be Changed" section and the feedback-prisma-db-push-safety memory).
+-- No trace of this feature exists anywhere in the current prisma/schema.prisma.
+--
+-- This placeholder is intentionally EMPTY. This is not a guess: a full authoritative diff
+-- between the live database and the current prisma/schema.prisma
+-- (`prisma migrate diff --from-url <DATABASE_URL> --to-schema-datamodel prisma/schema.prisma`)
+-- returned zero differences, confirming no residual schema from this feature remains —
+-- replaying this as a no-op is the only content consistent with the database's verified
+-- current state.
+--
+-- Do not add speculative SQL here. If the Time Balance Leave feature is implemented in the
+-- future, it should be a brand-new migration with a new name and a proper product/design
+-- decision (see CLAUDE.md's guidance on deliberate scope decisions) — not a revival of this
+-- migration name.
