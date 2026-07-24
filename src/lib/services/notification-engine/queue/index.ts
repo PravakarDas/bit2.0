@@ -1,4 +1,5 @@
 export { QueueEngine } from "./queue-engine";
+export type { IQueueEngine } from "./queue-engine.interface";
 export { QueueRepository } from "./queue.repository";
 export type { IQueueRepository, PaginationParams } from "./queue-repository.interface";
 export { RetryScheduler, type RetryDecision, type RetrySchedulerOptions } from "./retry-scheduler";

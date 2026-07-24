@@ -6,9 +6,11 @@ import {
   NotificationRepository,
   NotificationTemplateRepository,
 } from "./repositories";
+import { randomUUID } from "node:crypto";
 import { ChannelAdapterFactory } from "./factories";
 import { NotificationService } from "./notification.service";
 import { QueueEngine, QueueRepository } from "./queue";
+import { createWorkerRuntime } from "./worker";
 
 /**
  * Manual dependency wiring — this project has no DI framework/container
@@ -59,6 +61,18 @@ export function createNotificationEngineContainer(overrides?: {
   // (whose raiseEvent/processJob/resendJob remain stubs — see notification.service.ts).
   const queueEngine = new QueueEngine(queueRepository);
 
+  // WorkerRuntime (Phase 4) — constructed, but NOT started, here. Nothing in
+  // this container (or anywhere else this phase) calls `.start()`; wiring it
+  // into application boot (instrumentation.ts) is explicitly deferred — see
+  // WorkerRuntimeReport.md "Intentionally Postponed". Its own
+  // `ChannelAdapterFactory` (with stub adapters registered) is deliberately
+  // separate from the one above — that one belongs to `NotificationService`'s
+  // eventual dispatch path (still unimplemented), this one belongs to the
+  // worker's own dispatch pipeline; they are not required to be the same
+  // instance, and keeping them separate avoids a hidden coupling between two
+  // still-independently-evolving stub surfaces.
+  const { runtime: workerRuntime } = createWorkerRuntime(queueEngine, { workerId: `worker-${randomUUID()}` });
+
   return {
     repositories: {
       notificationRepository,
@@ -72,6 +86,7 @@ export function createNotificationEngineContainer(overrides?: {
     channelAdapterFactory,
     notificationService,
     queueEngine,
+    workerRuntime,
   };
 }
 

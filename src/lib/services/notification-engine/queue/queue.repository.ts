@@ -113,6 +113,15 @@ export class QueueRepository extends BaseRepository implements IQueueRepository 
     );
   }
 
+  async renewLease(jobId: string, workerId: string, now: Date = new Date()): Promise<NotificationJobDTO> {
+    return this.guardedTransition(
+      jobId,
+      "PROCESSING",
+      { status: "PROCESSING", lockedBy: workerId },
+      { lockedAt: now, updatedAt: now }
+    );
+  }
+
   async markSent(jobId: string, workerId: string): Promise<NotificationJobDTO> {
     return this.guardedTransition(
       jobId,

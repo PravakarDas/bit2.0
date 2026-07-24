@@ -40,6 +40,18 @@ export interface IQueueRepository {
   /** PROCESSING -> QUEUED, only if `workerId` currently holds the lock. Throws `InvalidQueueTransitionError` otherwise. */
   release(jobId: string, workerId: string): Promise<NotificationJobDTO>;
 
+  /**
+   * Phase 4 addition (additive — see WorkerRuntimeReport.md "Architecture
+   * Compliance"; Phase 3 explicitly deferred lease renewal to "the worker
+   * that would call it," this phase). Stays PROCESSING; only touches
+   * `lockedAt` (extends the lease window so a long-running job isn't
+   * reclaimed by `recoverExpiredLocks` while still genuinely being worked
+   * on), only if `workerId` currently holds the lock. Throws
+   * `InvalidQueueTransitionError` otherwise — identical guard shape to
+   * every other transition here.
+   */
+  renewLease(jobId: string, workerId: string, now?: Date): Promise<NotificationJobDTO>;
+
   /** PROCESSING -> SENT, only if `workerId` currently holds the lock. */
   markSent(jobId: string, workerId: string): Promise<NotificationJobDTO>;
 

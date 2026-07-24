@@ -12,5 +12,6 @@ export * from "./repositories";
 export * from "./factories";
 export * from "./utils";
 export * from "./queue";
+export * from "./worker";
 export { NotificationService } from "./notification.service";
 export { createNotificationEngineContainer, notificationEngineContainer } from "./container";

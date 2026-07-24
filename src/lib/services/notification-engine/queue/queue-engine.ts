@@ -7,6 +7,7 @@ import type { QueueSearchCriteria, QueueSearchResult, QueueStatistics } from "./
 import { RetryScheduler, type RetrySchedulerOptions } from "./retry-scheduler";
 import { DuplicateJobError, InvalidQueueTransitionError } from "./errors";
 import { NoopLogger, type IQueueLogger } from "./logger.interface";
+import type { IQueueEngine } from "./queue-engine.interface";
 
 /**
  * The Notification Queue Engine — the public API this phase delivers.
@@ -24,8 +25,13 @@ import { NoopLogger, type IQueueLogger } from "./logger.interface";
  * this phase does not generate or manage worker identity; that belongs to
  * the future worker-loop phase (this phase "prepares... without redesign"
  * for it, per this phase's own instructions).
+ *
+ * `implements IQueueEngine` is a Phase 4 addition (additive — see
+ * WorkerRuntimeReport.md) — declares conformance to an interface extracted
+ * from this class's own already-existing public shape; no method here
+ * changed to accommodate it.
  */
-export class QueueEngine {
+export class QueueEngine implements IQueueEngine {
   constructor(
     private readonly queueRepository: IQueueRepository,
     private readonly logger: IQueueLogger = new NoopLogger(),
@@ -93,6 +99,17 @@ export class QueueEngine {
   async release(jobId: string, workerId: string): Promise<NotificationJobDTO> {
     const job = await this.queueRepository.release(jobId, workerId);
     this.logger.info("queue.job_released", { jobId, workerId });
+    return job;
+  }
+
+  /**
+   * Phase 4 addition (additive — see WorkerRuntimeReport.md). Extends a held
+   * lease's `lockedAt` so a long-running job survives `recoverExpiredLocks`
+   * while still genuinely in progress. Status stays PROCESSING.
+   */
+  async renewLease(jobId: string, workerId: string): Promise<NotificationJobDTO> {
+    const job = await this.queueRepository.renewLease(jobId, workerId);
+    this.logger.debug("queue.lease_renewed", { jobId, workerId, lockedAt: job.lockedAt?.toISOString() });
     return job;
   }
 

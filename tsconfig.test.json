@@ -11,6 +11,9 @@
     "sourceMap": false,
     "incremental": false
   },
-  "include": ["src/lib/services/notification-engine/queue/**/*.ts"],
+  "include": [
+    "src/lib/services/notification-engine/queue/**/*.ts",
+    "src/lib/services/notification-engine/worker/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }

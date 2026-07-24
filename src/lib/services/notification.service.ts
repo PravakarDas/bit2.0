@@ -16,11 +16,19 @@
 // Phase 3 (Queue Engine) adds `queueEngine`, re-exported the same way —
 // queue persistence/locking/retry-scheduling only, still no SMTP/worker
 // loop/PDF/Drive. See QueueEngineReport.md.
+//
+// Phase 4 (Worker Runtime) adds `workerRuntime` — constructed here, NOT
+// started. No code in this repository calls `workerRuntime.start()`; doing
+// so is explicitly deferred (see WorkerRuntimeReport.md "Intentionally
+// Postponed"). Its dispatch pipeline resolves only `StubChannelAdapter`s
+// that throw `ProviderNotImplementedError` — still no real SMTP/delivery.
 export { NotificationService } from "./notification-engine/notification.service";
 export { QueueEngine } from "./notification-engine/queue";
+export { WorkerRuntime } from "./notification-engine/worker";
 export { notificationEngineContainer } from "./notification-engine/container";
 
 import { notificationEngineContainer } from "./notification-engine/container";
 
 export const notificationService = notificationEngineContainer.notificationService;
 export const queueEngine = notificationEngineContainer.queueEngine;
+export const workerRuntime = notificationEngineContainer.workerRuntime;
