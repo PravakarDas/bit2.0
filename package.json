@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsc -p tsconfig.test.json && node --test ./.test-build/lib/services/notification-engine/queue/*.test.js ./.test-build/lib/services/notification-engine/worker/*.test.js ./.test-build/lib/services/notification-engine/template/*.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test ./.test-build/lib/services/notification-engine/queue/*.test.js ./.test-build/lib/services/notification-engine/worker/*.test.js ./.test-build/lib/services/notification-engine/template/*.test.js ./.test-build/lib/services/notification-engine/delivery/*.test.js ./.test-build/lib/services/notification-engine/delivery/types/*.test.js ./.test-build/lib/services/notification-engine/delivery/value-objects/*.test.js",
     "test:clean": "if exist .test-build rmdir /s /q .test-build && npm run test"
   },
   "prisma": {

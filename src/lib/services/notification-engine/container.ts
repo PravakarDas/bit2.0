@@ -12,6 +12,7 @@ import { NotificationService } from "./notification.service";
 import { QueueEngine, QueueRepository } from "./queue";
 import { createWorkerRuntime } from "./worker";
 import { TemplateEngine, TemplateRegistry } from "./template";
+import { DeliveryManager, ProviderHealthMonitor, ProviderMetricsCollector, ProviderRegistry, ProviderResolver } from "./delivery";
 
 /**
  * Manual dependency wiring — this project has no DI framework/container
@@ -82,6 +83,20 @@ export function createNotificationEngineContainer(overrides?: {
   const templateRegistry = new TemplateRegistry(templateRepository);
   const templateEngine = new TemplateEngine(templateRegistry);
 
+  // DeliveryManager (Phase 6) — the provider-abstraction framework future
+  // SMTP/SMS/WhatsApp/Push providers plug into. `providerRegistry` starts
+  // empty: nothing in this container registers a real (or even stub)
+  // `DeliveryProvider` into it, so `deliveryManager.deliver(...)` always
+  // resolves zero candidates (`NO_PROVIDER_AVAILABLE`) until a future phase
+  // registers one. Not consumed by `notificationService`/`workerRuntime`'s
+  // dispatch path yet — see DeliveryFrameworkReport.md "Worker Integration"
+  // for why `JobDispatcher` still resolves `StubChannelAdapter`s directly.
+  const providerRegistry = new ProviderRegistry();
+  const providerHealthMonitor = new ProviderHealthMonitor();
+  const providerMetrics = new ProviderMetricsCollector();
+  const providerResolver = new ProviderResolver(providerRegistry, providerHealthMonitor);
+  const deliveryManager = new DeliveryManager(providerResolver, providerHealthMonitor, providerMetrics);
+
   return {
     repositories: {
       notificationRepository,
@@ -97,6 +112,10 @@ export function createNotificationEngineContainer(overrides?: {
     queueEngine,
     workerRuntime,
     templateEngine,
+    providerRegistry,
+    providerHealthMonitor,
+    providerMetrics,
+    deliveryManager,
   };
 }
 

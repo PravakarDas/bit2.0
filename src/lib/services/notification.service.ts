@@ -29,10 +29,20 @@
 // calls it from `notificationService`/`workerRuntime`'s dispatch path —
 // wiring rendering into actual delivery is a later phase. See
 // TemplateEngineReport.md.
+//
+// Phase 6 (Delivery Framework) adds `deliveryManager` — the provider
+// abstraction (registry, resolver, selector, health, metrics, failover
+// strategy) every future SMTP/SMS/WhatsApp/Push provider will plug into.
+// No real provider is registered anywhere in this container, so
+// `deliveryManager.deliver(...)` always resolves `NO_PROVIDER_AVAILABLE`
+// today. `workerRuntime`'s dispatch pipeline is untouched — it still
+// resolves `StubChannelAdapter`s via `ChannelAdapterFactory`, not this
+// manager. See DeliveryFrameworkReport.md.
 export { NotificationService } from "./notification-engine/notification.service";
 export { QueueEngine } from "./notification-engine/queue";
 export { WorkerRuntime } from "./notification-engine/worker";
 export { TemplateEngine } from "./notification-engine/template";
+export { DeliveryManager } from "./notification-engine/delivery";
 export { notificationEngineContainer } from "./notification-engine/container";
 
 import { notificationEngineContainer } from "./notification-engine/container";
@@ -41,3 +51,4 @@ export const notificationService = notificationEngineContainer.notificationServi
 export const queueEngine = notificationEngineContainer.queueEngine;
 export const workerRuntime = notificationEngineContainer.workerRuntime;
 export const templateEngine = notificationEngineContainer.templateEngine;
+export const deliveryManager = notificationEngineContainer.deliveryManager;

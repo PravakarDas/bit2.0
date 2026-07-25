@@ -291,3 +291,88 @@ Phases 0 through 5 are all complete: design, database foundation, migration reco
 ## Next Recommended Phase
 
 Wire one real channel end-to-end rather than adding another isolated capability: implement a real `nodemailer`-backed `EMAIL` channel adapter (replacing `StubChannelAdapter`'s `ProviderNotImplementedError` for that one channel), and have `NotificationWorker`'s dispatch step call `templateEngine.render()` before invoking it. That connects queue → template → real delivery for one channel for the first time, while every other channel and `instrumentation.ts`/worker-startup integration remain correctly deferred until after that.
+
+# Phase 6 — Delivery Framework
+
+Implements the abstraction responsible for delivering already-rendered notifications: provider registration (multiple providers per channel, priority-ordered), resolution/selection/failover, passive health tracking, per-provider metrics, and a structural (non-enforcing) delivery policy. **No SMTP, no Nodemailer, no SMS/WhatsApp/Push/Firebase/Twilio client — every provider used anywhere in this phase, including its own tests, is an in-memory fake.**
+
+## Files Created
+
+42 new files under `src/lib/services/notification-engine/delivery/` (28 source, 14 test) across five subfolders: `types/` (health-state, result, descriptor, outcome, options), `value-objects/` (`ProviderPriority`, `ProviderCapabilities`), `provider/` (the `DeliveryProvider`/`ProviderLifecycle` interfaces + `ProviderContext`), `errors/` (`ProviderUnavailableError`, additive to Phase 2's frozen hierarchy), and the module root (`ProviderRegistry`, `ProviderHealthMonitor`, `ProviderMetricsCollector`, `ProviderResolver`, `ProviderSelector`, `DeliveryPolicy`, `DeliveryAttemptContext`, `DeliveryExceptionMapper`, `DeliveryStrategy`/`FailoverDeliveryStrategy`, `DeliveryManager`). Plus `test-fakes/` (`FakeDeliveryProvider`, `FakeNotificationProviderRepository`, a shared job fixture) — never exported from the module barrel.
+
+## Files Modified (Cross-Phase Changes)
+
+All purely additive: `container.ts` (constructs the registry/health-monitor/metrics/resolver/`DeliveryManager`, registry starts empty), `notification-engine/index.ts` and top-level `notification.service.ts` (export `DeliveryManager` + `deliveryManager` singleton, same pattern as every prior phase), `tsconfig.test.json` (adds the delivery glob), `package.json` (adds three explicit test globs — `node --test` doesn't recurse through a bare `**` the way a `globstar`-enabled shell would, so `delivery/`, `delivery/types/`, and `delivery/value-objects/` are each listed, matching this project's established never-point-at-a-bare-directory convention).
+
+**Zero new repository methods needed** — the second phase in a row (after Phase 5) where Phase 2's existing repository interface (`INotificationProviderRepository`) already covered everything required.
+
+## Public API
+
+```ts
+class DeliveryManager {
+  deliver(job, content, options?: { requiredCapabilities?, policy?, correlationId? }): Promise<DeliveryOutcome>;
+}
+class ProviderRegistry {
+  register(descriptor, provider): void;
+  unregister(providerId): void;
+  getByChannel(channel): RegisteredProvider[];
+  getById(providerId): RegisteredProvider | undefined;
+  list(): RegisteredProvider[];
+  initializeAll(): Promise<void>;
+  shutdownAll(): Promise<void>;
+}
+interface DeliveryProvider {
+  deliver(job, content, context): Promise<ProviderResult>;
+  initialize?(); shutdown?(); healthCheck?(); validateConfiguration?();
+}
+function providerDescriptorFromDTO(dto, capabilities?): ProviderDescriptor;
+```
+
+`DeliveryOutcome` is a 4-way discriminated union: `SUCCESS | PERMANENT_FAILURE | TEMPORARY_FAILURE | NO_PROVIDER_AVAILABLE`, each carrying the full `ProviderResult[]` attempt history.
+
+## Architecture Compliance
+
+All 15 requested units built, each with one distinct responsibility (full table in DeliveryFrameworkReport.md). Notable design resolutions: `ProviderResolver` ("who's eligible") and `ProviderSelector` ("which one's next") are deliberately separate classes so a future load-balancing `SelectionStrategy` plugs in without touching eligibility filtering; `ProviderHealthMonitor`'s 5-state model (HEALTHY/DEGRADED/OFFLINE/MAINTENANCE/UNKNOWN) is intentionally richer than the DB's 3-value `NotificationProviderHealthStatus` enum (frozen schema, no migration this phase), with an explicit lossy mapping function for future persistence.
+
+## Tests Executed
+
+Clean rebuild (`.test-build` + `tsconfig.test.tsbuildinfo` deleted, `tsc -p tsconfig.test.json && node --test ...`), stable across 2 consecutive runs:
+
+```
+tests 344   suites 77   pass 344   fail 0
+```
+
+88 of those tests (18 suites) are this phase's. All 256 pre-existing tests remain green, unmodified. Every test uses a mocked `DeliveryProvider` and a mocked `INotificationProviderRepository` — no database, no network, per this phase's explicit instruction.
+
+## Coverage
+
+Every one of the 15 units has a dedicated test file. Key scenarios: priority-ordered failover across providers, immediate stop on `PERMANENT_FAILURE` (no further candidates tried), `NO_PROVIDER_AVAILABLE` when nothing resolves, capability-based filtering, a throwing provider mapped without crashing the delivery, health DEGRADED→OFFLINE after the configured failure threshold with the now-OFFLINE provider correctly skipped on the next call, `PERMANENT_FAILURE` not penalizing provider health (business failure ≠ infra failure), sticky `MAINTENANCE` override, and retry-metric counting starting only from the 2nd attempt.
+
+## Performance Notes
+
+Every operation is O(1)/O(n) in *providers per channel* (expected single digits), never in delivery volume. `ProviderHealthMonitor`/`ProviderMetricsCollector` hold exactly one record per distinct provider ever registered — no unbounded growth tied to throughput.
+
+## Known Limitations
+
+`DeliveryPolicy` is structural only (no enforcement — no timeout race, no rate limiter, no size check). `ProviderResult` (SUCCESS/TEMPORARY_FAILURE/PERMANENT_FAILURE) and Phase 2's `ChannelDeliveryOutcome` (SUCCESS/FAILURE) remain two separate shapes pending a future integration decision. No automatic recovery from OFFLINE (no half-open/timed retry) — only a manual `setState` call clears it. Nothing persists runtime health back to the `NotificationProvider.healthStatus` DB column yet (the lossy mapping function exists, unused).
+
+## Technical Debt
+
+None introduced. No TODOs, no placeholder methods beyond what's explicitly disclosed as "architecture only" above.
+
+## Breaking Changes
+
+**None.** Every touched file received a pure addition; `JobDispatcher`, `NotificationWorker`, and `WorkerRuntime` are byte-for-byte behaviorally unchanged — their full pre-existing test suites pass without modification.
+
+## Engineering Review Summary
+
+SOLID (single responsibility per unit, dependency inversion throughout `DeliveryManager`'s constructor, open/closed via pluggable `SelectionStrategy`/`DeliveryStrategy`), DRY (one redundant default-strategy specification caught and removed during self-review — `FailoverDeliveryStrategy` now relies on `ProviderSelector`'s own default instead of re-specifying it), KISS (`DeliveryPolicy` does nothing beyond structural validation, no half-built enforcement), and security (no raw stack traces surfaced by `DeliveryExceptionMapper`, no credential handling in this module) were all reviewed. No O(n²) algorithms, no missing indexes (no schema touched), no race conditions or deadlocks (Node's single-threaded model, no `await` mid-mutation in any method). This is the **first phase requiring no fix to a pre-existing bug or test** — the only correction made was the DRY cleanup above, caught during self-review before it was ever a defect.
+
+## Current Project Status
+
+Phases 0–6 complete: design, database foundation, migration recovery, database audit, core infrastructure, queue engine, worker runtime, template engine, and now the delivery framework. Five independently-tested engines now exist (`queueEngine`, `workerRuntime`, `templateEngine`, `deliveryManager`, plus the still-stub `notificationService`) — none wired to each other's real dispatch path yet; nothing anywhere sends a real notification.
+
+## Next Recommended Phase
+
+A real SMTP `DeliveryProvider` for the `EMAIL` channel (reusing `email.service.ts`'s existing SMTP config/transporter/`EMAIL_SECRET_KEY` pattern), registered into `ProviderRegistry` — the first phase giving both this framework and `TemplateEngine` (Phase 5) a genuine consumer. Wiring `JobDispatcher`/`NotificationWorker` to call `DeliveryManager` instead of `ChannelAdapterFactory` directly would naturally follow once that first real provider exists.
+
