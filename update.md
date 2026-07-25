@@ -200,3 +200,94 @@ Two different levels, with genuinely different answers:
 | 9 | `NotificationPreference` (recipient opt-out checking, §6) has no repository and is never consulted — there's no fan-out/resolution logic to consult it from yet, since `raiseEvent` is still a stub. | §6 | Disclosed as postponed in `CoreInfrastructureReport.md`. |
 
 Items 1, 2, and 4 are the three not previously stated with full clarity — items 1 and 2 in particular are gaps a reader of the prior reports could reasonably have missed.
+
+---
+
+# Phase 5 — Template Engine
+
+Full detail in [TemplateEngineReport.md](TemplateEngineReport.md). Summary below, in the same structure as the rest of this file.
+
+## Files Created
+
+39 new files under `src/lib/services/notification-engine/template/`:
+
+- **Errors** (extend the frozen Phase 2 `TemplateError` additively): `template-not-found.error.ts`, `template-parse.error.ts`, `template-validation-failed.error.ts`, `errors/index.ts`.
+- **Core types**: `types/template-source.ts`, `render-context.ts`, `compiled-template.ts`, `parse-issue.ts`, `template-validation-issue.ts`, `types/index.ts`.
+- **Parsing/compiling**: `template-parser.ts` (item 9), `template-compiler.ts` (item 4).
+- **Variable resolution** (item 5): `template-variable-resolver.ts`, `variable-resolvers/variable-resolver-plugin.interface.ts`, `dot-path-resolver.plugin.ts`, `date-variable-resolver.plugin.ts`, `variable-resolvers/index.ts`.
+- **Rendering** (item 2): `template-renderer.ts`, `html-escape.ts`.
+- **Validation** (item 3): `template-validator.ts`.
+- **Caching** (item 7): `template-cache.ts`.
+- **Version/locale metadata** (items 11, 8): `template-version.ts`, `template-locale.ts`.
+- **Metrics** (item 12): `template-metrics.ts`.
+- **Registry** (item 10): `template-registry.ts`, `register-template-input.ts`.
+- **Facade** (item 1): `template-engine.ts`, `template-engine.interface.ts`, `render-params.ts`.
+- **Test infrastructure**: `test-fakes/fake-notification-template.repository.ts` (shared by two test files — the reason it's its own file rather than inline, unlike Phase 3/4's single-file inline fakes).
+- **Tests**: 11 `*.test.ts` files, ~94 individual cases.
+- **Barrel**: `index.ts`.
+
+Plus `TemplateEngineReport.md` at the repo root.
+
+## Files Modified
+
+| File | Created in | Why changed this phase |
+|---|---|---|
+| `notification-engine/container.ts` | Phase 2 | Added `templateEngine` construction (`TemplateRegistry` + `TemplateEngine`), reusing the already-existing `templateRepository` — no new repository instance. |
+| `notification-engine/index.ts` | Phase 2 | Added `export * from "./template"`. |
+| `notification.service.ts` (top-level) | Phase 2 | Added `TemplateEngine`/`templateEngine` re-exports — same pattern as Phase 3's `queueEngine` and Phase 4's `workerRuntime`. |
+| `tsconfig.test.json` | Phase 3 | Added `template/**/*.ts` to `include`. |
+| `package.json` | Phase 3 | Added `template/*.test.js` to the `test` script's glob. |
+
+## Cross-Phase Changes
+
+Same additive-only discipline as Phases 3 and 4 — every touch above is a new line (a construction, an export), never a modification to an existing line. Notably, **this phase needed zero new methods on any prior-phase repository or interface** — the first phase where the DI-wiring touch was the *only* cross-phase change required, since `INotificationTemplateRepository`'s existing `create`/`findById`/`findActiveByKeyAndChannel`/`findMany`/`update` (Phase 2) already covered every operation `TemplateRegistry` needed.
+
+## Tests Executed
+
+256 tests total across the whole engine (up from 252 after Phase 4), 0 failures, via the existing dependency-free `pnpm test` setup. Two real bugs were found and fixed while getting the suite green:
+
+1. `template-engine.ts` imported `NoopLogger` from the `../queue` **barrel**, which also value-exports `QueueRepository` (imports `@/lib/prisma`) — transitively broke the plain-`node --test` runner exactly the way Phase 3/4's reports warned about. Fixed by importing directly from `../queue/logger.interface`.
+2. One of my own test assertions (in `template-registry.test.ts`) expected the wrong outcome for locale fallback after `unregister` — fixed the assertion, not the code, since the code's actual behavior (graceful fallback to the still-active default) was correct.
+
+## Coverage
+
+Every public method of every new class has at least one direct test, covering both success and failure/edge paths for the state-changing operations (`register`/`unregister`/`render`/`preview`). The real, Prisma-backed `NotificationTemplateRepository` itself is not re-tested here (no new methods were added to it this phase).
+
+## Performance Notes
+
+Single-pass O(n) placeholder scanning (no backtracking regex), compile-once/cache-many rendering, one repository read per `render()` on a cache miss and zero on a hit, up to 3 sequential reads for a full locale-fallback chain (the common no-locale case is exactly 1). No N+1 patterns of the kind flagged in this file's Phase 3 audit section exist in this phase's code.
+
+## Architecture Compliance
+
+Full compliance with `NotificationEngineDesign.md` §7's own commitment to an in-house, dependency-free substitution engine (no Handlebars/Mustache/i18n library added). Three disclosed interpretations, none a redesign: (1) localization implemented as a `key`-encoding convention with a fallback chain rather than a schema change; (2) a genuinely new content validator (`TemplateValidator`) distinct from Phase 2's structural `NotificationTemplateValidator`; (3) versioning reuses the existing `BaseSalary`-style append/deactivate pattern, no history table.
+
+## Known Limitations
+
+- `TemplateCache` has no eviction policy — unbounded growth for the process lifetime (acceptable at this project's scale: a bounded, admin-managed template set, not user-generated content).
+- "Unknown/missing/unused variable" validation checks are all opt-in (require the caller to supply `knownNamespaces`/`sampleContext`/`expectedVariables`) — there is no global hardcoded variable schema.
+- No authorization check anywhere in this phase — correctly deferred to a future Server Action layer, matching this project's own convention.
+- Locale fallback assumes IETF-BCP-47-shaped locale strings; a differently-shaped locale string degrades safely (skips the base-language fallback step) rather than erroring.
+
+## Technical Debt
+
+`TemplateEngine` depends on `TemplateRegistry`/`TemplateCompiler`/`TemplateRenderer`/`TemplateValidator`/`TemplateCache`/`TemplateMetricsCollector` as concrete classes, not interfaces — unlike Phases 2-4's repository pattern. Deliberate: the pure/I/O-free pieces have nothing to mock, and `TemplateRegistry` already delegates its own actual I/O to an interface one layer down. A minor, inherent double-parse also exists across a register→render lifecycle (validation and first-compile each independently scan the same content, at different times, for different purposes) — negligible cost given template string sizes, not fixed.
+
+## Breaking Changes
+
+**None.** Every prior-phase touch was a pure addition.
+
+## Public API
+
+`TemplateEngine`'s exact 8 methods: `render`, `preview`, `validate`, `compile`, `register`, `unregister`, `list`, `exists` — see TemplateEngineReport.md's "Public API" table for full signatures. `render()`'s output (`RenderedNotificationContent`) is Phase 2's already-frozen `{ subject?, bodyHtml?, bodyText? }`, reused verbatim — no new shape for a future channel adapter to learn.
+
+## Engineering Review Summary
+
+SOLID/DRY/KISS/naming/folder-organization/performance/extensibility all reviewed and found strong, with two items disclosed rather than hidden: (1) a deliberate DIP nuance (concrete-class dependencies for I/O-free pieces — see Technical Debt), and (2) **one real security vulnerability found and fixed, not merely reported**: the dot-path variable resolver used the `in` operator, which resolves inherited `Object.prototype` members — since `__proto__`/`constructor` are syntactically valid placeholder identifiers under this module's own grammar, a crafted template like `{{__proto__.constructor.name}}` would have "resolved" instead of correctly failing. Fixed by switching to `Object.prototype.hasOwnProperty.call(...)`, with 4 new regression tests. HTML-escaping of substituted values into `bodyHtml` (preventing a value like an employee's name from injecting markup) was implemented and tested from the start, not added reactively.
+
+## Current Project Status
+
+Phases 0 through 5 are all complete: design, database foundation, migration recovery, database audit, core infrastructure, queue engine, worker runtime, and now template engine. Four independently-tested engines exist (`queueEngine`, `workerRuntime`, `templateEngine`, plus the still-stub `notificationService`) — none wired to each other's delivery path yet, none wired to any business module or UI, nothing anywhere sends a real notification.
+
+## Next Recommended Phase
+
+Wire one real channel end-to-end rather than adding another isolated capability: implement a real `nodemailer`-backed `EMAIL` channel adapter (replacing `StubChannelAdapter`'s `ProviderNotImplementedError` for that one channel), and have `NotificationWorker`'s dispatch step call `templateEngine.render()` before invoking it. That connects queue → template → real delivery for one channel for the first time, while every other channel and `instrumentation.ts`/worker-startup integration remain correctly deferred until after that.

@@ -11,6 +11,7 @@ import { ChannelAdapterFactory } from "./factories";
 import { NotificationService } from "./notification.service";
 import { QueueEngine, QueueRepository } from "./queue";
 import { createWorkerRuntime } from "./worker";
+import { TemplateEngine, TemplateRegistry } from "./template";
 
 /**
  * Manual dependency wiring — this project has no DI framework/container
@@ -73,6 +74,14 @@ export function createNotificationEngineContainer(overrides?: {
   // still-independently-evolving stub surfaces.
   const { runtime: workerRuntime } = createWorkerRuntime(queueEngine, { workerId: `worker-${randomUUID()}` });
 
+  // TemplateEngine (Phase 5) — a standalone component, per its own scope,
+  // built directly on the same `templateRepository` above (Phase 2,
+  // unmodified). Not consumed by `notificationService`/`queueEngine`/
+  // `workerRuntime` yet — wiring template rendering into the dispatch
+  // pipeline is explicitly a later phase's job (see TemplateEngineReport.md).
+  const templateRegistry = new TemplateRegistry(templateRepository);
+  const templateEngine = new TemplateEngine(templateRegistry);
+
   return {
     repositories: {
       notificationRepository,
@@ -87,6 +96,7 @@ export function createNotificationEngineContainer(overrides?: {
     notificationService,
     queueEngine,
     workerRuntime,
+    templateEngine,
   };
 }
 
