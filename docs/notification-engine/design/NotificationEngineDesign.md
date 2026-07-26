@@ -4,7 +4,7 @@
 
 **Scope of Phase 0:** Design a multi-channel-ready Notification Engine for Bit HR. Only **Email** ships in the first implementation phase; SMS, WhatsApp, Push, Slack, and Teams are designed as pluggable channel adapters that slot into the same event/queue/worker skeleton without a rewrite.
 
-**Grounding:** Every design decision below was made by reading the current [README.md](README.md), [CLAUDE.md](CLAUDE.md), [ARCHITECTURE.md](ARCHITECTURE.md), [DATABASE.md](DATABASE.md), [API.md](API.md), [SETUP.md](SETUP.md), [CONTRIBUTING.md](CONTRIBUTING.md), [DECISIONS.md](DECISIONS.md), [TROUBLESHOOTING.md](TROUBLESHOOTING.md), [CHANGELOG.md](CHANGELOG.md), plus the live source of `src/lib/services/email.service.ts` and `src/instrumentation.ts`. This engine is designed to **extend** existing patterns (DB-backed config, in-process interval-loop workers, the `{ success, error }` action contract, `AdminNotification`/`EmployeeNotification` as the in-app channel) rather than introduce a parallel architecture.
+**Grounding:** Every design decision below was made by reading the current [README.md](../../../README.md), [CLAUDE.md](../../../CLAUDE.md), [ARCHITECTURE.md](../../../ARCHITECTURE.md), [DATABASE.md](../../../DATABASE.md), [API.md](../../../API.md), [SETUP.md](../../../SETUP.md), [CONTRIBUTING.md](../../../CONTRIBUTING.md), [DECISIONS.md](../../../DECISIONS.md), [TROUBLESHOOTING.md](../../../TROUBLESHOOTING.md), [CHANGELOG.md](../../../CHANGELOG.md), plus the live source of `src/lib/services/email.service.ts` and `src/instrumentation.ts`. This engine is designed to **extend** existing patterns (DB-backed config, in-process interval-loop workers, the `{ success, error }` action contract, `AdminNotification`/`EmployeeNotification` as the in-app channel) rather than introduce a parallel architecture.
 
 ---
 
@@ -64,13 +64,13 @@
 |---|---|---|
 | No Redis, RabbitMQ, Kafka, BullMQ | Stated requirement | Queue lives in PostgreSQL as a Prisma-modeled table, not an external broker. |
 | Single worker | Stated requirement | One in-process poller, following the exact `setInterval` + single-flight-lock pattern already used by the ZKTeco sync loop in `src/instrumentation.ts` — not a separate worker process/container. |
-| Next.js 16 Server Actions architecture | [CLAUDE.md](CLAUDE.md) | The engine is invoked from `src/actions/*.ts` like every other domain; it is not a separate service reachable over its own HTTP API. |
-| No repository/service layer proliferation | [DECISIONS.md](DECISIONS.md#no-repositoryservice-layer-for-most-domains) | Only two services are justified here (external HTTP/calculation-heavy, multi-caller): `notification.service.ts` (queueing/dispatch) and `document.service.ts` (PDF+Drive). Everything else stays inline in actions, matching existing precedent. |
-| Existing `AdminNotification` / `EmployeeNotification` are not to be replaced | [CLAUDE.md](CLAUDE.md#what-should-always-be-reused) | They remain the **in-app channel**. The new engine treats "in-app" as one more channel target and writes into these existing tables rather than duplicating them. |
-| `createAdminNotification()` remains the reuse point for admin alerts | [CLAUDE.md](CLAUDE.md) | Unchanged; the engine optionally triggers a multi-channel fan-out *from* the same call sites, additively. |
-| Money/duration/soft-delete conventions | [DATABASE.md](DATABASE.md) | New models follow existing conventions: `cuid()` ids (except one singleton config row), `createdAt`/`updatedAt` on mutable models only, hard delete unless a specific reason for soft delete exists. |
-| No new dependency without discussion | [CONTRIBUTING.md](CONTRIBUTING.md#logging) | PDF library, Google Drive SDK, and any SMS/WhatsApp/Slack SDKs are flagged explicitly as **new dependencies requiring sign-off** in [§44](#44-open-questions-requiring-product-sign-off), not silently assumed. |
-| `.gitignore` excludes `*.md` | [CLAUDE.md](CLAUDE.md) | This file will not be tracked by git unless an explicit negation is added — same caveat as every other doc in this repo. |
+| Next.js 16 Server Actions architecture | [CLAUDE.md](../../../CLAUDE.md) | The engine is invoked from `src/actions/*.ts` like every other domain; it is not a separate service reachable over its own HTTP API. |
+| No repository/service layer proliferation | [DECISIONS.md](../../../DECISIONS.md#no-repositoryservice-layer-for-most-domains) | Only two services are justified here (external HTTP/calculation-heavy, multi-caller): `notification.service.ts` (queueing/dispatch) and `document.service.ts` (PDF+Drive). Everything else stays inline in actions, matching existing precedent. |
+| Existing `AdminNotification` / `EmployeeNotification` are not to be replaced | [CLAUDE.md](../../../CLAUDE.md#what-should-always-be-reused) | They remain the **in-app channel**. The new engine treats "in-app" as one more channel target and writes into these existing tables rather than duplicating them. |
+| `createAdminNotification()` remains the reuse point for admin alerts | [CLAUDE.md](../../../CLAUDE.md) | Unchanged; the engine optionally triggers a multi-channel fan-out *from* the same call sites, additively. |
+| Money/duration/soft-delete conventions | [DATABASE.md](../../../DATABASE.md) | New models follow existing conventions: `cuid()` ids (except one singleton config row), `createdAt`/`updatedAt` on mutable models only, hard delete unless a specific reason for soft delete exists. |
+| No new dependency without discussion | [CONTRIBUTING.md](../../../CONTRIBUTING.md#logging) | PDF library, Google Drive SDK, and any SMS/WhatsApp/Slack SDKs are flagged explicitly as **new dependencies requiring sign-off** in [§44](#44-open-questions-requiring-product-sign-off), not silently assumed. |
+| `.gitignore` excludes `*.md` | [CLAUDE.md](../../../CLAUDE.md) | This file will not be tracked by git unless an explicit negation is added — same caveat as every other doc in this repo. |
 
 **Non-goals for this phase:** no implementation of any kind; no SMS/WhatsApp/Push/Slack/Teams sending (design only); no change to `AdminNotification`/`EmployeeNotification` schemas; no introduction of Redis/queue infra; no multi-replica worker coordination (see [§25](#25-scalability-strategy) for why this is deliberately deferred).
 
@@ -305,7 +305,7 @@ flowchart TD
     JOB --> COMMIT[Commit transaction]
 ```
 
-This is deliberately event-sourcing-*lite*, matching the "Idempotent reconciliation" and "Audit log (partial)" patterns already observed in [ARCHITECTURE.md](ARCHITECTURE.md#design-patterns-observed) rather than introducing a full event-sourcing framework the app doesn't otherwise use.
+This is deliberately event-sourcing-*lite*, matching the "Idempotent reconciliation" and "Audit log (partial)" patterns already observed in [ARCHITECTURE.md](../../../ARCHITECTURE.md#design-patterns-observed) rather than introducing a full event-sourcing framework the app doesn't otherwise use.
 
 ---
 
@@ -374,7 +374,7 @@ Today, `EmailConfig` is a *singleton* row (`id: "global"`) — one SMTP account,
 
 - New model `NotificationProvider` (channel = `EMAIL` for phase 1) replaces the *conceptual* role of `EmailConfig` for the engine's purposes, but **`EmailConfig` itself is left untouched** — it continues to back the existing System Control → Email Config screen and the existing `emailService.sendMail()` used by the one current caller (test-mail sending). The engine's `emailChannelAdapter` reads from `NotificationProvider` rows instead, seeded initially from the existing `EmailConfig` row (migration-time backfill, not a schema change to `EmailConfig`).
 - Each `NotificationProvider` row: `priority` (lower = tried first), `configEncrypted` (AES-256-GCM via the **existing** `src/lib/crypto.ts` — reused, not reinvented), `healthStatus` (`HEALTHY`/`DEGRADED`/`DOWN`), `consecutiveFailures`, `lastFailureAt`.
-- Credential encryption reuses `EMAIL_SECRET_KEY` and `encryptSecret`/`decryptSecret` exactly as today — **no new secret-key management introduced** (see [CLAUDE.md](CLAUDE.md#what-should-not-be-changed)).
+- Credential encryption reuses `EMAIL_SECRET_KEY` and `encryptSecret`/`decryptSecret` exactly as today — **no new secret-key management introduced** (see [CLAUDE.md](../../../CLAUDE.md#what-should-not-be-changed)).
 
 ```mermaid
 flowchart LR
@@ -454,7 +454,7 @@ flowchart LR
 ```
 
 - **Templates** live alongside `NotificationTemplate` conceptually but as their own `DocumentTemplate` notion (an HTML layout + CSS, independent of email templates) — kept in `src/lib/documents/templates/` (see [§21](#21-folder-structure)).
-- **Library choice is an explicit open decision** — not assumed here (see [§44](#44-open-questions-requiring-product-sign-off)): either a headless-browser renderer (accurate CSS, heavier dependency) or a programmatic PDF library (lighter, less flexible layout). Both are "new dependency" decisions requiring sign-off per [CONTRIBUTING.md](CONTRIBUTING.md#logging)'s low-dependency norm.
+- **Library choice is an explicit open decision** — not assumed here (see [§44](#44-open-questions-requiring-product-sign-off)): either a headless-browser renderer (accurate CSS, heavier dependency) or a programmatic PDF library (lighter, less flexible layout). Both are "new dependency" decisions requiring sign-off per [CONTRIBUTING.md](../../../CONTRIBUTING.md#logging)'s low-dependency norm.
 - Generation runs on the **same single worker tick loop** as notification dispatch is deliberately avoided — PDF rendering can be CPU-heavy and would starve the notification queue. Instead it runs on its **own separate interval loop** (`startDocumentGenerationCron`, same `instrumentation.ts` pattern, independent single-flight lock) so a slow PDF render never delays an unrelated email send. See [§35](#35-suggested-background-workers).
 
 ---
@@ -570,7 +570,7 @@ flowchart TD
 Idempotency is not only about *creating* jobs once — it also matters when the **worker retries a job that may have partially succeeded** (e.g. the SMTP send succeeded but the process crashed before the DB was updated to `SENT`). Strategy:
 
 - **Outbound side-effect ordering**: for channels where the provider itself is idempotent-friendly (most transactional email/SMS providers accept a client-supplied idempotency key or de-facto tolerate a duplicate send as low-cost), the adapter passes `NotificationJob.idempotencyKey` (or a derived per-attempt key) to the provider where the provider API supports it (SMS/WhatsApp providers commonly do; raw SMTP does not — this is a **known limitation carried forward**, not solved by this design: a crash between "SMTP accepted the message" and "DB updated to SENT" can cause a duplicate email on the next retry. This is called out explicitly in [§44](#44-open-questions-requiring-product-sign-off) as an accepted risk for email specifically, mitigated only by tightening the crash-recovery lease window, not eliminated).
-- **At-least-once delivery, not exactly-once**: this design targets **at-least-once** semantics for email (occasional duplicate email is a minor UX annoyance, not a correctness bug, matching the low-stakes tolerance already implicit in this app's `Float`-money/no-test-suite risk posture per [DECISIONS.md](DECISIONS.md)). Channels with idempotency-key support at the provider (SMS/WhatsApp in the future) get closer to exactly-once for free.
+- **At-least-once delivery, not exactly-once**: this design targets **at-least-once** semantics for email (occasional duplicate email is a minor UX annoyance, not a correctness bug, matching the low-stakes tolerance already implicit in this app's `Float`-money/no-test-suite risk posture per [DECISIONS.md](../../../DECISIONS.md)). Channels with idempotency-key support at the provider (SMS/WhatsApp in the future) get closer to exactly-once for free.
 - **Idempotent status transitions**: every worker-side status update is a conditional `UPDATE ... WHERE status = 'PROCESSING' AND lockedBy = ourWorkerId` — never a blind overwrite — so a duplicate/late-arriving update from a previous crashed attempt can't clobber a newer state.
 
 ---
@@ -598,7 +598,7 @@ sequenceDiagram
 
 ## 20. Database Transaction Strategy
 
-Following the exact precedent in [CLAUDE.md](CLAUDE.md#backend-patterns-server-actions) ("`prisma.$transaction` required whenever a mutation touches more than one of..."), applied to this domain:
+Following the exact precedent in [CLAUDE.md](../../../CLAUDE.md#backend-patterns-server-actions) ("`prisma.$transaction` required whenever a mutation touches more than one of..."), applied to this domain:
 
 | Operation | Transaction? | Why |
 |---|---|---|
@@ -684,7 +684,7 @@ Described by responsibility, not TypeScript — each row is one method's contrac
 | `uploadDocument` | Given a `Document` in `GENERATED_LOCAL` state, upload to Google Drive, update the row, clean up the local file on success. |
 | `retryUpload` | Re-attempt a previously failed upload, applying the Drive-specific backoff from §15. |
 
-No class hierarchy or dependency-injection container is introduced — each service remains a plain exported singleton instance, exactly matching the existing `emailService`/`zkTecoService` pattern, per [CLAUDE.md](CLAUDE.md#existing-reusable-services).
+No class hierarchy or dependency-injection container is introduced — each service remains a plain exported singleton instance, exactly matching the existing `emailService`/`zkTecoService` pattern, per [CLAUDE.md](../../../CLAUDE.md#existing-reusable-services).
 
 ---
 
@@ -805,10 +805,10 @@ sequenceDiagram
 
 The stated requirement is explicitly **single worker** — this section documents what that means and what the deliberate limits are, rather than over-engineering for a scale this phase doesn't need:
 
-- **Vertical, not horizontal, scaling first**: increase `BATCH_SIZE` and decrease `POLL_INTERVAL` (both DB-configurable) before considering multiple workers. A single Node process sending sequentially through nodemailer can plausibly handle low-thousands of emails/day comfortably, which covers this app's single-organization scale (per [DECISIONS.md](DECISIONS.md), tens of employees, not tens of thousands).
+- **Vertical, not horizontal, scaling first**: increase `BATCH_SIZE` and decrease `POLL_INTERVAL` (both DB-configurable) before considering multiple workers. A single Node process sending sequentially through nodemailer can plausibly handle low-thousands of emails/day comfortably, which covers this app's single-organization scale (per [DECISIONS.md](../../../DECISIONS.md), tens of employees, not tens of thousands).
 - **The design does not preclude a future second worker**: the atomic conditional-claim (`UPDATE ... WHERE status='QUEUED'`, checking rows-affected) is safe under concurrent claimers even though only one worker runs today — this is "cheap insurance," not speculative engineering, since it costs nothing extra to write the claim this way versus a naive read-then-write. If a second worker replica is ever introduced, the *only* additional requirement is a unique `lockedBy` per process instance (already in the schema) — no redesign needed.
-- **Explicitly deferred, not solved here**: distributed leader election, a message broker, or horizontal auto-scaling — consistent with [DECISIONS.md](DECISIONS.md#in-process-interval-loops-instead-of-a-job-queue)'s existing acceptance of single-replica assumptions elsewhere in this app. If the org ever needs multi-replica `app` containers (e.g. for zero-downtime deploys), the notification worker (and the existing three cron loops) would need to move to a dedicated single-replica "worker" service — flagged as a future infra decision, not something this design silently assumes away.
-- **Table growth management**: `NotificationJob`/`NotificationDeliveryAttempt` are append/high-volume tables; a retention/archival cron (§36) keeps them from growing unbounded, since there's no read-replica or partitioning strategy in this app today (per [DECISIONS.md](DECISIONS.md#prisma--postgresql-as-the-only-datastore)).
+- **Explicitly deferred, not solved here**: distributed leader election, a message broker, or horizontal auto-scaling — consistent with [DECISIONS.md](../../../DECISIONS.md#in-process-interval-loops-instead-of-a-job-queue)'s existing acceptance of single-replica assumptions elsewhere in this app. If the org ever needs multi-replica `app` containers (e.g. for zero-downtime deploys), the notification worker (and the existing three cron loops) would need to move to a dedicated single-replica "worker" service — flagged as a future infra decision, not something this design silently assumes away.
+- **Table growth management**: `NotificationJob`/`NotificationDeliveryAttempt` are append/high-volume tables; a retention/archival cron (§36) keeps them from growing unbounded, since there's no read-replica or partitioning strategy in this app today (per [DECISIONS.md](../../../DECISIONS.md#prisma--postgresql-as-the-only-datastore)).
 
 ---
 
@@ -817,7 +817,7 @@ The stated requirement is explicitly **single worker** — this section document
 - New `NotificationProvider` rows with `channel = SMS` (e.g. Twilio, or a regional Bangladesh SMS gateway given the org's location).
 - New `smsChannelAdapter` implementing the same `NotificationChannelAdapter` interface — `send()` calls the provider's REST API instead of SMTP; `classifyError()` maps provider-specific codes (e.g. Twilio's error codes) into the same `PROVIDER_LEVEL`/`RECIPIENT_LEVEL` classification used by email.
 - **Recipient resolution**: needs `User.phoneNumber` (already exists in the schema) rather than `User.email` — the event-resolution layer (§6) already resolves "a recipient," the adapter just picks the right address field per channel.
-- **Delivery-status webhooks**: unlike SMTP (fire-and-forget from the app's perspective), SMS providers typically POST delivery-status callbacks — this requires a new Route Handler (`src/app/api/webhooks/sms-delivery-status/route.ts`), matching the existing precedent that asynchronous external callbacks are Route Handlers, not Server Actions (see [ARCHITECTURE.md](ARCHITECTURE.md#request-flow), point 6).
+- **Delivery-status webhooks**: unlike SMTP (fire-and-forget from the app's perspective), SMS providers typically POST delivery-status callbacks — this requires a new Route Handler (`src/app/api/webhooks/sms-delivery-status/route.ts`), matching the existing precedent that asynchronous external callbacks are Route Handlers, not Server Actions (see [ARCHITECTURE.md](../../../ARCHITECTURE.md#request-flow), point 6).
 - **No schema change needed** beyond adding `SMS` as a valid `NotificationProvider.channel`/`NotificationJob.channel` value — the queue, retry, dead-letter, and crash-recovery machinery is entirely channel-agnostic already.
 
 ---
@@ -849,17 +849,17 @@ The stated requirement is explicitly **single worker** — this section document
 
 ## 30. Future API Contracts
 
-Since this app is Server-Actions-first (per [ARCHITECTURE.md](ARCHITECTURE.md)), the engine's *primary* contract is TypeScript function signatures, not REST — consistent with [API.md](API.md)'s own framing ("there is no separate REST/RPC contract for [Server Actions] beyond their TypeScript function signatures"). The only genuine HTTP contracts this engine introduces are the inbound webhook receivers future channels need, described conceptually (not as code) below:
+Since this app is Server-Actions-first (per [ARCHITECTURE.md](../../../ARCHITECTURE.md)), the engine's *primary* contract is TypeScript function signatures, not REST — consistent with [API.md](../../../API.md)'s own framing ("there is no separate REST/RPC contract for [Server Actions] beyond their TypeScript function signatures"). The only genuine HTTP contracts this engine introduces are the inbound webhook receivers future channels need, described conceptually (not as code) below:
 
 | Contract | Direction | Shape (conceptual) | Precedent |
 |---|---|---|---|
 | Internal: `raiseEvent` | Producer action → engine | event type, dedupe key, payload object, source domain string | Same shape discipline as every other action's plain-object return (`{ success, ... }`) |
-| Internal: dashboard queries | Admin/Manager UI → engine | filter params (date range, channel, status, recipient) → paginated `NotificationJob` + latest attempt summary | Mirrors existing `getAllLoans`/`getMyLoans`-style listing conventions from [CONTRIBUTING.md](CONTRIBUTING.md#function--variable-naming) |
+| Internal: dashboard queries | Admin/Manager UI → engine | filter params (date range, channel, status, recipient) → paginated `NotificationJob` + latest attempt summary | Mirrors existing `getAllLoans`/`getMyLoans`-style listing conventions from [CONTRIBUTING.md](../../../CONTRIBUTING.md#function--variable-naming) |
 | External: SMS delivery-status webhook | SMS provider → `POST /api/webhooks/sms-delivery-status` | provider-specific signature header + delivery status payload, mapped to a `NotificationDeliveryAttempt` update | Same authentication shape as the existing Clerk webhook (verify a provider signature, not a Clerk/App session) |
 | External: WhatsApp delivery-status webhook | WhatsApp Cloud API → `POST /api/webhooks/whatsapp-delivery-status` | Meta's webhook verification handshake (`hub.challenge` on `GET`) + status payload on `POST` | Same Route-Handler-not-Server-Action reasoning as the Clerk webhook |
 | External: Slack/Teams — none needed inbound | Outbound only (this app posts, doesn't receive) | N/A | — |
 
-No REST contract is proposed for the engine's own read/write surface — that would contradict the app's established architecture (per [DECISIONS.md](DECISIONS.md#nextjs-app-router--server-actions-instead-of-a-separate-api-backend)) and isn't requested.
+No REST contract is proposed for the engine's own read/write surface — that would contradict the app's established architecture (per [DECISIONS.md](../../../DECISIONS.md#nextjs-app-router--server-actions-instead-of-a-separate-api-backend)) and isn't requested.
 
 ---
 
@@ -886,7 +886,7 @@ No REST contract is proposed for the engine's own read/write surface — that wo
 
 ## 32. Suggested Server Actions
 
-Following the `getAll.../getMy.../getPending...` and `approve.../reject...`-style naming split from [CONTRIBUTING.md](CONTRIBUTING.md#function--variable-naming). Names and responsibilities only — no implementation.
+Following the `getAll.../getMy.../getPending...` and `approve.../reject...`-style naming split from [CONTRIBUTING.md](../../../CONTRIBUTING.md#function--variable-naming). Names and responsibilities only — no implementation.
 
 **`src/actions/notification-engine.actions.ts`**
 
@@ -935,13 +935,13 @@ Following the `getAll.../getMy.../getPending...` and `approve.../reject...`-styl
 | `src/lib/services/document.service.ts` | Singleton | PDF generation + Drive upload orchestration — see [§11](#11-document-engine-architecture)/[§22](#22-service-interfaces). |
 | `src/lib/services/channels/*.adapter.ts` | One small module per channel, exporting a plain object implementing `NotificationChannelAdapter` | Channel-specific send/error-classification logic only — no queue/retry logic duplicated here (that's the engine's job, adapters stay thin). |
 
-No new class hierarchy, no dependency-injection framework — each adapter is a plain object literal satisfying the shared interface shape, matching this codebase's existing preference for simple singletons over frameworks (per [DECISIONS.md](DECISIONS.md#no-repositoryservice-layer-for-most-domains)).
+No new class hierarchy, no dependency-injection framework — each adapter is a plain object literal satisfying the shared interface shape, matching this codebase's existing preference for simple singletons over frameworks (per [DECISIONS.md](../../../DECISIONS.md#no-repositoryservice-layer-for-most-domains)).
 
 ---
 
 ## 34. Suggested Components
 
-Namespaced by primary consumer, per [CONTRIBUTING.md](CONTRIBUTING.md#file--folder-naming):
+Namespaced by primary consumer, per [CONTRIBUTING.md](../../../CONTRIBUTING.md#file--folder-naming):
 
 | Component | Folder | Responsibility |
 |---|---|---|
@@ -950,7 +950,7 @@ Namespaced by primary consumer, per [CONTRIBUTING.md](CONTRIBUTING.md#file--fold
 | `NotificationProviderTable` | `components/admin/notifications/` | Manage SMTP/channel providers, drag-to-reorder priority, health indicators. |
 | `NotificationTemplateEditor` | `components/admin/notifications/` | Edit subject/body per event type/channel, live preview against sample data. |
 | `NotificationSettingsForm` | `components/admin/notifications/` | Worker interval, retry policy, retention days — mirrors `EmailConfigCard`'s existing shape. |
-| `ManagerNotificationCenterClient` | `components/manager/notifications/` | Read-only team-scoped mirror of the admin center (no provider/template editing — manager-scoped, per the field-level authorization precedent in [CLAUDE.md](CLAUDE.md#authorization-flow)). |
+| `ManagerNotificationCenterClient` | `components/manager/notifications/` | Read-only team-scoped mirror of the admin center (no provider/template editing — manager-scoped, per the field-level authorization precedent in [CLAUDE.md](../../../CLAUDE.md#authorization-flow)). |
 | `NotificationStatusBadge` | `components/shared/notifications/` | Small status-pill renderer (`QUEUED`/`SENT`/`DEAD_LETTER`/etc.), used by both admin and manager centers. |
 | `DocumentStatusIndicator` | `components/shared/notifications/` | Small "attachment: generating / ready / failed" indicator embedded in job rows that reference a `Document`. |
 
@@ -1001,8 +1001,8 @@ Every mutating action here follows the existing pattern: permission check inline
 
 Route group: `src/app/(manager)/manager/notifications/*` (gated by the existing `(manager)/layout.tsx` check):
 
-- **`/manager/notifications`** — read-only mirror of the Notification Center, scoped to notifications concerning the manager's own team (their direct reports), following the existing `getActiveEmployeesForManager`-style scoping convention. No provider/template/settings access — matches the existing precedent that managers get operational visibility but not system-configuration access (e.g. ZKTeco/SMTP credentials are blanked for managers today per [CLAUDE.md](CLAUDE.md#authorization-flow)).
-- A manager **can** trigger `resendNotificationJob` for their own team's failed notifications (a manager-privileged action) — if this is enabled, it should log via the existing `logManagerEmployeeEditAction` audit helper, per [CLAUDE.md](CLAUDE.md#backend-patterns-server-actions)'s rule that manager-privileged mutations must use the shared audit helpers, not ad hoc logging.
+- **`/manager/notifications`** — read-only mirror of the Notification Center, scoped to notifications concerning the manager's own team (their direct reports), following the existing `getActiveEmployeesForManager`-style scoping convention. No provider/template/settings access — matches the existing precedent that managers get operational visibility but not system-configuration access (e.g. ZKTeco/SMTP credentials are blanked for managers today per [CLAUDE.md](../../../CLAUDE.md#authorization-flow)).
+- A manager **can** trigger `resendNotificationJob` for their own team's failed notifications (a manager-privileged action) — if this is enabled, it should log via the existing `logManagerEmployeeEditAction` audit helper, per [CLAUDE.md](../../../CLAUDE.md#backend-patterns-server-actions)'s rule that manager-privileged mutations must use the shared audit helpers, not ad hoc logging.
 
 ---
 
@@ -1089,7 +1089,7 @@ Mirrors `EmailConfigCard`'s existing card-based settings layout style, backed by
 | Generated PDF (transient) | Local filesystem, scratch directory | Until Drive upload succeeds, or purge-cron window elapses | See [§14](#14-temporary-local-storage-flow). |
 | Generated PDF (durable) | Google Drive | Indefinite (subject to org's own Drive retention policy) | See [§13](#13-google-drive-flow). `Document.driveFileId`/`driveFileUrl` are the durable pointers; the app itself stores no binary long-term. |
 | Delivery/audit history | PostgreSQL (`NotificationDeliveryAttempt`, `DocumentUploadAttempt`) | Bounded by retention cron (§36) | Consistent with this app having no object storage layer of its own beyond the Postgres-backed `barman-cloud` DB backups already in place. |
-| Encrypted provider credentials | PostgreSQL (`NotificationProvider.configEncrypted`), AES-256-GCM via existing `src/lib/crypto.ts` | Indefinite, admin-editable | Reuses `EMAIL_SECRET_KEY` — **no new secret key introduced**, avoiding a second "never change this key" liability alongside the existing one (see [CLAUDE.md](CLAUDE.md#what-should-not-be-changed)). |
+| Encrypted provider credentials | PostgreSQL (`NotificationProvider.configEncrypted`), AES-256-GCM via existing `src/lib/crypto.ts` | Indefinite, admin-editable | Reuses `EMAIL_SECRET_KEY` — **no new secret key introduced**, avoiding a second "never change this key" liability alongside the existing one (see [CLAUDE.md](../../../CLAUDE.md#what-should-not-be-changed)). |
 
 **Explicitly out of scope for phase 1:** any S3-compatible object storage for documents — Google Drive is the only long-term document store requested. If a future need arises for a storage backend Google Drive doesn't fit well (e.g. very large files, or a desire to drop the Google dependency), the `Document` model's `driveFileId`/`driveFileUrl` fields would need a `storageProvider` discriminator to stay generic — flagged here so the schema isn't accidentally Drive-specific if that ever comes up, without building unused abstraction now.
 
@@ -1111,12 +1111,12 @@ Each phase is independently shippable and does not require the next phase's mode
 
 ## 43. Tradeoffs & Alternatives Considered
 
-Written in the same "What / Why / Tradeoffs / Alternatives" style as the existing [DECISIONS.md](DECISIONS.md), since that's this project's established convention for architectural rationale.
+Written in the same "What / Why / Tradeoffs / Alternatives" style as the existing [DECISIONS.md](../../../DECISIONS.md), since that's this project's established convention for architectural rationale.
 
 ### DB-backed queue instead of Redis/BullMQ
 
 **What:** The queue is a Postgres table (`NotificationJob`) polled by a single interval loop, not a dedicated broker.
-**Why:** Explicitly required (no Redis/RabbitMQ/Kafka/BullMQ) and consistent with this app's existing zero-cache-layer, zero-broker architecture (per [DECISIONS.md](DECISIONS.md#in-process-interval-loops-instead-of-a-job-queue)).
+**Why:** Explicitly required (no Redis/RabbitMQ/Kafka/BullMQ) and consistent with this app's existing zero-cache-layer, zero-broker architecture (per [DECISIONS.md](../../../DECISIONS.md#in-process-interval-loops-instead-of-a-job-queue)).
 **Tradeoffs:** Polling (even at 10s) has more latency than a push-based broker; Postgres absorbs both transactional HR data and now queue churn, with no separate scaling path for the two. Acceptable at this app's scale (single org, no evidence of high notification volume).
 **Alternatives:** BullMQ+Redis (rejected per requirement); a dedicated lightweight queue library atop Postgres (e.g. `pg-boss`) — would reduce hand-rolled claim/lease logic but is a **new dependency** requiring the same sign-off flagged in §44; hand-rolling was chosen here to keep the design fully within existing conventions until that tradeoff is explicitly decided.
 
@@ -1130,15 +1130,15 @@ Written in the same "What / Why / Tradeoffs / Alternatives" style as the existin
 ### In-house template placeholder substitution, not a templating library
 
 **What:** `{{firstName}}`-style substitution implemented directly, rather than adding Handlebars/Mustache/EJS.
-**Why:** [CONTRIBUTING.md](CONTRIBUTING.md#logging) explicitly discourages new dependencies without discussion, and this app's needs (flat key/value substitution into HTML email bodies) don't require a full templating language (no loops/conditionals needed for the notification types surveyed in [DATABASE.md](DATABASE.md)'s `NotificationType` enum).
+**Why:** [CONTRIBUTING.md](../../../CONTRIBUTING.md#logging) explicitly discourages new dependencies without discussion, and this app's needs (flat key/value substitution into HTML email bodies) don't require a full templating language (no loops/conditionals needed for the notification types surveyed in [DATABASE.md](../../../DATABASE.md)'s `NotificationType` enum).
 **Tradeoffs:** No conditional/loop logic in templates (e.g. "list each leave day") — if a future template genuinely needs that, this becomes a real constraint, not a style preference.
 **Alternatives:** A minimal templating library — flagged in §44 as a decision point if a template with real logic needs is identified during Phase 1 template-writing.
 
 ### Generalizing `EmailConfig` into `NotificationProvider` rather than modifying it in place
 
 **What:** A new table for failover-capable provider config, leaving `EmailConfig` as-is.
-**Why:** `EmailConfig` already backs a live, working feature (test-mail sending, per the most recent commit in [CHANGELOG.md](CHANGELOG.md)) — changing its shape risks breaking that working path for a benefit (failover) it doesn't need yet. Additive is lower-risk than in-place modification here.
-**Tradeoffs:** Two SMTP-config-shaped tables exist simultaneously for a period, which is a real (if temporary and clearly labeled) duplication — similar in spirit to the already-accepted `formatCurrency()` duplication noted in [DECISIONS.md](DECISIONS.md#observed-inconsistencies-not-treated-as-deliberate-decisions), but here it's a deliberate migration bridge, not drift.
+**Why:** `EmailConfig` already backs a live, working feature (test-mail sending, per the most recent commit in [CHANGELOG.md](../../../CHANGELOG.md)) — changing its shape risks breaking that working path for a benefit (failover) it doesn't need yet. Additive is lower-risk than in-place modification here.
+**Tradeoffs:** Two SMTP-config-shaped tables exist simultaneously for a period, which is a real (if temporary and clearly labeled) duplication — similar in spirit to the already-accepted `formatCurrency()` duplication noted in [DECISIONS.md](../../../DECISIONS.md#observed-inconsistencies-not-treated-as-deliberate-decisions), but here it's a deliberate migration bridge, not drift.
 **Alternatives:** Migrate `EmailConfig` into a single-row `NotificationProvider` and update the existing test-mail feature to read from the new table — cleaner long-term, but expands this phase's blast radius into a currently-working, recently-shipped feature; recommended as a **Phase 1 cleanup task**, not a Phase-0-design blocker.
 
 ---
@@ -1151,9 +1151,9 @@ These are decision points this document deliberately does not resolve unilateral
 2. **Google Drive authentication model** — service account with a shared/delegated Drive vs. some other org-level Drive access pattern. Requires a Google Workspace admin decision outside this codebase.
 3. **Degraded-mode behavior when a document upload is still retrying** — send the notification without the attachment after a timeout (recommended default, §11) vs. always block until the document is ready.
 4. **Email duplicate-send tolerance** — this design accepts at-least-once (occasional duplicate) delivery for email specifically (§18) rather than building exactly-once guarantees SMTP doesn't natively support. Confirm this UX tradeoff is acceptable.
-5. **Whether managers can trigger `resendNotificationJob`** for their team (§38) — a new manager-privileged action type, worth a deliberate decision per [CLAUDE.md](CLAUDE.md#what-should-not-be-changed)'s general caution about extending manager privileges.
+5. **Whether managers can trigger `resendNotificationJob`** for their team (§38) — a new manager-privileged action type, worth a deliberate decision per [CLAUDE.md](../../../CLAUDE.md#what-should-not-be-changed)'s general caution about extending manager privileges.
 6. **`EmailConfig` → `NotificationProvider` migration** — whether to fold the existing single-provider config into the new table as a Phase 1 cleanup (§43) or leave both indefinitely.
-7. **New dependency approvals in general** — any SMS/WhatsApp/Push/Slack/Teams SDK, and the templating/PDF library choices above, each need the explicit go-ahead [CONTRIBUTING.md](CONTRIBUTING.md#logging) calls for before Phase 1 implementation begins.
+7. **New dependency approvals in general** — any SMS/WhatsApp/Push/Slack/Teams SDK, and the templating/PDF library choices above, each need the explicit go-ahead [CONTRIBUTING.md](../../../CONTRIBUTING.md#logging) calls for before Phase 1 implementation begins.
 
 ---
 

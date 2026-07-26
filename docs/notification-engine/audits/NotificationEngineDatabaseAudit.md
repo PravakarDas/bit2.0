@@ -2,7 +2,7 @@
 
 **Scope:** Read-only verification only. No migration repair was attempted in this phase, per explicit instruction. No schema, data, or migration bookkeeping was modified while producing this report — every command below is either a Postgres system-catalog `SELECT`, a Prisma introspection/diff (read-only), or a Prisma Client query against existing rows.
 
-**Inputs:** [NotificationEngineDesign.md](NotificationEngineDesign.md) (architecture), `prisma/schema.prisma` (current schema), [DatabaseImplementationReport.md](DatabaseImplementationReport.md) (Phase 1), [MigrationRecoveryReport.md](MigrationRecoveryReport.md) (Phase 1.5).
+**Inputs:** [NotificationEngineDesign.md](../design/NotificationEngineDesign.md) (architecture), `prisma/schema.prisma` (current schema), [DatabaseImplementationReport.md](../reports/DatabaseImplementationReport.md) (Phase 1), [MigrationRecoveryReport.md](MigrationRecoveryReport.md) (Phase 1.5).
 
 ---
 
@@ -60,7 +60,7 @@ Verified via `pg_indexes` directly (ground truth, not Prisma's `@@index` syntax)
 | `Document` | `_pkey`, `status_idx`, `sourceEntityId_idx`, `type_status_idx` | 4 | ✅ |
 | `DocumentUploadAttempt` | `_pkey`, `documentId_attemptNumber_idx` | 2 | ✅ |
 
-**31 of 31 expected indexes present** (9 primary keys + 4 unique indexes + 18 query-pattern indexes), all matching the exact column composition specified in [DatabaseImplementationReport.md](DatabaseImplementationReport.md)'s index table.
+**31 of 31 expected indexes present** (9 primary keys + 4 unique indexes + 18 query-pattern indexes), all matching the exact column composition specified in [DatabaseImplementationReport.md](../reports/DatabaseImplementationReport.md)'s index table.
 
 ---
 
@@ -140,7 +140,7 @@ OK  document: count=0
 OK  documentUploadAttempt: count=0
 ```
 
-All 9 succeeded. `notificationSettings.findUnique({ where: { id: "global" } })` was also exercised specifically (since it's the one singleton model) and returned `null` cleanly — correct and expected, since no seed/upsert has run yet (seeding is explicitly Server-Action/service work, out of scope for the database layer per [DatabaseImplementationReport.md](DatabaseImplementationReport.md)'s "Anything Else Intentionally Postponed" section).
+All 9 succeeded. `notificationSettings.findUnique({ where: { id: "global" } })` was also exercised specifically (since it's the one singleton model) and returned `null` cleanly — correct and expected, since no seed/upsert has run yet (seeding is explicitly Server-Action/service work, out of scope for the database layer per [DatabaseImplementationReport.md](../reports/DatabaseImplementationReport.md)'s "Anything Else Intentionally Postponed" section).
 
 ---
 
@@ -150,7 +150,7 @@ Design §31 ("Suggested Prisma Models") lists exactly 10 models, one (`PushSubsc
 
 `NotificationEvent`, `NotificationJob`, `NotificationDeliveryAttempt`, `NotificationTemplate`, `NotificationProvider`, `NotificationPreference`, `NotificationSettings`, `Document`, `DocumentUploadAttempt`.
 
-Zero extra models, zero missing models (beyond the deliberately-postponed `PushSubscription`, documented as such in both the design and [DatabaseImplementationReport.md](DatabaseImplementationReport.md)). Enum count also matches: 5 enums in `schema.prisma`, each traceable to a specific design section (§5/§23 → `NotificationJobStatus`; §9/§10 → `NotificationChannel`, `NotificationProviderHealthStatus`; §23 → `DocumentStatus`; shared attempt-outcome concept in §10/§15 → `AttemptOutcome`). Design and schema are in full agreement.
+Zero extra models, zero missing models (beyond the deliberately-postponed `PushSubscription`, documented as such in both the design and [DatabaseImplementationReport.md](../reports/DatabaseImplementationReport.md)). Enum count also matches: 5 enums in `schema.prisma`, each traceable to a specific design section (§5/§23 → `NotificationJobStatus`; §9/§10 → `NotificationChannel`, `NotificationProviderHealthStatus`; §23 → `DocumentStatus`; shared attempt-outcome concept in §10/§15 → `AttemptOutcome`). Design and schema are in full agreement.
 
 ---
 

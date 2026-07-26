@@ -2,7 +2,7 @@
 
 **Scope:** Executing queue jobs — lifecycle, heartbeat, health, metrics, graceful shutdown, lease renewal, provider resolution/dispatch, cancellation, configuration. **No SMTP, no Nodemailer, no Google Drive, no PDF, no template rendering, no business-module integration, no Notification Center UI.** Every registered provider adapter throws `ProviderNotImplementedError`. Verified by `tsc --noEmit` (strict, whole project, zero errors), `eslint` (zero issues), and 129 passing unit tests (zero touching the live database) — including 2 real defects the tests caught and that were fixed, not just tests adjusted to match buggy behavior (see [Testing](#testing)).
 
-**Inputs (frozen, unchanged in behavior by this phase):** [NotificationEngineDesign.md](NotificationEngineDesign.md), [DatabaseImplementationReport.md](DatabaseImplementationReport.md), [MigrationRecoveryReport.md](MigrationRecoveryReport.md), [NotificationEngineDatabaseAudit.md](NotificationEngineDatabaseAudit.md), [CoreInfrastructureReport.md](CoreInfrastructureReport.md), [QueueEngineReport.md](QueueEngineReport.md).
+**Inputs (frozen, unchanged in behavior by this phase):** [NotificationEngineDesign.md](../design/NotificationEngineDesign.md), [DatabaseImplementationReport.md](DatabaseImplementationReport.md), [MigrationRecoveryReport.md](../audits/MigrationRecoveryReport.md), [NotificationEngineDatabaseAudit.md](../audits/NotificationEngineDatabaseAudit.md), [CoreInfrastructureReport.md](CoreInfrastructureReport.md), [QueueEngineReport.md](QueueEngineReport.md).
 
 ---
 

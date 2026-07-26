@@ -2,7 +2,7 @@
 
 **Scope:** Template management, rendering, variable substitution, validation, preview, and (architecture-only) localization — **only**. No SMTP, no delivery of any kind, no `NotificationService` business logic, no worker integration. Verified by `tsc --noEmit` (strict, whole project, zero errors), `eslint` (zero issues), and 256 passing unit tests (up from 252 before this phase's own ~90 new tests, minus the ones this phase's own bug-fixing corrected — see "Tests Executed" below), none touching the live database.
 
-**Inputs (frozen, unchanged in behavior by this phase):** [NotificationEngineDesign.md](NotificationEngineDesign.md), [DatabaseImplementationReport.md](DatabaseImplementationReport.md), [MigrationRecoveryReport.md](MigrationRecoveryReport.md), [NotificationEngineDatabaseAudit.md](NotificationEngineDatabaseAudit.md), [CoreInfrastructureReport.md](CoreInfrastructureReport.md), [QueueEngineReport.md](QueueEngineReport.md), [WorkerRuntimeReport.md](WorkerRuntimeReport.md), [update.md](update.md).
+**Inputs (frozen, unchanged in behavior by this phase):** [NotificationEngineDesign.md](../design/NotificationEngineDesign.md), [DatabaseImplementationReport.md](DatabaseImplementationReport.md), [MigrationRecoveryReport.md](../audits/MigrationRecoveryReport.md), [NotificationEngineDatabaseAudit.md](../audits/NotificationEngineDatabaseAudit.md), [CoreInfrastructureReport.md](CoreInfrastructureReport.md), [QueueEngineReport.md](QueueEngineReport.md), [WorkerRuntimeReport.md](WorkerRuntimeReport.md), [update.md](../updates/update.md).
 
 ---
 
@@ -89,7 +89,7 @@ Every public method of every new class has at least one direct test. Both succes
 - Compiling happens once per (key, channel, version); every subsequent `render()` for the same version is a cache hit and re-walks only the already-tokenized segment list — no re-parsing.
 - `render()` costs exactly one repository read on a cache miss, zero on a hit. `preview()` deliberately always skips the cache (so an admin's unsaved edit is never stale), costing one read per call when given a persisted key — this is the intended tradeoff for a preview/editing UX, not an oversight.
 - `TemplateRegistry.getActive`'s locale fallback can issue up to 3 sequential reads (exact locale → base language → base key) in the worst case; the common no-locale case is exactly 1 read, since `TemplateLocaleKey.fallbackChain` returns a single-element array when no locale is given.
-- No nested loops, no N+1 patterns of the kind flagged in [update.md](update.md)'s Phase 3 audit (`recoverExpiredLocks`) exist anywhere in this phase's code.
+- No nested loops, no N+1 patterns of the kind flagged in [update.md](../updates/update.md)'s Phase 3 audit (`recoverExpiredLocks`) exist anywhere in this phase's code.
 
 ## Known Limitations
 

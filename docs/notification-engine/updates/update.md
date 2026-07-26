@@ -205,7 +205,7 @@ Items 1, 2, and 4 are the three not previously stated with full clarity — item
 
 # Phase 5 — Template Engine
 
-Full detail in [TemplateEngineReport.md](TemplateEngineReport.md). Summary below, in the same structure as the rest of this file.
+Full detail in [TemplateEngineReport.md](../reports/TemplateEngineReport.md). Summary below, in the same structure as the rest of this file.
 
 ## Files Created
 
