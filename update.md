@@ -376,3 +376,80 @@ Phases 0–6 complete: design, database foundation, migration recovery, database
 
 A real SMTP `DeliveryProvider` for the `EMAIL` channel (reusing `email.service.ts`'s existing SMTP config/transporter/`EMAIL_SECRET_KEY` pattern), registered into `ProviderRegistry` — the first phase giving both this framework and `TemplateEngine` (Phase 5) a genuine consumer. Wiring `JobDispatcher`/`NotificationWorker` to call `DeliveryManager` instead of `ChannelAdapterFactory` directly would naturally follow once that first real provider exists.
 
+# Phase 7 — SMTP Provider
+
+Implements the first real `DeliveryProvider`: SMTP email, built entirely on this project's pre-existing SMTP infrastructure (`email.service.ts`, `EmailConfig`, `EMAIL_SECRET_KEY`). **No SMS/WhatsApp/Push/Firebase/Twilio, no `NotificationService` orchestration, no worker activation, no `instrumentation.ts` change.**
+
+## Files Created
+
+23 new files: `src/lib/smtp-shared.ts` (+ test) — a prisma-free extraction of `email.service.ts`'s transporter-options builder and SMTP error categorization, reused by both the old and new code instead of duplicated. `delivery/delivery-manager-channel-adapter.ts` (+ test) — a generic bridge from `DeliveryManager` to Phase 2's frozen `NotificationChannelAdapter` interface. `delivery/providers/smtp/` — `SmtpConfigValidator`, `SmtpTransportFactory`, `SmtpConnectionManager`, `buildSmtpCapabilities`, `isPermanentSmtpError`, `SmtpResultMapper`, `SmtpHealthChecker`, `SmtpDeliveryProvider`, `registerSmtpProvider` (no test — see Testing), a barrel, a `FakeTransporter` test fake, one `.test.ts` per unit, and an integration test proving the TemplateEngine → DeliveryManager → SMTP pipeline.
+
+## Files Modified (Cross-Phase Changes)
+
+`email.service.ts` refactored (behavior-preserving: removed its private config-resolver/error-mapper/transporter-options code, now imports the shared versions) — same messages, same transporter-reuse caching, same `SystemAudit` logging. `email-config.ts` gained an exported `resolveEmailConfig()` (moved verbatim from `EmailService`). `delivery/index.ts` gained `DeliveryManagerChannelAdapter` (the `providers/smtp` submodule is deliberately NOT re-exported from this barrel — see Testing). `tsconfig.test.json`/`package.json` extended with the new test paths. **`container.ts` and `notification.service.ts` are untouched** — the SMTP provider is fully built and tested but not wired into the live app (see Worker Integration).
+
+## Public API
+
+```ts
+class SmtpDeliveryProvider implements DeliveryProvider {
+  deliver(job, content, context): Promise<ProviderResult>;
+  initialize(); shutdown(); healthCheck(); validateConfiguration();
+}
+function registerSmtpProvider(registry: ProviderRegistry, options?): void;
+class SmtpConnectionManager {
+  getTransporter(config); verify(config): Promise<boolean>; invalidate(); close();
+}
+class DeliveryManagerChannelAdapter implements NotificationChannelAdapter {
+  constructor(channel, deliveryManager);
+  send(job, content): Promise<ChannelDeliveryOutcome>;
+}
+```
+
+## Architecture Compliance
+
+All 10 requested units built (table in SmtpProviderReport.md). Item 9 ("SMTP Metrics Integration") needed zero new code — `DeliveryManager.invokeProvider()` (Phase 6) already wraps every provider's `deliver()` call with metrics/health tracking generically, proof that the Delivery Framework's design works exactly as intended. Error classification reuses one shared `classifySmtpErrorCategory()` for both the human-readable message (`mapSmtpError`, unchanged output) and the PERMANENT/TEMPORARY decision (`isPermanentSmtpError`) — ENVELOPE and 5xx SERVER_REJECTED are permanent (recipient/content problem); AUTH/DNS/CONNECTION/TIMEOUT/unknown are temporary (infra, potentially resolved by failover to a sibling provider), matching `DeliveryExceptionMapper`'s (Phase 6, frozen) own conservative default, which `SmtpResultMapper` genuinely delegates to rather than bypassing.
+
+## Tests Executed
+
+Clean rebuild, stable across 2 consecutive runs:
+
+```
+tests 401   suites 94   pass 401   fail 0
+```
+
+49 tests across 14 suites belong to this phase (45 in `providers/smtp/`, 4 in `delivery-manager-channel-adapter.test.ts`'s two describe blocks, plus `smtp-shared.test.ts`'s share of the total). All 373 pre-existing tests remain green, unmodified. Zero real network calls — every test uses a `FakeTransporter`; two integration tests prove (a) Phase 4's real `JobDispatcher` correctly drives `DeliveryManager` via `DeliveryManagerChannelAdapter`, and (b) Phase 5's real `TemplateEngine.render()` output flows unmodified into a mocked SMTP send.
+
+One caught mistake worth recording: several new files were first written importing the shared config via the `@/lib/smtp-shared` Next.js path alias — which plain `node --test` cannot resolve (only Next.js's bundler understands `@/`), the same class of pitfall documented in every prior phase's report but this time self-inflicted rather than inherited. All 7 affected files failed to load their test suites at all (not an assertion failure — a `require()` crash). Fixed by switching to relative imports; re-verified clean on the next run.
+
+## Coverage
+
+Every named unit has a dedicated test file: connection reuse/invalidation/graceful-shutdown, health-probe HEALTHY/OFFLINE/MAINTENANCE, config validation, every SMTP error category's permanent/temporary classification, unconfigured-provider handling (never a crash — a retryable `TEMPORARY_FAILURE`), a full successful send with exact mail-options assertions, and both integration proofs.
+
+## Performance Notes
+
+One transporter per `SmtpConnectionManager`, reused until config changes — no per-message connection setup. Everything in this phase's own code is O(1) per call.
+
+## Known Limitations
+
+Attachments stay capability-`false` (Phase 2's frozen `RenderedNotificationContent` has no field for them yet — claiming the capability would be false advertising to `ProviderResolver`). No connection pooling (sequential reuse, matching `email.service.ts`'s existing behavior). `register-smtp-provider.ts` and the `email.service.ts` refactor have no automated test of their own — the former by the same necessity as Phase 4's untested `create-worker-runtime.ts` (importing the real Prisma-backed resolver at module scope), the latter because that file has never had a test suite (pre-existing condition, not introduced here); both were verified by careful manual review instead.
+
+## Technical Debt
+
+None introduced.
+
+## Breaking Changes
+
+**None.** `email.service.ts`'s public exports and observable `sendMail()` behavior are unchanged; every Phase 2–6 public API is untouched.
+
+## Engineering Review Summary
+
+SOLID (dependency inversion throughout — `SmtpDeliveryProvider` takes an injected config-resolver function, never touches Prisma directly), DRY (one shared error-categorization function feeding both the message mapper and the retry classifier; one shared transport-options builder feeding both `EmailService` and the new factory), connection lifecycle (reuse + invalidate-on-error + graceful shutdown, old transporter always closed before replacement, verified by test), security (no credentials logged, `EMAIL_SECRET_KEY` untouched), and error mapping (`DeliveryExceptionMapper` genuinely used, not bypassed) were all reviewed clean. No breaking changes, no O(n²) algorithms, no resource leaks.
+
+## Current Project Status
+
+Phases 0–7 complete. Six independently-tested engines now exist (`queueEngine`, `workerRuntime`, `templateEngine`, `deliveryManager` — now with a real, tested SMTP provider available to register — plus the still-stub `notificationService`). Nothing in the live application calls any of them yet; every wiring point is a deliberate, documented one-line future step.
+
+## Next Recommended Phase
+
+Activate what Phases 2–7 built: register the SMTP provider into the live `container.ts`, swap the worker's EMAIL channel adapter to `DeliveryManagerChannelAdapter`, and have the dispatch pipeline call `templateEngine.render()` first — the first phase where this engine sends a real email end to end.
+

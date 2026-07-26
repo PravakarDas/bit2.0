@@ -17,3 +17,10 @@ export { DeliveryAttemptContext, type DeliveryAttemptContextInput } from "./deli
 export { DeliveryExceptionMapper } from "./delivery-exception-mapper";
 export { FailoverDeliveryStrategy, type DeliveryStrategy, type ProviderInvoker } from "./delivery-strategy";
 export { DeliveryManager } from "./delivery-manager";
+export { DeliveryManagerChannelAdapter } from "./delivery-manager-channel-adapter";
+
+// NOTE: `./providers/smtp` is intentionally NOT re-exported here — its
+// `registerSmtpProvider()` imports the real, Prisma-backed
+// `resolveEmailConfig`, which plain `node --test` cannot resolve. Import
+// SMTP-specific pieces directly from `./providers/smtp` instead. See
+// SmtpProviderReport.md's "Testing" section.
