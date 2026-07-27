@@ -17,7 +17,8 @@
     "src/lib/services/notification-engine/queue/**/*.ts",
     "src/lib/services/notification-engine/worker/**/*.ts",
     "src/lib/services/notification-engine/template/**/*.ts",
-    "src/lib/services/notification-engine/delivery/**/*.ts"
+    "src/lib/services/notification-engine/delivery/**/*.ts",
+    "src/lib/services/notification-engine/integration/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

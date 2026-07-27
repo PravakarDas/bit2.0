@@ -13,6 +13,7 @@ import { QueueEngine, QueueRepository } from "./queue";
 import { createWorkerRuntime } from "./worker";
 import { TemplateEngine, TemplateRegistry } from "./template";
 import { DeliveryManager, ProviderHealthMonitor, ProviderMetricsCollector, ProviderRegistry, ProviderResolver } from "./delivery";
+import { registerSmtpProvider } from "./delivery/providers/smtp";
 
 /**
  * Manual dependency wiring — this project has no DI framework/container
@@ -63,39 +64,49 @@ export function createNotificationEngineContainer(overrides?: {
   // (whose raiseEvent/processJob/resendJob remain stubs — see notification.service.ts).
   const queueEngine = new QueueEngine(queueRepository);
 
-  // WorkerRuntime (Phase 4) — constructed, but NOT started, here. Nothing in
-  // this container (or anywhere else this phase) calls `.start()`; wiring it
-  // into application boot (instrumentation.ts) is explicitly deferred — see
-  // WorkerRuntimeReport.md "Intentionally Postponed". Its own
-  // `ChannelAdapterFactory` (with stub adapters registered) is deliberately
-  // separate from the one above — that one belongs to `NotificationService`'s
-  // eventual dispatch path (still unimplemented), this one belongs to the
-  // worker's own dispatch pipeline; they are not required to be the same
-  // instance, and keeping them separate avoids a hidden coupling between two
-  // still-independently-evolving stub surfaces.
-  const { runtime: workerRuntime } = createWorkerRuntime(queueEngine, { workerId: `worker-${randomUUID()}` });
-
   // TemplateEngine (Phase 5) — a standalone component, per its own scope,
   // built directly on the same `templateRepository` above (Phase 2,
-  // unmodified). Not consumed by `notificationService`/`queueEngine`/
-  // `workerRuntime` yet — wiring template rendering into the dispatch
-  // pipeline is explicitly a later phase's job (see TemplateEngineReport.md).
+  // unmodified). As of Phase 8, this IS the instance `workerRuntime`'s
+  // `JobDispatcher` renders through before every EMAIL dispatch — see
+  // EngineIntegrationReport.md.
   const templateRegistry = new TemplateRegistry(templateRepository);
   const templateEngine = new TemplateEngine(templateRegistry);
 
-  // DeliveryManager (Phase 6) — the provider-abstraction framework future
-  // SMTP/SMS/WhatsApp/Push providers plug into. `providerRegistry` starts
-  // empty: nothing in this container registers a real (or even stub)
-  // `DeliveryProvider` into it, so `deliveryManager.deliver(...)` always
-  // resolves zero candidates (`NO_PROVIDER_AVAILABLE`) until a future phase
-  // registers one. Not consumed by `notificationService`/`workerRuntime`'s
-  // dispatch path yet — see DeliveryFrameworkReport.md "Worker Integration"
-  // for why `JobDispatcher` still resolves `StubChannelAdapter`s directly.
+  // DeliveryManager (Phase 6) + SmtpDeliveryProvider (Phase 7) — Phase 8
+  // registers the engine's one real provider, for EMAIL only.
+  // `registerSmtpProvider` is the same registration mechanism any future
+  // channel's provider will use (`registerXyzProvider(providerRegistry)`).
   const providerRegistry = new ProviderRegistry();
   const providerHealthMonitor = new ProviderHealthMonitor();
   const providerMetrics = new ProviderMetricsCollector();
   const providerResolver = new ProviderResolver(providerRegistry, providerHealthMonitor);
   const deliveryManager = new DeliveryManager(providerResolver, providerHealthMonitor, providerMetrics);
+  registerSmtpProvider(providerRegistry);
+
+  // WorkerRuntime (Phase 4) — constructed, but NOT started, here. Nothing in
+  // this container (or anywhere else this phase) calls `.start()`; wiring it
+  // into application boot (instrumentation.ts) is explicitly deferred — see
+  // WorkerRuntimeReport.md "Intentionally Postponed" (still true as of
+  // Phase 8 — "Do NOT activate any worker" is one of this phase's own STOP
+  // conditions). Its own `ChannelAdapterFactory` (registered by
+  // `createWorkerRuntime`, below) is deliberately separate from the
+  // `channelAdapterFactory` above — that one belongs to `NotificationService`'s
+  // eventual dispatch path (still unimplemented), this one belongs to the
+  // worker's own dispatch pipeline.
+  //
+  // Phase 8: EMAIL now routes through `deliveryManager` (via
+  // `DeliveryManagerChannelAdapter`, registered inside `createWorkerRuntime`)
+  // instead of `StubChannelAdapter`; every other channel is still a stub.
+  // Dispatch renders through `templateEngine` (using `notificationRepository`
+  // to resolve each job's `NotificationEvent`) before handing
+  // `RenderedNotificationContent` to the channel adapter — see
+  // job-dispatcher.ts's `renderContent()`.
+  const { runtime: workerRuntime } = createWorkerRuntime(
+    queueEngine,
+    { workerId: `worker-${randomUUID()}` },
+    undefined,
+    { deliveryManager, eventRepository: notificationRepository, templateEngine }
+  );
 
   return {
     repositories: {

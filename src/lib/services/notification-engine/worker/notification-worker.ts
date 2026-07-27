@@ -73,7 +73,18 @@ export class NotificationWorker implements INotificationWorker {
     const outcome = await this.jobDispatcher.dispatch(job, context);
     const runtimeMs = context.elapsedMs();
 
-    if (outcome.kind === "SUCCESS") {
+    // Phase 8: a dispatch can resolve without throwing (`kind: "SUCCESS"`)
+    // yet still report a delivery FAILURE inside `result` — `DeliveryManagerChannelAdapter`
+    // (wrapping a real `DeliveryProvider`, e.g. SMTP) does exactly this for
+    // a temporary/permanent delivery failure, since Phase 6's
+    // `ChannelDeliveryOutcome` was always designed to carry a non-thrown
+    // failure (see factories/channel-adapter.interface.ts). Every adapter
+    // before this phase (`StubChannelAdapter`, and every mock adapter in
+    // this module's own tests) only ever *threw* on failure, so this branch
+    // was unreachable until a real provider existed — checking
+    // `result.outcome` here is required to actually "preserve retry
+    // behavior" now that one does.
+    if (outcome.kind === "SUCCESS" && outcome.result.outcome === "SUCCESS") {
       await this.queueEngine.complete(job.id, this.config.workerId);
       this.metrics.recordSuccess(runtimeMs);
       this.logger.info("worker.job_succeeded", { jobId: job.id, workerId: this.config.workerId, runtimeMs });
@@ -87,9 +98,11 @@ export class NotificationWorker implements INotificationWorker {
       return { kind: "CANCELLED", jobId: job.id, runtimeMs };
     }
 
-    // PROVIDER_NOT_IMPLEMENTED and FAILURE both route to retry — see
-    // job-dispatcher.ts's doc comment for why "no real provider yet" is
-    // treated as transient, not a permanent per-recipient failure.
+    // PROVIDER_NOT_IMPLEMENTED, FAILURE, and a SUCCESS-kind dispatch whose
+    // ChannelDeliveryOutcome.outcome is "FAILURE" all route to retry — see
+    // job-dispatcher.ts's doc comment for why "no real provider yet" (and,
+    // as of Phase 8, a real provider's own transient failure) is treated as
+    // transient, not a permanent per-recipient failure.
     const updated = await this.queueEngine.scheduleRetry(job.id, this.config.workerId);
     this.metrics.recordRetried(runtimeMs);
 

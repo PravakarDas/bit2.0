@@ -226,7 +226,7 @@ Full detail in [TemplateEngineReport.md](../reports/TemplateEngineReport.md). Su
 - **Tests**: 11 `*.test.ts` files, ~94 individual cases.
 - **Barrel**: `index.ts`.
 
-Plus `TemplateEngineReport.md` at the repo root.
+Plus `TemplateEngineReport.md` (now under `docs/notification-engine/reports/` — see the documentation reorganization noted later in this file).
 
 ## Files Modified
 
@@ -452,4 +452,64 @@ Phases 0–7 complete. Six independently-tested engines now exist (`queueEngine`
 ## Next Recommended Phase
 
 Activate what Phases 2–7 built: register the SMTP provider into the live `container.ts`, swap the worker's EMAIL channel adapter to `DeliveryManagerChannelAdapter`, and have the dispatch pipeline call `templateEngine.render()` first — the first phase where this engine sends a real email end to end.
+
+# Phase 8 — Engine Integration
+
+Wires Phases 2–7 into one working pipeline — **Queue → Worker → TemplateEngine → DeliveryManager → SMTP Provider** — for the `EMAIL` channel only. Every other channel is untouched (still `StubChannelAdapter`). Nothing is activated automatically: the worker still requires an explicit `.start()` call nothing in this repository makes.
+
+## Files Created
+
+`src/lib/services/notification-engine/integration/queue-to-smtp.integration.test.ts` (the required end-to-end proof) and `docs/notification-engine/reports/EngineIntegrationReport.md`.
+
+## Files Modified
+
+`worker/job-dispatcher.ts` (optional `eventRepository`/`templateEngine` params + a `renderContent()` step before `adapter.send()` — both default to nothing, preserving pre-Phase-8 behavior exactly), `worker/notification-worker.ts` (a genuine bug fix — see below), `worker/create-worker-runtime.ts` (new optional `DispatchIntegration` param; swaps EMAIL's `StubChannelAdapter` for `DeliveryManagerChannelAdapter` via `ChannelAdapterFactory.register()`'s existing extension point, every other channel untouched), `worker/index.ts` (export), `container.ts` (reordered construction, calls `registerSmtpProvider(providerRegistry)` once, passes the new integration deps into `createWorkerRuntime`), `worker/job-dispatcher.test.ts` (+7 tests), `worker/notification-worker.test.ts` (+1 regression test), `tsconfig.test.json`/`package.json` (new `integration/` test path).
+
+## Cross-Phase Changes
+
+**A latent gap this phase closes, not a new architecture decision**: `NotificationWorker.execute()` only ever checked `dispatchOutcome.kind === "SUCCESS"`, never `outcome.result.outcome` — harmless while every adapter (`StubChannelAdapter`) only ever *threw* on failure, but `DeliveryManagerChannelAdapter` (Phase 7) is the first adapter that resolves normally while still reporting a delivery failure (exactly what an unconfigured/failing SMTP provider does). Wiring it in without fixing this would have silently broken retry behavior — a real SMTP failure would have been marked complete instead of retried, directly violating this phase's own "preserve retry behavior" requirement. Fixed with one added condition; verified against all 82 pre-existing worker tests (unmodified, still green) plus a dedicated regression test.
+
+## Integration Points
+
+1. `registerSmtpProvider(providerRegistry)` — called exactly once, using Phase 7's existing registration mechanism (future channels register the same way).
+2. `createWorkerRuntime` registers `StubChannelAdapter` for all 8 channels, then conditionally overwrites just `EMAIL` with `DeliveryManagerChannelAdapter` — via the `ChannelAdapterFactory.register()` extension point that has existed, documented, since Phase 2.
+3. `JobDispatcher.renderContent()` resolves the job's `NotificationEvent` (`INotificationRepository.findById` — Phase 2, zero new repository methods), uses `event.eventType` as the template key and `event.payload` as the render context, and renders *before* the adapter is ever called. `DeliveryManager`/`SmtpDeliveryProvider`/`DeliveryManagerChannelAdapter` never render — verified by a test asserting exactly one render call per dispatch.
+
+## Tests Executed
+
+Clean rebuild, stable across 2 consecutive runs:
+
+```
+tests 411   suites 96   pass 411   fail 0
+```
+
+10 new tests (7 JobDispatcher render tests, 1 NotificationWorker regression test, 3 end-to-end integration tests). All 401 pre-existing tests remain green, unmodified.
+
+## Coverage
+
+The integration suite builds one complete, real pipeline (real `QueueEngine`, `NotificationWorker`, `JobDispatcher`, `TemplateEngine`, `DeliveryManager`, `SmtpDeliveryProvider`, wired exactly as `createWorkerRuntime`/`container.ts` do) against mocked repositories and a mocked SMTP transporter, proving: (1) a full success with `{{employee.name}}` rendered correctly and the job ending `SENT`; (2) a graceful SMTP failure correctly triggers `RETRY_SCHEDULED` with `attemptCount: 1` (the bug-fix, proven under real conditions); (3) a non-EMAIL (`SMS`) job is still untouched — stub adapter, `ProviderNotImplementedError`, retry.
+
+## Performance
+
+One additional repository lookup and one template render per dispatched job, both O(1) relative to queue depth — no new loops, no N+1 patterns.
+
+## Known Limitations
+
+Rendering (and the event lookup) is not raced against `ExecutionContext`'s cancellation signal — only the adapter's own network call is, unchanged from Phase 4; a hang there relies on `WorkerRuntime`'s graceful-shutdown grace period, not cancellation. The `eventType`-as-template-key mapping is a disclosed interpretation (the frozen design never specified this exact mapping) — see EngineIntegrationReport.md for the full reasoning. A missing template and a missing SMTP config currently look identical to the queue (both retry then dead-letter) — no separate observability signal distinguishes them yet.
+
+## Technical Debt
+
+None introduced — the one bug fixed removes debt rather than adding it.
+
+## Breaking Changes
+
+**None.** Every new parameter is optional with a behavior-preserving default; all 401 pre-existing tests pass unmodified. The `NotificationWorker` fix only changes behavior on a code path that was unreachable before this phase.
+
+## Current Project Status
+
+Phases 0–8 complete. The full pipeline (Queue → Worker → TemplateEngine → DeliveryManager → SMTP) is wired and provably correct end to end via integration tests, but still fully dormant in the live application — nothing calls `workerRuntime.start()`, and no business module calls `notificationService.raiseEvent()` (still a stub) to actually create a job.
+
+## Next Recommended Phase
+
+Decide how a real business event (e.g. a loan approval) calls into the engine to enqueue a job, and whether/how `instrumentation.ts` starts the worker in production — both deliberately out of scope here (explicit STOP conditions) and still open for a future, explicitly-scoped phase.
 

@@ -221,6 +221,32 @@ describe("NotificationWorker.execute", () => {
     assert.equal(result.kind, "DEAD_LETTERED");
   });
 
+  it("Phase 8 regression: a dispatch that resolves without throwing but reports a delivery FAILURE (e.g. DeliveryManagerChannelAdapter routing to a real provider that failed) still routes to scheduleRetry, not queueEngine.complete", async () => {
+    const queueEngine = new MockQueueEngine();
+    const factory = new ChannelAdapterFactory();
+    factory.register({
+      channel: "EMAIL" as const,
+      // Resolves normally (does NOT throw) but reports a delivery failure —
+      // exactly what DeliveryManagerChannelAdapter does for a TEMPORARY_FAILURE/
+      // PERMANENT_FAILURE/NO_PROVIDER_AVAILABLE DeliveryOutcome. Before Phase 8's
+      // fix, NotificationWorker only checked `outcome.kind`, so this would have
+      // been incorrectly treated as a job success.
+      send: async (): Promise<ChannelDeliveryOutcome> => ({ outcome: "FAILURE", errorCode: "SMTP_NOT_CONFIGURED", errorMessage: "not configured" }),
+    });
+    const dispatcher = new JobDispatcher(factory);
+    const metrics = new WorkerMetricsCollector();
+    const config = resolveWorkerConfig({ workerId: "worker-1" });
+    const worker = new NotificationWorker(queueEngine, dispatcher, metrics, config);
+    const job = fakeJob();
+    const context = new ExecutionContext(job, "worker-1");
+
+    const result = await worker.execute(job, context);
+    assert.equal(result.kind, "RETRY_SCHEDULED");
+    assert.equal(queueEngine.completedJobs.length, 0);
+    assert.ok(queueEngine.calls.some((c) => c.method === "scheduleRetry"));
+    assert.equal(metrics.getSnapshot().jobsRetried, 1);
+  });
+
   it("on cancellation: calls queueEngine.release (not scheduleRetry/markFailed) and does not count as processed", async () => {
     const queueEngine = new MockQueueEngine();
     const factory = new ChannelAdapterFactory();

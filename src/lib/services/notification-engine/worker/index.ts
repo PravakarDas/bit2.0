@@ -13,4 +13,4 @@ export { JobDispatcher, type DispatchOutcome } from "./job-dispatcher";
 export { NotificationWorker, type ClaimResult, type ProcessResult } from "./notification-worker";
 export type { INotificationWorker } from "./notification-worker.interface";
 export { WorkerRuntime } from "./worker-runtime";
-export { createWorkerRuntime } from "./create-worker-runtime";
+export { createWorkerRuntime, type DispatchIntegration } from "./create-worker-runtime";
