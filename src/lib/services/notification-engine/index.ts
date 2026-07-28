@@ -15,5 +15,6 @@ export * from "./queue";
 export * from "./worker";
 export * from "./template";
 export * from "./delivery";
+export * from "./inbox";
 export { NotificationService } from "./notification.service";
 export { createNotificationEngineContainer, notificationEngineContainer } from "./container";

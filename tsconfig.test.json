@@ -20,7 +20,8 @@
     "src/lib/services/notification-engine/worker/**/*.ts",
     "src/lib/services/notification-engine/template/**/*.ts",
     "src/lib/services/notification-engine/delivery/**/*.ts",
-    "src/lib/services/notification-engine/integration/**/*.ts"
+    "src/lib/services/notification-engine/integration/**/*.ts",
+    "src/lib/services/notification-engine/inbox/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

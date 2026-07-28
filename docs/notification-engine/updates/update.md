@@ -697,3 +697,77 @@ Phases 0–11 complete. The engine is fully live end to end: a loan approval enq
 
 A Notification Center (admin/employee dashboard over `NotificationJob`/`NotificationDeliveryAttempt`), additional business events beyond `LOAN_APPROVED`, and additional channels (SMS/WhatsApp/Push) behind their own `DeliveryProvider` — the extension points this engine has been built around since Phase 2.
 
+# Phase 12 — Notification Center
+
+Builds a read-oriented presentation/management layer: an Employee Notification Center (view/read/archive/delete own notifications) and an Administrator Notification Center (everything employees have, plus queue/delivery/provider visibility and two manual queue actions). No frozen Notification Engine component was redesigned.
+
+## Files Created
+
+**Migration**: `prisma/migrations/20260728120000_add_notification_job_inbox_state/migration.sql` (hand-authored, generated but **not applied** — see below).
+
+**Backend**: `inbox/dto/*` (3 files), `inbox/event-title.util.ts`, `inbox/repositories/interfaces/*` (2 interfaces), `inbox/repositories/*` (2 Prisma-backed classes), `inbox/notification-inbox.service.ts` (the core query+command logic), `inbox/notification-inbox.service.test.ts` (31 tests), `inbox/index.ts`.
+
+**Actions**: `src/actions/notification-inbox.actions.ts` (employee), `src/actions/notification-admin.actions.ts` (admin).
+
+**UI**: `NotificationStatusBadge`/`NotificationTable`/`NotificationFiltersBar`/`NotificationPagination`/`NotificationDetailDrawer` (shared, `src/components/shared/notification-center/`), `(employee)/notification-center/page.tsx`, `(admin)/admin/notification-center/page.tsx`.
+
+`docs/notification-engine/reports/NotificationCenterReport.md`.
+
+## Files Modified
+
+`prisma/schema.prisma` (new `NotificationJobInboxState` model + two virtual, zero-migration-impact back-relation fields), `container.ts` (new `inboxService`), engine barrel `index.ts` (`export * from "./inbox"`), `AppSidebar.tsx` (one nav entry each for admin/employee), `tsconfig.test.json`/`package.json` (new `inbox/**` test path).
+
+## A Schema Decision, Resolved With the User First
+
+Read/unread/archived/deleted state and channel/delivery-status filtering can't be expressed by `NotificationJob`/`NotificationEvent` (frozen) or by the pre-existing, unrelated `EmployeeNotification`/`AdminNotification` tables. Confirmed with the user before writing code: one new, purely additive table (`NotificationJobInboxState`, one row per `(notificationJobId, userId)`) — no column added to any existing table. `prisma migrate dev --create-only` hit pre-existing, undocumented-until-now drift between this project's live database and its migration history (present since before this phase, shared by three earlier migrations) and refused to proceed without offering a schema reset; per the user's explicit instruction, the migration SQL was hand-authored instead (matching this repo's existing migration style) and left **unapplied** — the user will apply it when ready. See `NotificationCenterReport.md`'s own section for full detail and the exact commands to apply it.
+
+## UI Pages
+
+`/notification-center` (employee) and `/admin/notification-center` (admin) — both reachable from the sidebar. Admin adds a Queue Status summary card and a detail-drawer section (delivery attempts, worker/lock info, raw payload, retry/requeue buttons) employees never see.
+
+## Components
+
+Five shared components (`NotificationStatusBadge`, `NotificationTable`, `NotificationFiltersBar`, `NotificationPagination`, `NotificationDetailDrawer`) reused verbatim by both role pages via props (`showRecipient`, `isAdmin`) — no logic duplicated between roles.
+
+## Queries
+
+New `INotificationCenterJobsRepository` (paginated, joined `NotificationJob`+`NotificationEvent`+`recipient` search with a total count; delivery-attempts-with-provider join; search-match id resolution) and `INotificationInboxStateRepository` (read/archived/deleted flag tracking) — both new, additive interfaces reusing `NotificationJob`'s existing relations. The two manual queue actions (retry-now, dead-letter requeue) use Phase 2's existing generic `INotificationJobRepository.update()` directly — `QueueEngine`/`NotificationService` were not modified to add this capability, per this phase's own STOP conditions.
+
+## API Endpoints
+
+None added. Every read/write in this phase is a Server Action, matching this project's dominant convention for this class of feature (list/detail/mutate from a UI) — Phase 11's `/api/notification-engine/worker-health` already covers the one legitimate "hit it directly" ops use case.
+
+## Tests Executed
+
+Clean rebuild, stable across 2 consecutive runs:
+
+```
+tests 476   suites 121   pass 476   fail 0
+```
+
+31 new tests. All 445 pre-existing tests remain green, unmodified. (No React/UI test runner exists in this project at any prior phase; UI pages were verified via `tsc --noEmit` and manual review, not automated component tests.)
+
+## Coverage
+
+Every Testing-section item (employee access, admin access, search, filtering, pagination, read/unread, archive, manual retry, dead-letter requeue, authorization, performance-sensitive query behavior) has a dedicated test suite — see `NotificationCenterReport.md`'s "Coverage" table for the exact mapping.
+
+## Performance
+
+List queries: 1 `search()` call plus up to ~3 small id-set queries when read/unread/archived/search filters are active — never per-row. Detail views: 2–3 queries total, independent of history length. Rendered template content is only ever loaded for a specific opened notification, never in a list. All verified by a dedicated "performance-sensitive query behavior" test suite asserting constant call counts.
+
+## Technical Debt
+
+The generated migration is not yet applied (by explicit user instruction) — the feature will not work against the live database until it is. Body search is unindexed (acceptable at this app's scale). Admin read/unread/archived filtering only works when scoped to one employee, not across all at once — a disclosed scope decision. `pnpm run build` shows 5 cosmetic Turbopack warnings (Node-only code reachable from `instrumentation.ts`'s Edge-runtime bundle, since `proxy.ts`'s middleware has no declared runtime and defaults to Edge) — build succeeds, runtime behavior is correct, and the user explicitly declined the one fix that would remove them (declaring `proxy.ts` `runtime: "nodejs"`) as out of scope for this phase. See `NotificationCenterReport.md`'s "Build Verification" section.
+
+## Breaking Changes
+
+**None.** Every prior phase's public API is untouched; the pre-existing `/admin/notifications` page (a different, older feature) is untouched.
+
+## Current Project Status
+
+Phases 0–12 complete (Phase 12's migration generated but not yet applied — see above). Employees and administrators now have a full read/management UI over the Notification Engine's delivery data, built entirely as a presentation layer with zero changes to any frozen engine component.
+
+## Next Recommended Phase
+
+Apply the generated migration, then verify end to end against the real database. Beyond that: Notification Preferences (per-user channel opt-out), additional business events, and additional channels — the same extension points this engine has been built around since Phase 2.
+

@@ -308,6 +308,8 @@ model User {
   // Notification Engine relations (see NotificationEngineDesign.md) — additive only, no new columns on User itself
   notificationJobs        NotificationJob[]
   notificationPreferences NotificationPreference[]
+  // Phase 12 (Notification Center) — same additive convention as the two lines above.
+  notificationJobInboxStates NotificationJobInboxState[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1161,6 +1163,11 @@ model NotificationJob {
 
   deliveryAttempts NotificationDeliveryAttempt[]
 
+  // Phase 12 (Notification Center) — virtual back-relation only, required by
+  // Prisma to declare NotificationJobInboxState's FK; produces NO migration
+  // SQL for this table (verified — see NotificationCenterReport.md).
+  inboxStates NotificationJobInboxState[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1279,6 +1286,43 @@ model NotificationSettings {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Phase 12 (Notification Center) — purely additive per-recipient UI state
+// (read/archived/deleted) for a NotificationJob. Deliberately a separate side
+// table rather than columns on NotificationJob/NotificationEvent: those two
+// models are frozen Notification Engine infrastructure (Phases 1–11); this
+// state is presentation-layer only and QueueEngine/WorkerRuntime/TemplateEngine/
+// DeliveryManager/NotificationService never read or write it. A row is only
+// created lazily, the first time a recipient interacts with a job (marks it
+// read/archived) — a job with no row here is implicitly unread, unarchived,
+// not deleted (see NotificationCenterReport.md).
+model NotificationJobInboxState {
+  id String @id @default(cuid())
+
+  notificationJobId String
+  notificationJob    NotificationJob @relation(fields: [notificationJobId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  isArchived Boolean   @default(false)
+  archivedAt DateTime?
+
+  // Soft delete (matches EmployeeNote's existing deletedAt convention) — only
+  // ever set for an already-archived notification (see "Delete archived
+  // notification" in NotificationCenterReport.md).
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([notificationJobId, userId])
+  @@index([userId, isRead])
+  @@index([userId, isArchived])
+  @@index([userId, deletedAt])
 }
 
 // One generated file's lifecycle: local generation → Drive upload (design §11–§15).

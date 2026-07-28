@@ -14,6 +14,7 @@ import { createWorkerRuntime } from "./worker";
 import { TemplateEngine, TemplateRegistry } from "./template";
 import { DeliveryManager, ProviderHealthMonitor, ProviderMetricsCollector, ProviderRegistry, ProviderResolver } from "./delivery";
 import { registerSmtpProvider } from "./delivery/providers/smtp";
+import { NotificationCenterJobsRepository, NotificationInboxService, NotificationInboxStateRepository } from "./inbox";
 
 /**
  * Manual dependency wiring — this project has no DI framework/container
@@ -110,6 +111,22 @@ export function createNotificationEngineContainer(overrides?: {
     { deliveryManager, eventRepository: notificationRepository, templateEngine }
   );
 
+  // Notification Center (Phase 12) — pure read/management layer over the
+  // existing repositories/engines above; see inbox/notification-inbox.service.ts's
+  // own doc comment. `notificationCenterJobsRepository`/`inboxStateRepository`
+  // are this phase's own new, additive repositories; every other dependency
+  // handed to `inboxService` (jobRepository, templateEngine, queueEngine) is
+  // reused unmodified from above.
+  const notificationCenterJobsRepository = new NotificationCenterJobsRepository();
+  const inboxStateRepository = new NotificationInboxStateRepository();
+  const inboxService = new NotificationInboxService(
+    notificationCenterJobsRepository,
+    inboxStateRepository,
+    jobRepository,
+    templateEngine,
+    queueEngine
+  );
+
   return {
     repositories: {
       notificationRepository,
@@ -119,6 +136,8 @@ export function createNotificationEngineContainer(overrides?: {
       providerRepository,
       documentRepository,
       queueRepository,
+      notificationCenterJobsRepository,
+      inboxStateRepository,
     },
     channelAdapterFactory,
     notificationService,
@@ -129,6 +148,7 @@ export function createNotificationEngineContainer(overrides?: {
     providerHealthMonitor,
     providerMetrics,
     deliveryManager,
+    inboxService,
   };
 }
 

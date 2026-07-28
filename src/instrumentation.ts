@@ -2,7 +2,6 @@ import { checkAndGenerateToday } from "@/actions/timeline.actions";
 import { syncAllEmployeesTimeData } from "@/actions/zkteco-sync.actions";
 import { runLeaveAutomationPipeline } from "@/actions/leave-automation.actions";
 import { getRuntimeSystemControlConfig } from "@/lib/system-control";
-import { startProductionNotificationWorker } from "@/lib/services/notification-engine/production-worker";
 
 const CRON_GLOBAL_FLAG = "__dailyTimelineCronStarted";
 const ZKTECO_CRON_GLOBAL_FLAG = "__zkTecoSyncCronStarted";
@@ -290,6 +289,17 @@ function startLeaveAutomationCron() {
 // this doesn't poll "is it due yet" on a shared 60s tick — WorkerRuntime
 // owns its own poll loop once started (see worker-runtime.ts); this
 // function's only job is the one-time, guarded `.start()` call.
+//
+// `production-worker.ts` is imported dynamically, not statically at the top
+// of this file, deliberately: `instrumentation.ts`'s `register()` is bundled
+// by Next.js for BOTH the Node.js and Edge runtimes, and this function is
+// only ever called from inside the `NEXT_RUNTIME === "nodejs"` guard below —
+// but a static top-level import would still make Turbopack bundle (and, for
+// `container.ts`'s module-level `randomUUID()` call, potentially evaluate)
+// the whole node:crypto-touching chain for the Edge runtime too, which
+// caused build warnings and could throw if that Edge bundle were ever
+// actually loaded. A dynamic import is only ever reached from code that has
+// already confirmed it's running under Node.js.
 function startNotificationWorker() {
   const globalAny = global as unknown as Record<string, boolean>;
   if (globalAny[NOTIFICATION_WORKER_GLOBAL_FLAG]) {
@@ -297,9 +307,11 @@ function startNotificationWorker() {
   }
   globalAny[NOTIFICATION_WORKER_GLOBAL_FLAG] = true;
 
-  startProductionNotificationWorker().catch((error) => {
-    console.error("Failed to start Notification Engine worker:", error);
-  });
+  import("@/lib/services/notification-engine/production-worker")
+    .then(({ startProductionNotificationWorker }) => startProductionNotificationWorker())
+    .catch((error) => {
+      console.error("Failed to start Notification Engine worker:", error);
+    });
 }
 
 export async function register() {
