@@ -2,10 +2,12 @@ import { checkAndGenerateToday } from "@/actions/timeline.actions";
 import { syncAllEmployeesTimeData } from "@/actions/zkteco-sync.actions";
 import { runLeaveAutomationPipeline } from "@/actions/leave-automation.actions";
 import { getRuntimeSystemControlConfig } from "@/lib/system-control";
+import { startProductionNotificationWorker } from "@/lib/services/notification-engine/production-worker";
 
 const CRON_GLOBAL_FLAG = "__dailyTimelineCronStarted";
 const ZKTECO_CRON_GLOBAL_FLAG = "__zkTecoSyncCronStarted";
 const LEAVE_AUTOMATION_CRON_GLOBAL_FLAG = "__leaveAutomationCronStarted";
+const NOTIFICATION_WORKER_GLOBAL_FLAG = "__notificationWorkerStarted";
 
 function getLocalTimeParts(timeZone?: string) {
   if (!timeZone) {
@@ -280,10 +282,31 @@ function startLeaveAutomationCron() {
   setInterval(runIfDue, 60_000);
 }
 
+// Notification Engine (Phase 11): same in-process-loop + idempotency-guard
+// convention as the three crons above — the established, only mechanism
+// this project uses to start a long-running background loop from
+// application boot (see ProductionWorkerReport.md's "Startup Strategy" for
+// why this, not a separate process/service, was chosen). Unlike the crons,
+// this doesn't poll "is it due yet" on a shared 60s tick — WorkerRuntime
+// owns its own poll loop once started (see worker-runtime.ts); this
+// function's only job is the one-time, guarded `.start()` call.
+function startNotificationWorker() {
+  const globalAny = global as unknown as Record<string, boolean>;
+  if (globalAny[NOTIFICATION_WORKER_GLOBAL_FLAG]) {
+    return;
+  }
+  globalAny[NOTIFICATION_WORKER_GLOBAL_FLAG] = true;
+
+  startProductionNotificationWorker().catch((error) => {
+    console.error("Failed to start Notification Engine worker:", error);
+  });
+}
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     startDailyTimelineCron();
     startZKTecoSyncCron();
     startLeaveAutomationCron();
+    startNotificationWorker();
   }
 }

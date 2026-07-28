@@ -639,3 +639,61 @@ Phases 0–10 complete. `LOAN_APPROVED` emails are enqueued for real on every lo
 
 Decide how/where to actually run the worker in production (a scheduled job, an `instrumentation.ts` hook, or an explicit ops action) — the last piece between "provably correct" and "actually sends email in production."
 
+# Phase 11 — Production Worker Activation & Operations
+
+Moves the engine from "provably correct in tests" to "actually running in production." Adds one new operational layer around the six frozen components — none redesigned.
+
+## Files Created
+
+`queue/console-logger.ts` (`ConsoleQueueLogger`, the first real `IQueueLogger`), `notification-settings.ts` (`getOrCreateNotificationSettings()`, same upsert pattern as `system-control.ts`), `worker/worker-lifecycle-manager.ts` (`WorkerLifecycleManager` — duplicate-start prevention, crash/lease recovery, combined health snapshot; prisma-free, unit-tested), `worker/worker-lifecycle-manager.test.ts` (9 tests), `production-worker.ts` (the one prisma-touching wiring file `instrumentation.ts` calls), `src/app/api/notification-engine/worker-health/route.ts` (SUPERADMIN-only health endpoint), `integration/worker-activation.integration.test.ts` (2 tests: full automatic loop with no manual `processNext()`, and crash recovery), `docs/notification-engine/reports/ProductionWorkerReport.md`.
+
+## Files Modified
+
+`src/instrumentation.ts` (one new guarded starter, `startNotificationWorker()`, following the three existing crons' exact `global`-flag pattern), `queue/index.ts`/`worker/index.ts` (new exports).
+
+## Startup Strategy
+
+`instrumentation.ts` — this project's one established mechanism for starting a long-running in-process loop at boot, already used by three cron-style background jobs. A dedicated process or scheduled-job trigger would either need new deployment infrastructure this single-app project has never had, or would require `WorkerRuntime` to become stateless across invocations (a redesign, forbidden this phase) — see `ProductionWorkerReport.md`'s "Startup Strategy" for the full reasoning.
+
+## Production Lifecycle
+
+`instrumentation.ts` → `startNotificationWorker()` (global-flag guarded) → `production-worker.ts` reads `NotificationSettings`, builds a settings-configured `QueueEngine`/`WorkerRuntime` (sharing the container's real `queueRepository`, not the container's own dormant, default-configured runtime), wraps it in a `WorkerLifecycleManager`, and starts it — which sweeps expired leases once immediately (crash recovery), starts `WorkerRuntime`'s own graceful polling loop, then sweeps again every 60 seconds for the life of the process (ongoing lease recovery). `stop()` reverses cleanly; OS-signal wiring (`SIGTERM`/`SIGINT`) is deliberately not added — no precedent for it elsewhere in this codebase, and it changes process-wide behavior beyond this phase's scope; `stopProductionNotificationWorker()` is exported and ready for a future phase to wire up.
+
+## Health Monitoring
+
+`WorkerLifecycleManager.snapshot()` combines `isStarted` + `WorkerRuntime.status()`/`.health()`/`.heartbeat()`/`.metrics()`, exposed at `GET /api/notification-engine/worker-health` (SUPERADMIN-only) — ops tooling, not the still-out-of-scope "Notification Center."
+
+## Tests Executed
+
+Clean rebuild, stable across 2 consecutive runs:
+
+```
+tests 445   suites 111   pass 445   fail 0
+```
+
+11 new tests. All 434 pre-existing tests remain green, unmodified.
+
+## Coverage
+
+Every Testing-section item (startup, shutdown, restart, duplicate startup, crash recovery, lease recovery, worker health) has at least one dedicated test, plus one integration test proving the full diagrammed chain (Application Start → Worker Starts → Queued Loan Notification → Worker Claims Job → Template Render → SMTP → Email → Worker Continues Running) end to end with zero manual `processNext()` calls — see `ProductionWorkerReport.md`'s "Coverage" table for the exact mapping.
+
+## Performance
+
+One `recoverExpiredLocks()` call at startup, one every 60 seconds thereafter — both already-cheap, already-analyzed `QueueEngine` operations. No new per-job overhead; the claim/dispatch loop itself is `WorkerRuntime`'s unmodified Phase 4 code.
+
+## Technical Debt
+
+None introduced. Two `NotificationSettings` fields (`workerBatchSize`, both retention-day fields) have no consumer yet — pre-existing Phase 1 schema surface, not new debt.
+
+## Breaking Changes
+
+**None.** Every prior phase's public API is untouched; `container.ts`'s existing dormant `workerRuntime` is simply not the instance production now uses.
+
+## Current Project Status
+
+Phases 0–11 complete. The engine is fully live end to end: a loan approval enqueues an email, and a worker started automatically at application boot delivers it, recovers from crashes/restarts, and reports its health — zero manual intervention required.
+
+## Next Recommended Phase
+
+A Notification Center (admin/employee dashboard over `NotificationJob`/`NotificationDeliveryAttempt`), additional business events beyond `LOAN_APPROVED`, and additional channels (SMS/WhatsApp/Push) behind their own `DeliveryProvider` — the extension points this engine has been built around since Phase 2.
+

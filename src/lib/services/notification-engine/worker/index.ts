@@ -14,3 +14,8 @@ export { NotificationWorker, type ClaimResult, type ProcessResult } from "./noti
 export type { INotificationWorker } from "./notification-worker.interface";
 export { WorkerRuntime } from "./worker-runtime";
 export { createWorkerRuntime, type DispatchIntegration } from "./create-worker-runtime";
+export {
+  WorkerLifecycleManager,
+  type WorkerLifecycleManagerOptions,
+  type WorkerLifecycleSnapshot,
+} from "./worker-lifecycle-manager";

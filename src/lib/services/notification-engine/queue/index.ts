@@ -7,4 +7,5 @@ export { QueueStateMachine } from "./queue-state-machine";
 export { IdempotencyGuard } from "./idempotency-guard";
 export type { QueueSearchCriteria, QueueSearchResult, QueueStatistics } from "./queue-query.dto";
 export { NoopLogger, type IQueueLogger, type LogContext } from "./logger.interface";
+export { ConsoleQueueLogger } from "./console-logger";
 export { DuplicateJobError, InvalidQueueTransitionError } from "./errors";
