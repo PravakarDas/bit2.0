@@ -34,6 +34,31 @@ async function main() {
         ],
     });
 
+    // 3. Notification Engine (Phase 10): ensure the LOAN_APPROVED/EMAIL
+    // template exists. Idempotent — skipped if an active version is already
+    // registered. Placeholders match the payload `approveLoan()` (loan.actions.ts)
+    // raises: `employee.name`, `amount`, `approvedBy` — see BusinessIntegrationReport.md.
+    const existingTemplate = await prisma.notificationTemplate.findFirst({
+        where: { key: "LOAN_APPROVED", channel: "EMAIL", isActive: true },
+    });
+
+    if (!existingTemplate) {
+        await prisma.notificationTemplate.create({
+            data: {
+                key: "LOAN_APPROVED",
+                channel: "EMAIL",
+                subjectTemplate: "Your loan has been approved",
+                bodyTemplateHtml: "<p>Hi {{employee.name}},</p><p>Your loan of ৳{{amount}} has been approved by {{approvedBy}}.</p>",
+                bodyTemplateText: "Hi {{employee.name}}, your loan of ৳{{amount}} has been approved by {{approvedBy}}.",
+                version: 1,
+                isActive: true,
+            },
+        });
+        console.log("Created LOAN_APPROVED/EMAIL notification template.");
+    } else {
+        console.log("LOAN_APPROVED/EMAIL notification template already exists — skipped.");
+    }
+
     console.log("Seed successful!");
 }
 

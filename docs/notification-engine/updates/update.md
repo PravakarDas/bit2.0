@@ -586,3 +586,56 @@ Phases 0–9 complete. `raiseEvent()` is a real, tested orchestration entry poin
 
 Pick one real business event (e.g. loan approval), have that domain's `actions.ts` call `notificationService.raiseEvent(...)` with its own recipients, and decide how/where `workerRuntime.start()` is invoked in production — both explicit STOP conditions here and still open for a future, explicitly-scoped phase.
 
+# Phase 10 — First Business Module Integration
+
+Connects exactly one real business workflow — loan approval (`LOAN_APPROVED`) — to the engine: `approveLoan()` (`loan.actions.ts`) now calls `notificationService.raiseEvent(...)` after its own transaction commits, so the employee gets an email through the full Queue → Worker → TemplateEngine → DeliveryManager → SMTP pipeline. No other business event, no engine file changed.
+
+## Files Created
+
+`src/lib/services/notification-engine/integration/loan-approved.integration.test.ts` (3 tests, starting from `NotificationService.raiseEvent()` rather than `queueEngine.enqueue()` directly) and `docs/notification-engine/reports/BusinessIntegrationReport.md`.
+
+## Files Modified
+
+`src/actions/loan.actions.ts` (`approveLoan()` calls `raiseEvent` for `LOAN_APPROVED` after its `$transaction` commits, wrapped in its own `try/catch` so a notification failure never blocks or reverses an already-approved loan; one previously-duplicated employee lookup is now shared), `prisma/seed.js` (idempotently registers the `LOAN_APPROVED`/`EMAIL` `NotificationTemplate`).
+
+## Integration Points
+
+1. **Call site**: after the loan's own transaction commits, not inside it — `NotificationService`'s repositories use the global `prisma` singleton, not `tx`, so it cannot participate in that transaction.
+2. **Failure isolation**: `raiseEvent` wrapped in `try/catch` + `console.error`, matching this codebase's standard Server Action error convention — `approveLoan`'s return value/behavior is otherwise unchanged.
+3. **Payload/recipients**: `dedupeKey: LOAN_APPROVED:${loanId}` (one notification per loan, ever), `payload: { employee: { id, name }, amount, approvedBy }` (same `employee.name` dot-path convention Phase 8 already established), one `EMAIL` recipient — skipped entirely if the employee has no email.
+4. **Template**: registered via a raw, idempotent `prisma.notificationTemplate.create()` in `prisma/seed.js` (this project's existing bootstrap-data mechanism) — not `TemplateEngine.register()` directly, since `seed.js` is a standalone script outside `tsconfig.test.json`'s path-alias resolution.
+
+## Tests Executed
+
+Clean rebuild, stable across 2 consecutive runs:
+
+```
+tests 434   suites 104   pass 434   fail 0
+```
+
+3 new tests covering success + template rendering + worker processing, queue creation, and SMTP failure + retry. All 431 pre-existing tests remain green, unmodified.
+
+## Coverage
+
+Every item in this phase's Testing section (success, template rendering, queue creation, worker processing, SMTP failure, retry) is covered by at least one assertion — see `BusinessIntegrationReport.md`'s "Coverage" section for the exact mapping.
+
+## Performance
+
+No engine component's performance characteristics changed. `approveLoan` gains one shared (not duplicated) employee lookup and one O(1) `raiseEvent` call, sequenced after — never inside — the transaction, so it never extends the transaction's lock duration.
+
+## Technical Debt
+
+The `seed.js` template-bootstrap step is an acknowledged stop-gap pending real template management (out of scope — part of the still-unbuilt Notification Center).
+
+## Breaking Changes
+
+**None.** `approveLoan`'s signature and return value are unchanged; its one existing caller never inspected the return value. No Notification Engine file was modified.
+
+## Current Project Status
+
+Phases 0–10 complete. `LOAN_APPROVED` emails are enqueued for real on every loan approval and provably deliverable end to end via integration tests, but nothing in the live application processes that queue yet — `workerRuntime.start()` is still never called anywhere.
+
+## Next Recommended Phase
+
+Decide how/where to actually run the worker in production (a scheduled job, an `instrumentation.ts` hook, or an explicit ops action) — the last piece between "provably correct" and "actually sends email in production."
+

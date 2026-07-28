@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { LoanStatus, TransactionType, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { calculateEMI, checkLoanEligibility, processLoanPayment } from "@/lib/services/loan.service";
+import { notificationEngineContainer } from "@/lib/services/notification-engine";
 import { getDbUser } from "./user.actions";
 
 function isMissingBranchLoanToggleColumnError(error: unknown): boolean {
@@ -221,7 +222,7 @@ export async function approveLoan(
         }
     }
 
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // `totalMonths` from the approval form represents EMI months.
         // Convert to full loan timeline by adding grace period months.
         const emiMonths = data.totalMonths;
@@ -290,6 +291,11 @@ export async function approveLoan(
         });
 
         // 6. Notify manager if this was a manager-verified loan
+        const employee = await tx.user.findUnique({
+            where: { id: loan.userId },
+            select: { id: true, firstName: true, lastName: true, email: true }
+        });
+
         if (loan.managerVerifiedById) {
             const manager = await tx.user.findUnique({
                 where: { id: loan.managerVerifiedById },
@@ -297,11 +303,6 @@ export async function approveLoan(
             });
 
             if (manager) {
-                const employee = await tx.user.findUnique({
-                    where: { id: loan.userId },
-                    select: { firstName: true, lastName: true }
-                });
-
                 await tx.employeeNotification.create({
                     data: {
                         userId: loan.managerVerifiedById,
@@ -325,8 +326,38 @@ export async function approveLoan(
         }
 
         revalidatePath("/admin/loans");
-        return updatedLoan;
+        return { updatedLoan, employee };
     });
+
+    // Notification Engine integration (Phase 10) — best-effort: a business
+    // action's own success must never hinge on a notification going out.
+    // Runs after the transaction commits (NotificationService's repositories
+    // use the global `prisma` singleton, not `tx`, so it cannot participate
+    // in the loan's own transaction — see BusinessIntegrationReport.md).
+    if (result.employee?.email) {
+        try {
+            await notificationEngineContainer.notificationService.raiseEvent({
+                eventType: "LOAN_APPROVED",
+                dedupeKey: `LOAN_APPROVED:${loanId}`,
+                sourceDomain: "loan",
+                payload: {
+                    employee: {
+                        id: result.employee.id,
+                        name: `${result.employee.firstName ?? ""} ${result.employee.lastName ?? ""}`.trim(),
+                    },
+                    amount: data.issuedAmount,
+                    approvedBy: `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim(),
+                },
+                recipients: [
+                    { channel: "EMAIL", recipientAddress: result.employee.email, recipientUserId: result.employee.id },
+                ],
+            });
+        } catch (error) {
+            console.error("notificationService.raiseEvent(LOAN_APPROVED) failed:", error);
+        }
+    }
+
+    return result.updatedLoan;
 }
 
 /**
