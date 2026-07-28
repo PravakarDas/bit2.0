@@ -14,3 +14,18 @@ export class SystemClock implements IClock {
     return new Date();
   }
 }
+
+/**
+ * Phase 9 addition (additive — no existing export changed). Lets a caller
+ * schedule a job for a future `nextAttemptAt` (`NotificationService.raiseEvent`'s
+ * `scheduledAt` option) by reusing the same `IClock` seam `NotificationJobFactory`
+ * already reads `nextAttemptAt` from, instead of adding a bespoke "scheduledAt"
+ * field/parameter to the factory or queue engine.
+ */
+export class FixedClock implements IClock {
+  constructor(private readonly fixedDate: Date) {}
+
+  now(): Date {
+    return this.fixedDate;
+  }
+}

@@ -34,3 +34,5 @@ export type {
   DocumentUploadAttemptDTO,
   CreateDocumentUploadAttemptInput,
 } from "./document-upload-attempt.dto";
+
+export type { RaiseEventRecipient, RaiseEventRequest, RaiseEventResult } from "./raise-event.dto";

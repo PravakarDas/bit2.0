@@ -513,3 +513,76 @@ Phases 0–8 complete. The full pipeline (Queue → Worker → TemplateEngine �
 
 Decide how a real business event (e.g. a loan approval) calls into the engine to enqueue a job, and whether/how `instrumentation.ts` starts the worker in production — both deliberately out of scope here (explicit STOP conditions) and still open for a future, explicitly-scoped phase.
 
+# Phase 9 — Notification API & Orchestration
+
+Completes `NotificationService.raiseEvent()` — the single public entry point business modules will eventually call — as a pure orchestrator over Phases 2–8's already-built components. No business module, worker activation, or `instrumentation.ts` change.
+
+## Files Created
+
+`dto/raise-event.dto.ts` (`RaiseEventRecipient`/`RaiseEventRequest`/`RaiseEventResult`), `validators/raise-event-request.validator.ts` (`RaiseEventRequestValidator`), `notification.service.test.ts` (20 tests), `docs/notification-engine/reports/NotificationServiceReport.md`.
+
+## Files Modified
+
+`notification.service.ts` (`raiseEvent()` fully implemented; new required constructor parameter `queueEngine: IQueueEngine`), `container.ts` (`queueEngine` now constructed before, and passed into, `NotificationService`), `utils/clock.ts`/`utils/index.ts` (added `FixedClock`, additive — the mechanism `scheduledAt` uses), `dto/index.ts`/`validators/index.ts` (new exports), `tsconfig.test.json`/`package.json` (added the root-level `notification.service.ts`/`.test.ts` files to the compiled/run test set).
+
+## Cross-Phase Changes
+
+None to any previously-completed phase's frozen public API. `NotificationService`'s constructor gained one new required parameter; its only real caller (`container.ts`) was updated. `raiseEvent`/`processJob`/`resendJob` were always throw-stubs before this phase, so there is no prior working behavior to preserve or break for those two still-stubbed methods.
+
+## Public API
+
+```ts
+await notificationService.raiseEvent({
+  eventType: "LOAN_APPROVED",
+  payload: { employeeId, employeeName, amount, approvedBy },
+  recipients: [{ channel: "EMAIL", recipientAddress: employee.email, recipientUserId: employee.id }],
+});
+```
+
+`recipients`, `dedupeKey`, `sourceDomain`, `triggeredByUserId`, `scheduledAt`, `maxAttempts` are the only other fields — none require the caller to know about `QueueEngine`, `WorkerRuntime`, `TemplateEngine`, `DeliveryManager`, SMTP, providers, retry logic, or the queue implementation. Two disclosed design decisions (full reasoning in `NotificationServiceReport.md`): `recipients` is required (recipient resolution is business logic Phase 2's own `NotificationJobFactory` already deferred to the caller, and this phase is barred from putting business logic in `NotificationService`); `dedupeKey`/`sourceDomain` are optional with a deterministic default derivation from `eventType`+`payload`, since both fields already exist on the frozen `NotificationEvent` schema.
+
+## Integration Points
+
+1. **Validation** — `RaiseEventRequestValidator` (new, structural) + `NotificationEventValidator` (Phase 2, unmodified) on the derived event shape.
+2. **Event-level dedup** — `notificationRepository.findByDedupeKey`; a concurrent-insert race is detected via the resulting `RepositoryError`'s wrapped Prisma `P2002`/`dedupeKey` conflict and treated identically to a synchronous dedupe hit.
+3. **Fan-out** — one `queueEngine.enqueue(...)` call per recipient (Phase 3, unmodified) — job-level idempotency (duplicate `(channel, recipientUserId)` pairs) is `QueueEngine.enqueue`'s own pre-existing behavior.
+4. **Scheduling** — `scheduledAt` reuses the existing `IClock` seam via a new `FixedClock`, passed through to `queueEngine.enqueue`'s `clock` parameter — no new field on `BuildNotificationJobParams`/`NotificationJob`.
+
+## Tests Executed
+
+Clean rebuild, stable across 2 consecutive runs:
+
+```
+tests 431   suites 103   pass 431   fail 0
+```
+
+20 new tests covering every numbered IMPLEMENT item (orchestration flow, validation, deduplication, idempotency, scheduling, repository/dependency failure propagation, read-only passthroughs). All 411 pre-existing tests remain green, unmodified.
+
+## Coverage
+
+Every IMPLEMENT item (`raiseEvent`, event validation, recipient resolution, event creation, job creation, deduplication, idempotency, queue insertion, scheduling support, event persistence, public service methods, dependency injection) has at least one dedicated test — see `NotificationServiceReport.md`'s "Coverage" section for the full mapping.
+
+## Performance
+
+Exactly one validation pass, one `findByDedupeKey` read, at most one event insert, and one `queueEngine.enqueue` call per recipient — all O(1) relative to queue depth, no N+1 beyond the intentional one-job-per-recipient fan-out the design itself requires.
+
+## Known Limitations
+
+`NotificationPreference` opt-outs are not enforced (no repository exists yet for that model, and building one was not in this phase's scope). No cross-repository transaction wraps the event insert and its jobs' inserts — matches every prior phase's same at-least-once, no-`$transaction` posture (Design §18's own acknowledged gap), not a new one. Recipients must be supplied by the caller; there is no `eventType → recipient` mapping table yet.
+
+## Technical Debt
+
+None introduced — both disclosed design decisions are documented trade-offs, not shortcuts.
+
+## Breaking Changes
+
+**None** to any previously-completed phase. `NotificationService`'s constructor signature change is confined to its one real caller, `container.ts`.
+
+## Current Project Status
+
+Phases 0–9 complete. `raiseEvent()` is a real, tested orchestration entry point — event validation, dedup, idempotency, fan-out, and scheduling all work end to end against fakes. Nothing in the live application calls it yet, and the worker it feeds is still never started.
+
+## Next Recommended Phase
+
+Pick one real business event (e.g. loan approval), have that domain's `actions.ts` call `notificationService.raiseEvent(...)` with its own recipients, and decide how/where `workerRuntime.start()` is invoked in production — both explicit STOP conditions here and still open for a future, explicitly-scoped phase.
+

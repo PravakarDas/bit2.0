@@ -49,6 +49,12 @@ export function createNotificationEngineContainer(overrides?: {
   const channelAdapterFactory = overrides?.channelAdapterFactory ?? new ChannelAdapterFactory();
   const queueRepository = overrides?.queueRepository ?? new QueueRepository();
 
+  // QueueEngine (Phase 3) — a standalone, directly-usable component per its
+  // own scope. As of Phase 9, this is also the mechanism `NotificationService.raiseEvent`
+  // fans jobs out through (job-level idempotency is QueueEngine.enqueue's,
+  // reused unmodified — see NotificationServiceReport.md).
+  const queueEngine = new QueueEngine(queueRepository);
+
   const notificationService = new NotificationService(
     notificationRepository,
     jobRepository,
@@ -56,13 +62,9 @@ export function createNotificationEngineContainer(overrides?: {
     templateRepository,
     providerRepository,
     documentRepository,
-    channelAdapterFactory
+    channelAdapterFactory,
+    queueEngine
   );
-
-  // QueueEngine (Phase 3) — a standalone, directly-usable component per its
-  // own scope, not merely a private implementation detail of NotificationService
-  // (whose raiseEvent/processJob/resendJob remain stubs — see notification.service.ts).
-  const queueEngine = new QueueEngine(queueRepository);
 
   // TemplateEngine (Phase 5) — a standalone component, per its own scope,
   // built directly on the same `templateRepository` above (Phase 2,
