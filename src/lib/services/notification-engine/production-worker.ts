@@ -24,10 +24,29 @@ import { NOTIFICATION_ENGINE_DEFAULTS } from "./constants";
  * has always been designed to tolerate (see NotificationEngineDesign.md's
  * crash-recovery/lease sections). `notificationEngineContainer.workerRuntime`
  * itself stays dormant, as it has since Phase 8.
+ *
+ * The `lifecycleManager` singleton is stored on `globalThis`, same pattern as
+ * `src/lib/prisma.ts`. A plain module-level `let` is not a reliable
+ * process-wide singleton under Next.js: `instrumentation.ts` (which starts
+ * the worker) and `worker-health/route.ts` (which reads its snapshot) are
+ * separate compiled entry points, and this file can be evaluated as a
+ * distinct module instance in each one — each getting its own top-level
+ * variable. `globalThis` is the one object actually shared across those
+ * instances within a process, so it's the only place a reference set by
+ * `startProductionNotificationWorker()` (called from instrumentation's copy)
+ * is guaranteed visible to `getProductionNotificationWorkerSnapshot()`
+ * (called from the route's copy).
  */
-let lifecycleManager: WorkerLifecycleManager | null = null;
+declare global {
+  var __notificationLifecycleManager: WorkerLifecycleManager | null | undefined;
+}
+
+function getLifecycleManager(): WorkerLifecycleManager | null {
+  return globalThis.__notificationLifecycleManager ?? null;
+}
 
 export async function startProductionNotificationWorker(): Promise<void> {
+  const lifecycleManager = getLifecycleManager();
   if (lifecycleManager?.isStarted()) {
     return;
   }
@@ -76,23 +95,25 @@ export async function startProductionNotificationWorker(): Promise<void> {
       : {}
   );
 
-  lifecycleManager = new WorkerLifecycleManager({
+  const manager = new WorkerLifecycleManager({
     runtime,
     queueEngine,
     leaseDurationMs,
     reaperIntervalMs: 60_000,
     logger,
   });
+  globalThis.__notificationLifecycleManager = manager;
 
-  await lifecycleManager.start();
+  await manager.start();
 }
 
 export async function stopProductionNotificationWorker(): Promise<void> {
+  const lifecycleManager = getLifecycleManager();
   if (lifecycleManager) {
     await lifecycleManager.stop();
   }
 }
 
 export function getProductionNotificationWorkerSnapshot(): WorkerLifecycleSnapshot | null {
-  return lifecycleManager?.snapshot() ?? null;
+  return getLifecycleManager()?.snapshot() ?? null;
 }
