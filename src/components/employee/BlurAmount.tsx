@@ -8,6 +8,8 @@ interface BlurAmountProps {
   blurred?: boolean;
   className?: string;
   amountClassName?: string;
+  /** When provided, rendered instead of `{currency}{amount}` (e.g. a signed time string like "+01:30"). */
+  formattedValue?: string;
 }
 
 export function BlurAmount({
@@ -16,6 +18,7 @@ export function BlurAmount({
   blurred = true,
   className = "",
   amountClassName = "text-base font-bold",
+  formattedValue,
 }: BlurAmountProps) {
   const [isVisible, setIsVisible] = useState(!blurred);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -65,8 +68,7 @@ export function BlurAmount({
         aria-label={isVisible ? "Amount visible. Click to hide." : "Amount hidden. Click to reveal for 3 seconds."}
       >
         <span className={isVisible ? amountClassName : `${amountClassName} blur-sm select-none`}>
-          {currency}
-          {amount.toLocaleString("en-BD")}
+          {formattedValue ?? `${currency}${amount.toLocaleString("en-BD")}`}
         </span>
       </button>
     </div>

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getDbUser } from "./user.actions";
+import { getMyOvertimePayoutSummary } from "./overtime.actions";
 import { Prisma } from "@prisma/client";
 
 export async function getEmployeeDashboardData() {
@@ -107,6 +108,7 @@ export async function getEmployeeDashboardData() {
         timelineRecords,
         leaveRecords,
         overtimeRecords,
+        otUtSummary,
     ] = await Promise.all([
             // Timeline records needed for current year + last month calculations
             prisma.dailyTimeRecord.findMany({
@@ -157,6 +159,9 @@ export async function getEmployeeDashboardData() {
                 },
                 take: 12,
             }),
+
+            // Combined OT/UT summary for the current year (same calc used on the payout pages)
+            getMyOvertimePayoutSummary(currentDate.getFullYear()),
         ]);
 
     const recordByDate = new Map(
@@ -252,6 +257,11 @@ export async function getEmployeeDashboardData() {
     const totalHoursThisMonth = thisMonthSummary.activeHours;
     const totalHoursLastMonth = lastMonthSummary.activeHours;
 
+    const combinedOvertimeUndertimeMinutes = otUtSummary.totalOvertimeMinutes;
+    const otUtAbsMinutes = Math.abs(combinedOvertimeUndertimeMinutes);
+    const otUtSign = combinedOvertimeUndertimeMinutes < 0 ? "-" : combinedOvertimeUndertimeMinutes > 0 ? "+" : "";
+    const combinedOvertimeUndertimeLabel = `${otUtSign}${String(Math.floor(otUtAbsMinutes / 60)).padStart(2, "0")}:${String(otUtAbsMinutes % 60).padStart(2, "0")}`;
+
     // Build dynamic leave breakdown only from available leave types
     const leaveArray = leaveRecords.map(leave => ({
         name: leave.leaveType.name,
@@ -264,6 +274,8 @@ export async function getEmployeeDashboardData() {
         walletBalance: user.walletBalance,
         remainingLoan: loans._sum.remainingPrincipal || 0,
         remainingMedical: medicalEntitlement?.remainingBalance || 0,
+        combinedOvertimeUndertimeMinutes,
+        combinedOvertimeUndertimeLabel,
         salaryHistory: salaryHistory.reverse().map((s: { month: string; netAmount: number }) => ({
             name: s.month,
             amount: s.netAmount

@@ -13,12 +13,15 @@ import {
     Banknote,
     Stethoscope,
     Clock,
+    Timer,
 } from "lucide-react";
 
 interface DashboardData {
     walletBalance: number;
     remainingLoan: number;
     remainingMedical: number;
+    combinedOvertimeUndertimeMinutes: number;
+    combinedOvertimeUndertimeLabel: string;
     attendanceData: {
         present: number;
         absent: number;
@@ -61,7 +64,7 @@ export default async function EmployeeDashboardPage() {
                 <BreakingNoticeBanner notices={notices} />
 
                 {/* Main Grid - Enhanced to fit single viewport */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
                     {/* Quick Financial Stats */}
                     <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-linear-to-br from-green-50 to-green-100/50">
                         <CardHeader className="pb-2 pt-3 px-3">
@@ -102,6 +105,21 @@ export default async function EmployeeDashboardPage() {
                                 blurred={true}
                             />
                             <Stethoscope className="h-3 w-3 text-indigo-600 opacity-60" />
+                        </CardContent>
+                    </Card>
+
+                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-linear-to-br from-purple-50 to-purple-100/50">
+                        <CardHeader className="pb-2 pt-3 px-3">
+                            <CardTitle className="text-xs font-medium text-purple-900 uppercase">Combined OT/UT</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-3 pb-3 space-y-1">
+                            <BlurAmount
+                                amount={data.combinedOvertimeUndertimeMinutes}
+                                formattedValue={data.combinedOvertimeUndertimeLabel}
+                                amountClassName="text-lg font-bold text-purple-700"
+                                blurred={true}
+                            />
+                            <Timer className="h-3 w-3 text-purple-600 opacity-60" />
                         </CardContent>
                     </Card>
 
