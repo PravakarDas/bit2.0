@@ -5,14 +5,10 @@ import { BlurAmount } from "@/components/employee/BlurAmount";
 import { LeaveRemaining } from "@/components/employee/LeaveRemaining";
 import { BreakingNoticeBanner } from "@/components/employee/BreakingNoticeBanner";
 import { AttendanceChart } from "@/components/employee/charts/AttendanceChart";
-import { MonthComparisonChart } from "@/components/employee/charts/MonthComparisonChart";
-import { OvertimeTrendChart } from "@/components/employee/charts/OvertimeTrendChart";
-import { TimeTrackingTabs } from "@/components/employee/TimeTrackingTabs";
 import {
     Wallet,
     Banknote,
     Stethoscope,
-    Clock,
     Timer,
 } from "lucide-react";
 
@@ -34,16 +30,6 @@ interface DashboardData {
         total: number;
         used: number;
     }>;
-    activeTimeData: {
-        last7WorkingDays: { activeHours: number; requiredHours: number; presentDays: number; workingDays: number };
-        thisWeek: { activeHours: number; requiredHours: number; presentDays: number; workingDays: number };
-        thisMonth: { activeHours: number; requiredHours: number; presentDays: number; workingDays: number };
-        lastMonth: { activeHours: number; requiredHours: number; presentDays: number; workingDays: number };
-        quarterSummaries: Array<{ quarter: string; activeHours: number; requiredHours: number; presentDays: number; workingDays: number }>;
-        dailyRequiredHours: number;
-    };
-    monthComparisonData: Array<{ name: string; thisMonth: number; lastMonth: number }>;
-    overtimeTrendData: Array<{ name: string; hours: number }>;
 }
 
 export default async function EmployeeDashboardPage() {
@@ -64,7 +50,7 @@ export default async function EmployeeDashboardPage() {
                 <BreakingNoticeBanner notices={notices} />
 
                 {/* Main Grid - Enhanced to fit single viewport */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                     {/* Quick Financial Stats */}
                     <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-linear-to-br from-green-50 to-green-100/50">
                         <CardHeader className="pb-2 pt-3 px-3">
@@ -122,40 +108,13 @@ export default async function EmployeeDashboardPage() {
                             <Timer className="h-3 w-3 text-purple-600 opacity-60" />
                         </CardContent>
                     </Card>
-
-                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-linear-to-br from-amber-50 to-amber-100/50">
-                        <CardHeader className="pb-2 pt-3 px-3">
-                            <CardTitle className="text-xs font-medium text-amber-900 uppercase">Active Leaves</CardTitle>
-                        </CardHeader>
-                        <CardContent className="px-3 pb-3 space-y-1">
-                            <span className="text-lg font-bold text-amber-700">
-                                {data.attendanceData.onLeave}
-                            </span>
-                            <Clock className="h-3 w-3 text-amber-600 opacity-60" />
-                        </CardContent>
-                    </Card>
                 </div>
 
-                {/* Time Tracking + Leave Balance */}
+                {/* Leave Balance + Attendance Chart */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                    <div className="lg:col-span-2">
-                        <TimeTrackingTabs
-                            last7WorkingDays={data.activeTimeData.last7WorkingDays}
-                            thisWeek={data.activeTimeData.thisWeek}
-                            thisMonth={data.activeTimeData.thisMonth}
-                            lastMonth={data.activeTimeData.lastMonth}
-                            quarterSummaries={data.activeTimeData.quarterSummaries}
-                            dailyRequiredHours={data.activeTimeData.dailyRequiredHours}
-                        />
-                    </div>
                     <div>
                         <LeaveRemaining leaves={data.leaveArray} />
                     </div>
-                </div>
-
-                {/* Charts Grid - Compact & Responsive */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {/* Attendance Chart */}
                     <Card className="border-0 shadow-sm">
                         <CardHeader className="pb-2 pt-3">
                             <CardTitle className="text-xs font-semibold">Attendance Rate</CardTitle>
@@ -164,27 +123,6 @@ export default async function EmployeeDashboardPage() {
                             <AttendanceChart {...data.attendanceData} />
                         </CardContent>
                     </Card>
-
-                    {/* Month Comparison Chart */}
-                    <Card className="border-0 shadow-sm">
-                        <CardHeader className="pb-2 pt-3">
-                            <CardTitle className="text-xs font-semibold">Month Comparison</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-0 pb-2">
-                            <MonthComparisonChart data={data.monthComparisonData} />
-                        </CardContent>
-                    </Card>
-
-                    {/* Overtime Trend */}
-                    <Card className="border-0 shadow-sm">
-                        <CardHeader className="pb-2 pt-3">
-                            <CardTitle className="text-xs font-semibold">Overtime Trend</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-0 pb-2">
-                            <OvertimeTrendChart data={data.overtimeTrendData} />
-                        </CardContent>
-                    </Card>
-
                 </div>
             </div>
         </div>
