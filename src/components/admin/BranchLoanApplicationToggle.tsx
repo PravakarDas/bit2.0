@@ -28,12 +28,13 @@ export function BranchLoanApplicationToggle({
     };
 
     return (
-        <div className="flex items-center justify-end gap-2">
-            <span className="text-sm text-muted-foreground">{isEnabled ? "On" : "Off"}</span>
+        <div className="flex items-center justify-center gap-1.5">
+            <span className="text-xs text-muted-foreground">{isEnabled ? "On" : "Off"}</span>
             <Switch
                 checked={isEnabled}
                 onCheckedChange={handleToggle}
                 disabled={loading}
+                aria-label="Toggle loan applications for this branch"
             />
         </div>
     );

@@ -339,7 +339,8 @@ model Branch {
   location  String
   isActive  Boolean  @default(true)
   isLoanApplicationEnabled Boolean @default(true)
-  
+  isLatePenaltyEnabled Boolean @default(true)
+
   // Timeline/Attendance Settings
   checkInTime    String   @default("09:00")    // Format: "HH:MM" (24-hour)
   checkOutTime   String   @default("18:00")    // Format: "HH:MM" (24-hour)  

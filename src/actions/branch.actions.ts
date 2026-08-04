@@ -74,13 +74,32 @@ function isMissingLoanToggleColumnError(error: unknown): boolean {
     return column.includes("Branch.isLoanApplicationEnabled");
 }
 
+function isMissingLatePenaltyToggleColumnError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+        return false;
+    }
+
+    if (error.code !== "P2022") {
+        return false;
+    }
+
+    const column =
+        typeof error.meta?.column === "string"
+            ? error.meta.column
+            : typeof error.message === "string"
+              ? error.message
+              : "";
+
+    return column.includes("Branch.isLatePenaltyEnabled");
+}
+
 export async function getBranches() {
     try {
         return await prisma.branch.findMany({
             orderBy: { name: "asc" },
         });
     } catch (error) {
-        if (!isMissingLoanToggleColumnError(error)) {
+        if (!isMissingLoanToggleColumnError(error) && !isMissingLatePenaltyToggleColumnError(error)) {
             throw error;
         }
 
@@ -103,6 +122,7 @@ export async function getBranches() {
         return legacyBranches.map((branch) => ({
             ...branch,
             isLoanApplicationEnabled: true,
+            isLatePenaltyEnabled: true,
         }));
     }
 }
@@ -114,7 +134,7 @@ export async function getActiveBranches() {
             orderBy: { name: "asc" },
         });
     } catch (error) {
-        if (!isMissingLoanToggleColumnError(error)) {
+        if (!isMissingLoanToggleColumnError(error) && !isMissingLatePenaltyToggleColumnError(error)) {
             throw error;
         }
 
@@ -138,11 +158,12 @@ export async function getActiveBranches() {
         return legacyBranches.map((branch) => ({
             ...branch,
             isLoanApplicationEnabled: true,
+            isLatePenaltyEnabled: true,
         }));
     }
 }
 
-export async function createBranch(data: { 
+export async function createBranch(data: {
     name: string; 
     location: string;
     checkInTime?: string;
@@ -254,6 +275,46 @@ export async function toggleBranchLoanApplication(id: string, isLoanApplicationE
         return {
             success: false,
             error: error instanceof Error ? error.message : "Failed to update loan application setting",
+        };
+    }
+}
+
+export async function toggleBranchLatePenalty(id: string, isLatePenaltyEnabled: boolean) {
+    const user = await getDbUser();
+    if (!canManageOrganization(user)) {
+        throw new Error("Unauthorized");
+    }
+
+    try {
+        const branch = await prisma.branch.update({
+            where: { id },
+            data: { isLatePenaltyEnabled },
+        });
+
+        await notifyIfManager({
+            user: user!,
+            action: "UPDATED",
+            entityId: branch.id,
+            entityName: branch.name,
+            details: `late check-in penalty ${isLatePenaltyEnabled ? "enabled" : "disabled"}`,
+        });
+
+        revalidatePath("/admin/organization");
+        revalidatePath("/manager/organization");
+        revalidatePath("/admin/timeline");
+        revalidatePath("/manager/timeline");
+        return { success: true, branch };
+    } catch (error) {
+        console.error("Error toggling branch late penalty status:", error);
+        if (isMissingLatePenaltyToggleColumnError(error)) {
+            return {
+                success: false,
+                error: "Late penalty toggle column is missing in the database. Please run the latest Prisma migration.",
+            };
+        }
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update late penalty setting",
         };
     }
 }

@@ -43,9 +43,8 @@ function signedLabel(value: string): string {
 }
 
 /**
- * Shared OT/UT payout calculation summary, used on both the admin
- * /admin/overtime-payouts page and the employee /overtime-payouts page so the
- * breakdown is identical everywhere.
+ * Shared OT/UT payout calculation summary, used on the admin
+ * /admin/overtime-payouts page so the breakdown is identical everywhere it's shown.
  */
 export default function OvertimePayoutSummaryGrid({ summary }: { summary: OvertimePayoutSummaryData }) {
   return (

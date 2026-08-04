@@ -180,6 +180,78 @@ async function reconcileLatePenaltyWalletOnTimelineEdit(
   };
 }
 
+async function reverseLatePenaltyOnTimeline(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  date: Date,
+): Promise<PenaltyAdjustmentResult> {
+  const dateKey = getDateKey(date);
+  const legacyDateKey = getUtcDateKey(date);
+  const penaltyTag = `Late check-in penalty for ${dateKey}`;
+  const legacyPenaltyTag = `Late check-in penalty for ${legacyDateKey}`;
+  const reversalTag = `Manual late check-in penalty reversal for ${dateKey}`;
+
+  const priorPenaltyTransactions = await tx.walletTransaction.findMany({
+    where: {
+      userId,
+      type: "ADJUSTMENT",
+      OR: [
+        { description: { contains: penaltyTag } },
+        { description: { contains: legacyPenaltyTag } },
+      ],
+    },
+    select: { amount: true },
+  });
+
+  const alreadyReversed = await tx.walletTransaction.findMany({
+    where: {
+      userId,
+      type: "ADJUSTMENT",
+      description: { contains: reversalTag },
+    },
+    select: { amount: true },
+  });
+
+  const originalPenalty = priorPenaltyTransactions.reduce((sum, transaction) => {
+    if (transaction.amount >= 0) {
+      return sum;
+    }
+    return sum + Math.abs(transaction.amount);
+  }, 0);
+
+  const reversedAmount = alreadyReversed.reduce((sum, transaction) => {
+    if (transaction.amount <= 0) {
+      return sum;
+    }
+    return sum + transaction.amount;
+  }, 0);
+
+  const outstanding = Number((originalPenalty - reversedAmount).toFixed(2));
+  if (outstanding <= 0.01) {
+    return { applied: false, adjustedAmount: 0, direction: "CREDIT" };
+  }
+
+  await tx.user.update({
+    where: { id: userId },
+    data: { walletBalance: { increment: outstanding } },
+  });
+
+  await tx.walletTransaction.create({
+    data: {
+      userId,
+      amount: outstanding,
+      type: "ADJUSTMENT",
+      description: reversalTag,
+    },
+  });
+
+  return {
+    applied: true,
+    adjustedAmount: outstanding,
+    direction: "CREDIT",
+  };
+}
+
 async function reverseAbsentPenaltyOnTimelineEdit(
   tx: Prisma.TransactionClient,
   userId: string,
@@ -670,6 +742,65 @@ function getDateKey(date: Date): string {
 
 function getUtcDateKey(date: Date): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Batch-annotates timeline records with their late-penalty wallet reversal
+ * state, using the same tag-diff bookkeeping as reverseLatePenaltyOnTimeline,
+ * so the Timeline UI can show/hide/disable the "Reverse Late Penalty" action
+ * without an extra DB column.
+ */
+async function attachLatePenaltyReversalStatus<
+  T extends { userId: string; date: Date; lateCheckInPenalty: number | null }
+>(records: T[]): Promise<(T & { latePenaltyReversible: boolean; latePenaltyReversed: boolean })[]> {
+  const userIds = [...new Set(records.filter((r) => (r.lateCheckInPenalty ?? 0) > 0).map((r) => r.userId))];
+
+  if (userIds.length === 0) {
+    return records.map((record) => ({ ...record, latePenaltyReversible: false, latePenaltyReversed: false }));
+  }
+
+  const walletTransactions = await prisma.walletTransaction.findMany({
+    where: {
+      userId: { in: userIds },
+      type: "ADJUSTMENT",
+      description: { contains: "Late check-in penalty" },
+    },
+    select: { userId: true, amount: true, description: true },
+  });
+
+  return records.map((record) => {
+    if ((record.lateCheckInPenalty ?? 0) <= 0) {
+      return { ...record, latePenaltyReversible: false, latePenaltyReversed: false };
+    }
+
+    const dateKey = getDateKey(record.date);
+    const legacyDateKey = getUtcDateKey(record.date);
+    const penaltyTag = `Late check-in penalty for ${dateKey}`;
+    const legacyPenaltyTag = `Late check-in penalty for ${legacyDateKey}`;
+    const reversalTag = `Manual late check-in penalty reversal for ${dateKey}`;
+
+    let originalPenalty = 0;
+    let reversedAmount = 0;
+    for (const txn of walletTransactions) {
+      if (txn.userId !== record.userId) continue;
+      if (txn.description.includes(reversalTag)) {
+        if (txn.amount > 0) reversedAmount += txn.amount;
+      } else if (txn.description.includes(penaltyTag) || txn.description.includes(legacyPenaltyTag)) {
+        if (txn.amount < 0) originalPenalty += Math.abs(txn.amount);
+      }
+    }
+
+    if (originalPenalty <= 0.01) {
+      return { ...record, latePenaltyReversible: false, latePenaltyReversed: false };
+    }
+
+    const outstanding = Number((originalPenalty - reversedAmount).toFixed(2));
+    return {
+      ...record,
+      latePenaltyReversible: outstanding > 0.01,
+      latePenaltyReversed: outstanding <= 0.01,
+    };
+  });
 }
 
 function getDisplayName(employee: { firstName: string | null; lastName: string | null; email: string }): string {
@@ -1536,10 +1667,11 @@ export async function getTimelineRecords(
       });
 
       const totalPages = usePagination ? Math.max(Math.ceil(total / limit), 1) : (total > 0 ? 1 : 0);
+      const annotatedRecords = await attachLatePenaltyReversalStatus(records);
 
       return {
         success: true,
-        records,
+        records: annotatedRecords,
         pagination: {
           page: usePagination ? page : 1,
           limit: usePagination ? limit : total,
@@ -1613,10 +1745,11 @@ export async function getTimelineRecords(
       ? filtered.slice((page - 1) * limit, (page - 1) * limit + limit)
       : filtered;
     const totalPages = usePagination ? Math.max(Math.ceil(filteredTotal / limit), 1) : (filteredTotal > 0 ? 1 : 0);
+    const annotatedRecords = await attachLatePenaltyReversalStatus(pagedRecords);
 
     return {
       success: true,
-      records: pagedRecords,
+      records: annotatedRecords,
       pagination: {
         page: usePagination ? page : 1,
         limit: usePagination ? limit : filteredTotal,
@@ -1707,6 +1840,9 @@ export async function updateTimelineRecordInTransaction(
       id: true,
       baseSalary: true,
       workingDaysInMonth: true,
+      branch: {
+        select: { isLatePenaltyEnabled: true },
+      },
     },
   });
 
@@ -1714,6 +1850,7 @@ export async function updateTimelineRecordInTransaction(
     return { success: false, error: 'Employee not found' };
   }
 
+  const latePenaltyEnabled = employeeForPenalty.branch?.isLatePenaltyEnabled ?? true;
   const workingDaysInMonth = employeeForPenalty.workingDaysInMonth || 22;
   const dailySalary = workingDaysInMonth > 0 ? (employeeForPenalty.baseSalary / workingDaysInMonth) : 0;
   const absentPenaltyAmount = Number(dailySalary.toFixed(2));
@@ -1973,7 +2110,7 @@ export async function updateTimelineRecordInTransaction(
     direction: "DEBIT",
   };
 
-  if (shouldReconcilePenalties && recalculatedLateMinutes > 0) {
+  if (shouldReconcilePenalties && recalculatedLateMinutes > 0 && latePenaltyEnabled) {
     adjustment = await reconcileLatePenaltyWalletOnTimelineEdit(
       tx,
       currentRecord.userId,
@@ -2124,6 +2261,56 @@ export async function setTimelineRecordProcessed(recordId: string, isProcessed: 
   }
 }
 
+/**
+ * Admin/manager manual reversal of an already-deducted late check-in penalty
+ * for a single day. Idempotent: reverses only the outstanding (not yet
+ * reversed) amount, so it can safely only ever apply once per day/employee.
+ */
+export async function reverseLatePenalty(recordId: string) {
+  try {
+    const actor = await getDbUser();
+    if (!actor) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const canUpdateTimeline = actor.role === "SUPERADMIN" || actor.role === "HR" || (actor.role === "EMPLOYEE" && actor.isManager);
+    if (!canUpdateTimeline) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const record = await prisma.dailyTimeRecord.findUnique({ where: { id: recordId } });
+    if (!record) {
+      return { success: false, error: 'Timeline record not found' };
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      return reverseLatePenaltyOnTimeline(tx, record.userId, record.date);
+    });
+
+    if (!result.applied) {
+      return { success: false, error: 'No outstanding late penalty to reverse for this day.' };
+    }
+
+    await prisma.employeeNotification.create({
+      data: {
+        userId: record.userId,
+        type: "LATE_CHECKIN_PENALTY",
+        title: "Late Check-in Penalty Reversed",
+        message: `Your late check-in penalty of ৳${result.adjustedAmount.toFixed(2)} for ${new Date(record.date).toLocaleDateString()} was manually reversed.`,
+        relatedDate: record.date,
+      },
+    });
+
+    revalidatePath('/admin/timeline');
+    revalidatePath('/manager/timeline');
+    revalidatePath('/timeline');
+    return { success: true, adjustedAmount: result.adjustedAmount };
+  } catch (error) {
+    console.error('Error reversing late penalty:', error);
+    return { success: false, error: 'Failed to reverse late penalty' };
+  }
+}
+
 export async function updateTimelineRecord(
   recordId: string,
   data: {
@@ -2164,6 +2351,9 @@ export async function updateTimelineRecord(
         id: true,
         baseSalary: true,
         workingDaysInMonth: true,
+        branch: {
+          select: { isLatePenaltyEnabled: true },
+        },
       },
     });
 
@@ -2171,6 +2361,7 @@ export async function updateTimelineRecord(
       return { success: false, error: 'Employee not found' };
     }
 
+    const latePenaltyEnabled = employeeForPenalty.branch?.isLatePenaltyEnabled ?? true;
     const workingDaysInMonth = employeeForPenalty.workingDaysInMonth || 22;
     const dailySalary = workingDaysInMonth > 0 ? (employeeForPenalty.baseSalary / workingDaysInMonth) : 0;
     const absentPenaltyAmount = Number(dailySalary.toFixed(2));
@@ -2438,7 +2629,7 @@ export async function updateTimelineRecord(
         direction: "DEBIT",
       };
 
-        if (shouldReconcilePenalties && recalculatedLateMinutes > 0) {
+        if (shouldReconcilePenalties && recalculatedLateMinutes > 0 && latePenaltyEnabled) {
         adjustment = await reconcileLatePenaltyWalletOnTimelineEdit(
           tx,
           currentRecord.userId,
