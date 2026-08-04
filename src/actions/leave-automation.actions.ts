@@ -650,7 +650,9 @@ async function handleWorkDay(employee: ActiveEmployee, processDate: Date, existi
             }
         });
 
-        if (penaltyAmount > 0) {
+        const latePenaltyEnabled = employee.branch?.isLatePenaltyEnabled ?? true;
+
+        if (penaltyAmount > 0 && latePenaltyEnabled) {
             const reconciliation = await reconcileLatePenaltyWallet(
                 employee.id,
                 processDate,

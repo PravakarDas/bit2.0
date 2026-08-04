@@ -48,7 +48,7 @@ import {
   ArrowUpDown,
   CalendarX
 } from "lucide-react";
-import { updateTimelineRecord, adjustLeaveType, setTimelineRecordProcessed } from "@/actions/timeline.actions";
+import { updateTimelineRecord, adjustLeaveType, setTimelineRecordProcessed, reverseLatePenalty } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 import { formatTime12 } from "@/lib/utils";
@@ -412,6 +412,7 @@ export default function TimelineTableView({
   const [saving, setSaving] = useState(false);
   const [processedSavingId, setProcessedSavingId] = useState<string | null>(null);
   const [syncingUsers, setSyncingUsers] = useState<Set<string>>(new Set());
+  const [reversingPenaltyId, setReversingPenaltyId] = useState<string | null>(null);
 
   const handleToggleProcessed = async (record: TimeRecord, target: boolean) => {
     if (
@@ -436,6 +437,31 @@ export default function TimelineTableView({
       alert("Failed to update processing status");
     } finally {
       setProcessedSavingId(null);
+    }
+  };
+
+  const handleReverseLatePenalty = async (record: TimeRecord) => {
+    if (
+      !window.confirm(
+        `Reverse the late check-in penalty for ${format(new Date(record.date), 'MMMM d, yyyy')}?\n\nThis credits the previously deducted amount back to the employee's wallet. This can only be done once per day.`,
+      )
+    ) {
+      return;
+    }
+
+    setReversingPenaltyId(record.id);
+    try {
+      const result = await reverseLatePenalty(record.id);
+      if (result.success) {
+        onRecordUpdate();
+      } else {
+        alert(result.error || "Failed to reverse late penalty");
+      }
+    } catch (error) {
+      console.error("Error reversing late penalty:", error);
+      alert("Failed to reverse late penalty");
+    } finally {
+      setReversingPenaltyId(null);
     }
   };
 
@@ -1038,6 +1064,14 @@ export default function TimelineTableView({
                           >
                             {record.isProcessed ? "Mark as Unprocessed & Re-fetch" : "Mark as Processed"}
                           </DropdownMenuItem>
+                          {(record.latePenaltyReversible || record.latePenaltyReversed) && (
+                            <DropdownMenuItem
+                              disabled={!record.latePenaltyReversible || reversingPenaltyId === record.id}
+                              onSelect={() => handleReverseLatePenalty(record)}
+                            >
+                              {record.latePenaltyReversed ? "Late Penalty Reversed" : "Reverse Late Penalty"}
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>

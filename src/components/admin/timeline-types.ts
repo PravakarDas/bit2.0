@@ -9,6 +9,9 @@ export interface TimeRecord {
   isProcessed: boolean;
   status: TimelineStatusValue;
   lateCheckInMinutes: number | null;
+  lateCheckInPenalty: number | null;
+  latePenaltyReversible: boolean;
+  latePenaltyReversed: boolean;
   requiredCheckIn: Date | null;
   requiredCheckOut: Date | null;
   requiredBreakTime: string | null;
