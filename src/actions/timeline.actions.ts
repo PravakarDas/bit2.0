@@ -1765,6 +1765,151 @@ export async function getTimelineRecords(
 }
 
 /**
+ * Self-scoped: the distinct months and years an employee has processed
+ * attendance data for, used to populate the Work Summary period dropdowns
+ * (only periods with actual data are offered).
+ */
+export async function getMyWorkSummaryPeriods() {
+  try {
+    const user = await getDbUser();
+    if (!user) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const records = await prisma.dailyTimeRecord.findMany({
+      where: { userId: user.id, isProcessed: true },
+      select: { date: true },
+    });
+
+    const monthSet = new Set<string>();
+    const yearSet = new Set<number>();
+    for (const record of records) {
+      const year = record.date.getFullYear();
+      const month = record.date.getMonth() + 1;
+      monthSet.add(`${year}-${String(month).padStart(2, '0')}`);
+      yearSet.add(year);
+    }
+
+    const months = [...monthSet].sort().reverse();
+    const years = [...yearSet].sort((a, b) => b - a);
+
+    return { success: true, months, years };
+  } catch (error) {
+    console.error('Error fetching work summary periods:', error);
+    return { success: false, error: 'Failed to fetch work summary periods' };
+  }
+}
+
+type WorkSummaryPeriod =
+  | { type: "month"; year: number; month: number }
+  | { type: "year"; year: number };
+
+const SERIES_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Self-scoped: attendance/OT-UT summary for a single month or a full year,
+ * used by the Dashboard's Work Summary widget. Mirrors the same definitions
+ * as the employee Timeline page's chip calculation (isProcessed-gated day
+ * counts + officialOvertimeundertime sum), plus a total late-minutes sum.
+ *
+ * Also returns `series`: a chart-ready breakdown of OT/UT and late minutes,
+ * grouped by date (month view) or by month (year view) — only for
+ * dates/months that actually have processed data, no zero-filled gaps.
+ */
+export async function getMyWorkSummary(period: WorkSummaryPeriod) {
+  try {
+    const user = await getDbUser();
+    if (!user) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const start = period.type === "month"
+      ? new Date(period.year, period.month - 1, 1)
+      : new Date(period.year, 0, 1);
+    const end = period.type === "month"
+      ? new Date(period.year, period.month, 0, 23, 59, 59, 999)
+      : new Date(period.year, 11, 31, 23, 59, 59, 999);
+
+    const records = await prisma.dailyTimeRecord.findMany({
+      where: {
+        userId: user.id,
+        isProcessed: true,
+        date: { gte: start, lte: end },
+      },
+      orderBy: { date: "asc" },
+      select: {
+        date: true,
+        status: true,
+        lateCheckInMinutes: true,
+        officialOvertimeundertime: true,
+      },
+    });
+
+    let presentDays = 0;
+    let absentDays = 0;
+    let onLeaveDays = 0;
+    let weeklyOffDays = 0;
+    let lateDays = 0;
+    let totalOvertimeMinutes = 0;
+    let totalLateMinutes = 0;
+
+    for (const record of records) {
+      if (record.status === "PRESENT") presentDays++;
+      else if (record.status === "ABSENT") absentDays++;
+      else if (record.status === "ON_LEAVE") onLeaveDays++;
+      else if (record.status === "WEEKLY_OFF") weeklyOffDays++;
+
+      if (record.lateCheckInMinutes && record.lateCheckInMinutes > 0) {
+        lateDays++;
+        totalLateMinutes += record.lateCheckInMinutes;
+      }
+
+      if (record.officialOvertimeundertime) {
+        totalOvertimeMinutes += timeStringToMinutes(record.officialOvertimeundertime);
+      }
+    }
+
+    const series = period.type === "month"
+      ? records.map((record) => ({
+          label: String(record.date.getDate()),
+          overtimeMinutes: record.officialOvertimeundertime ? timeStringToMinutes(record.officialOvertimeundertime) : 0,
+          lateMinutes: record.lateCheckInMinutes ?? 0,
+        }))
+      : (() => {
+          const byMonth = new Map<number, { overtimeMinutes: number; lateMinutes: number }>();
+          for (const record of records) {
+            const monthIndex = record.date.getMonth();
+            const entry = byMonth.get(monthIndex) ?? { overtimeMinutes: 0, lateMinutes: 0 };
+            entry.overtimeMinutes += record.officialOvertimeundertime ? timeStringToMinutes(record.officialOvertimeundertime) : 0;
+            entry.lateMinutes += record.lateCheckInMinutes ?? 0;
+            byMonth.set(monthIndex, entry);
+          }
+          return [...byMonth.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([monthIndex, values]) => ({ label: SERIES_MONTH_NAMES[monthIndex], ...values }));
+        })();
+
+    return {
+      success: true,
+      data: {
+        totalDays: presentDays + absentDays + onLeaveDays,
+        presentDays,
+        absentDays,
+        onLeaveDays,
+        weeklyOffDays,
+        lateDays,
+        totalOvertime: minutesToTimeString(totalOvertimeMinutes),
+        totalLateTime: minutesToTimeString(totalLateMinutes),
+      },
+      series,
+    };
+  } catch (error) {
+    console.error('Error fetching work summary:', error);
+    return { success: false, error: 'Failed to fetch work summary' };
+  }
+}
+
+/**
  * Get the most recent date that has been processed (isProcessed = true) for a
  * user, ignoring any period filter. Used on the employee timeline to show
  * "data processed up to" so the employee knows how current the data is.
