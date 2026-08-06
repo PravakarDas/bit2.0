@@ -1445,7 +1445,8 @@ export type TimelineSortField =
   | "checkOut"
   | "lateMinutes"
   | "activeTime"
-  | "otUt";
+  | "otUt"
+  | "officialOtUt";
 
 const DB_NATIVE_SORT_FIELDS: readonly TimelineSortField[] = [
   "employee",
@@ -1733,6 +1734,8 @@ export async function getTimelineRecords(
             return parseDurationToMinutes(record.actualActiveTime) ?? -Infinity;
           case "otUt":
             return parseDurationToMinutes(record.overtimeUndertime) ?? -Infinity;
+          case "officialOtUt":
+            return parseDurationToMinutes(record.officialOvertimeundertime) ?? -Infinity;
           default:
             return 0;
         }

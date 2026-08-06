@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import { formatTime12 } from "@/lib/utils";
+import { cn, formatTime12 } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -19,11 +19,62 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Calendar, Eye } from "lucide-react";
+import { Calendar, Eye, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import {
   getTimelineStatusDisplay,
   type TimelineStatus,
 } from "@/lib/timeline-status";
+import type { TimelineSortField } from "@/actions/timeline.actions";
+import type { EmployeeSortState } from "./EmployeeTimelineClient";
+
+function SortButton({
+  active,
+  order,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  order: "asc" | "desc";
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Sort by ${label}`}
+      className={cn(
+        "rounded p-0.5 transition-colors hover:bg-accent",
+        active ? "text-foreground" : "text-muted-foreground/60"
+      )}
+    >
+      {active ? (
+        order === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+      ) : (
+        <ArrowUpDown className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+}
+
+function ColumnHeaderCell({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <TableHead className={className}>
+      <div className="flex items-center gap-1">
+        <span>{label}</span>
+        {children}
+      </div>
+    </TableHead>
+  );
+}
 
 interface TimeRecord {
   id: string;
@@ -51,12 +102,16 @@ interface EmployeeTimelineTableProps {
   records: TimeRecord[];
   summary: any | null;
   latestProcessedDate: Date | null;
+  sort: EmployeeSortState;
+  onSortChange: (field: TimelineSortField) => void;
 }
 
 export default function EmployeeTimelineTable({
   records,
   summary,
   latestProcessedDate,
+  sort,
+  onSortChange,
 }: EmployeeTimelineTableProps) {
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<TimeRecord | null>(null);
@@ -176,10 +231,6 @@ export default function EmployeeTimelineTable({
     return `${sign}${hours || 0}h:${(minutes || 0).toString().padStart(2, "0")}m`;
   };
 
-  const sortedRecords = [...records].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-
   return (
     <div className="space-y-4">
       {/* Table */}
@@ -188,18 +239,39 @@ export default function EmployeeTimelineTable({
           <Table className="w-full">
             <TableHeader>
               <TableRow className="bg-gray-50 border-b border-gray-200">
-                <TableHead className="w-28 px-2 py-2">Date</TableHead>
-                <TableHead className="w-20 px-2 py-2">Status</TableHead>
-                <TableHead className="w-20 px-2 py-2">In</TableHead>
-                <TableHead className="w-20 px-2 py-2">Out</TableHead>
-                <TableHead className="w-20 px-2 py-2">Late (min)</TableHead>
-                <TableHead className="w-32 px-2 py-2">Active Time</TableHead>
-                <TableHead className="w-20 px-2 py-2">OT/UT</TableHead>
+                <ColumnHeaderCell label="Date" className="w-28 px-2 py-2">
+                  <SortButton label="Date" active={sort.field === "date"} order={sort.order} onClick={() => onSortChange("date")} />
+                </ColumnHeaderCell>
+
+                <ColumnHeaderCell label="Status" className="w-20 px-2 py-2">
+                  <SortButton label="Status" active={sort.field === "status"} order={sort.order} onClick={() => onSortChange("status")} />
+                </ColumnHeaderCell>
+
+                <ColumnHeaderCell label="In" className="w-20 px-2 py-2">
+                  <SortButton label="In" active={sort.field === "checkIn"} order={sort.order} onClick={() => onSortChange("checkIn")} />
+                </ColumnHeaderCell>
+
+                <ColumnHeaderCell label="Out" className="w-20 px-2 py-2">
+                  <SortButton label="Out" active={sort.field === "checkOut"} order={sort.order} onClick={() => onSortChange("checkOut")} />
+                </ColumnHeaderCell>
+
+                <ColumnHeaderCell label="Late (min)" className="w-20 px-2 py-2">
+                  <SortButton label="Late minutes" active={sort.field === "lateMinutes"} order={sort.order} onClick={() => onSortChange("lateMinutes")} />
+                </ColumnHeaderCell>
+
+                <ColumnHeaderCell label="Active Time" className="w-32 px-2 py-2">
+                  <SortButton label="Active time" active={sort.field === "activeTime"} order={sort.order} onClick={() => onSortChange("activeTime")} />
+                </ColumnHeaderCell>
+
+                <ColumnHeaderCell label="OT/UT" className="w-20 px-2 py-2">
+                  <SortButton label="OT/UT" active={sort.field === "officialOtUt"} order={sort.order} onClick={() => onSortChange("officialOtUt")} />
+                </ColumnHeaderCell>
+
                 <TableHead className="w-12 px-2 py-2 text-center">Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedRecords.length === 0 ? (
+              {records.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={7}
@@ -209,7 +281,7 @@ export default function EmployeeTimelineTable({
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedRecords.map((record) => (
+                records.map((record) => (
                   <TableRow
                     key={record.id}
                     className="border-b border-gray-100 hover:bg-gray-50 transition-colors h-16"
