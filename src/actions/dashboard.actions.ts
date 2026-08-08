@@ -2,7 +2,6 @@
 
 import { prisma } from "@/lib/prisma";
 import { getDbUser } from "./user.actions";
-import { getMyOvertimePayoutSummary } from "./overtime.actions";
 import { Prisma } from "@prisma/client";
 
 export async function getEmployeeDashboardData() {
@@ -38,56 +37,21 @@ export async function getEmployeeDashboardData() {
         }),
     ]);
 
-    const currentDate = new Date();
-    const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-    const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-
-    const [
-        timelineRecords,
-        leaveRecords,
-        otUtSummary,
-    ] = await Promise.all([
-            // Timeline records for this month's attendance breakdown
-            prisma.dailyTimeRecord.findMany({
-                where: {
-                    userId: user.id,
-                    date: {
-                        gte: firstDayOfMonth,
-                        lte: today,
-                    }
-                },
-                orderBy: { date: "asc" },
+    const leaveRecords = await prisma.userLeaveEntitlement.findMany({
+        where: {
+            userId: user.id,
+            year: new Date().getFullYear(),
+        },
+        select: {
+            allocatedDays: true,
+            usedDays: true,
+            leaveType: {
                 select: {
-                    date: true,
-                    status: true,
+                    name: true,
                 }
-            }),
-
-            // Leave records for breakdown
-            prisma.userLeaveEntitlement.findMany({
-                where: {
-                    userId: user.id,
-                    year: currentDate.getFullYear(),
-                },
-                select: {
-                    allocatedDays: true,
-                    usedDays: true,
-                    leaveType: {
-                        select: {
-                            name: true,
-                        }
-                    }
-                }
-            }),
-
-            // Combined OT/UT summary for the current year (same calc used on the payout pages)
-            getMyOvertimePayoutSummary(currentDate.getFullYear()),
-        ]);
-
-    const combinedOvertimeUndertimeMinutes = otUtSummary.totalOvertimeMinutes;
-    const otUtAbsMinutes = Math.abs(combinedOvertimeUndertimeMinutes);
-    const otUtSign = combinedOvertimeUndertimeMinutes < 0 ? "-" : combinedOvertimeUndertimeMinutes > 0 ? "+" : "";
-    const combinedOvertimeUndertimeLabel = `${otUtSign}${String(Math.floor(otUtAbsMinutes / 60)).padStart(2, "0")}:${String(otUtAbsMinutes % 60).padStart(2, "0")}`;
+            }
+        }
+    });
 
     // Build dynamic leave breakdown only from available leave types
     const leaveArray = leaveRecords.map(leave => ({
@@ -101,19 +65,11 @@ export async function getEmployeeDashboardData() {
         walletBalance: user.walletBalance,
         remainingLoan: loans._sum.remainingPrincipal || 0,
         remainingMedical: medicalEntitlement?.remainingBalance || 0,
-        combinedOvertimeUndertimeMinutes,
-        combinedOvertimeUndertimeLabel,
         salaryHistory: salaryHistory.reverse().map((s: { month: string; netAmount: number }) => ({
             name: s.month,
             amount: s.netAmount
         })),
         recentTransactions,
-        attendanceData: {
-            present: timelineRecords.filter(r => r.date >= firstDayOfMonth && r.date <= today && r.status === "PRESENT").length,
-            absent: timelineRecords.filter(r => r.date >= firstDayOfMonth && r.date <= today && r.status === "ABSENT").length,
-            onLeave: timelineRecords.filter(r => r.date >= firstDayOfMonth && r.date <= today && r.status === "ON_LEAVE").length,
-            weeklyOff: timelineRecords.filter(r => r.date >= firstDayOfMonth && r.date <= today && r.status === "WEEKLY_OFF").length,
-        },
         leaveArray,
     };
 }

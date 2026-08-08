@@ -8,6 +8,7 @@ import {
   Clock,
   AlertCircle,
   TrendingUp,
+  Timer,
 } from "lucide-react";
 
 export interface AttendanceSummaryStatsData {
@@ -17,6 +18,8 @@ export interface AttendanceSummaryStatsData {
   onLeaveDays: number;
   lateDays: number;
   totalOvertime: string;
+  /** Optional: sum of late-check-in minutes for the period, as "HH:MM". Only the Dashboard's Work Summary widget provides this, adding a 7th chip. */
+  totalLateTime?: string;
 }
 
 function formatOvertimeDisplay(overtime: string): string {
@@ -30,26 +33,45 @@ function formatOvertimeDisplay(overtime: string): string {
   return `${sign}${hours || 0}h:${(minutes || 0).toString().padStart(2, "0")}m`;
 }
 
+function formatDurationDisplay(duration: string): string {
+  if (!duration) return "0h:00m";
+
+  const cleanTime = duration.replace("-", "").replace("+", "");
+  const [hours, minutes] = cleanTime.split(":").map(Number);
+
+  return `${hours || 0}h:${(minutes || 0).toString().padStart(2, "0")}m`;
+}
+
 interface AttendanceSummaryStatsProps {
   data: AttendanceSummaryStatsData | null;
+  /** Hides the "Total Workdays" chip. Used by the Dashboard's Work Summary widget; the Timeline page keeps it. */
+  hideTotalDays?: boolean;
+  /** Caps the grid at 3 columns on large screens (wraps into more rows) instead of one column per stat — for narrower embeddings like the Dashboard. */
+  compact?: boolean;
 }
 
 export default function AttendanceSummaryStats({
   data,
+  hideTotalDays = false,
+  compact = false,
 }: AttendanceSummaryStatsProps) {
   if (!data) {
     return null;
   }
 
   const stats = [
-    {
-      label: "Total Workdays",
-      value: data.totalDays,
-      icon: Calendar,
-      color: "bg-blue-50",
-      textColor: "text-blue-600",
-      borderColor: "border-blue-200",
-    },
+    ...(hideTotalDays
+      ? []
+      : [
+          {
+            label: "Total Workdays",
+            value: data.totalDays,
+            icon: Calendar,
+            color: "bg-blue-50",
+            textColor: "text-blue-600",
+            borderColor: "border-blue-200",
+          },
+        ]),
     {
       label: "Present Days",
       value: data.presentDays,
@@ -90,10 +112,24 @@ export default function AttendanceSummaryStats({
       textColor: "text-purple-600",
       borderColor: "border-purple-200",
     },
+    ...(data.totalLateTime !== undefined
+      ? [
+          {
+            label: "Total Late Time",
+            value: data.totalLateTime,
+            icon: Timer,
+            color: "bg-rose-50",
+            textColor: "text-rose-600",
+            borderColor: "border-rose-200",
+          },
+        ]
+      : []),
   ];
 
+  const lgCols = compact ? "lg:grid-cols-3" : stats.length === 7 ? "lg:grid-cols-7" : "lg:grid-cols-6";
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${lgCols}`}>
       {stats.map((stat, idx) => {
         const Icon = stat.icon;
         return (
@@ -105,6 +141,8 @@ export default function AttendanceSummaryStats({
               <div className={`text-2xl font-bold ${stat.textColor} mb-1`}>
                 {stat.label === "Net OT/UT"
                   ? formatOvertimeDisplay(String(stat.value))
+                  : stat.label === "Total Late Time"
+                  ? formatDurationDisplay(String(stat.value))
                   : stat.value}
               </div>
               <div className="text-xs font-medium text-gray-600">

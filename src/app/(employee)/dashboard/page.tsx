@@ -4,26 +4,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BlurAmount } from "@/components/employee/BlurAmount";
 import { LeaveRemaining } from "@/components/employee/LeaveRemaining";
 import { BreakingNoticeBanner } from "@/components/employee/BreakingNoticeBanner";
-import { AttendanceChart } from "@/components/employee/charts/AttendanceChart";
+import { WorkSummary } from "@/components/employee/WorkSummary";
 import {
     Wallet,
     Banknote,
     Stethoscope,
-    Timer,
 } from "lucide-react";
 
 interface DashboardData {
     walletBalance: number;
     remainingLoan: number;
     remainingMedical: number;
-    combinedOvertimeUndertimeMinutes: number;
-    combinedOvertimeUndertimeLabel: string;
-    attendanceData: {
-        present: number;
-        absent: number;
-        onLeave: number;
-        weeklyOff: number;
-    };
     leaveArray: Array<{
         name: string;
         remaining: number;
@@ -50,7 +41,7 @@ export default async function EmployeeDashboardPage() {
                 <BreakingNoticeBanner notices={notices} />
 
                 {/* Main Grid - Enhanced to fit single viewport */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
                     {/* Quick Financial Stats */}
                     <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-linear-to-br from-green-50 to-green-100/50">
                         <CardHeader className="pb-2 pt-3 px-3">
@@ -93,37 +84,9 @@ export default async function EmployeeDashboardPage() {
                             <Stethoscope className="h-3 w-3 text-indigo-600 opacity-60" />
                         </CardContent>
                     </Card>
-
-                    <Card className="col-span-1 sm:col-span-2 lg:col-span-1 border-0 shadow-sm hover:shadow-md transition-shadow bg-linear-to-br from-purple-50 to-purple-100/50">
-                        <CardHeader className="pb-2 pt-3 px-3">
-                            <CardTitle className="text-xs font-medium text-purple-900 uppercase">Combined OT/UT</CardTitle>
-                        </CardHeader>
-                        <CardContent className="px-3 pb-3 space-y-1">
-                            <BlurAmount
-                                amount={data.combinedOvertimeUndertimeMinutes}
-                                formattedValue={data.combinedOvertimeUndertimeLabel}
-                                amountClassName="text-lg font-bold text-purple-700"
-                                blurred={true}
-                            />
-                            <Timer className="h-3 w-3 text-purple-600 opacity-60" />
-                        </CardContent>
-                    </Card>
                 </div>
 
-                {/* Leave Balance + Attendance Chart */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                    <div>
-                        <LeaveRemaining leaves={data.leaveArray} />
-                    </div>
-                    <Card className="border-0 shadow-sm">
-                        <CardHeader className="pb-2 pt-3">
-                            <CardTitle className="text-xs font-semibold">Attendance Rate</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-0 pb-2">
-                            <AttendanceChart {...data.attendanceData} />
-                        </CardContent>
-                    </Card>
-                </div>
+                <WorkSummary sideContent={<LeaveRemaining leaves={data.leaveArray} />} />
             </div>
         </div>
     );
