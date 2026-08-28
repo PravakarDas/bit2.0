@@ -312,6 +312,10 @@ class FakePreferenceRepository implements INotificationPreferenceRepository {
     return (await this.findOne(input.userId, input.notificationType, input.channel))!;
   }
 
+  async deleteOne(userId: string, notificationType: string, channel: NotificationChannel): Promise<void> {
+    this.rows.delete(this.key(userId, notificationType, channel));
+  }
+
   private key(userId: string, notificationType: string, channel: string): string {
     return `${userId}:${notificationType}:${channel}`;
   }

@@ -819,3 +819,69 @@ None new. See NotificationPreferencesReport.md's "Known Limitations" for the pre
 
 A deliberately-scoped follow-up for SUPERADMIN/HR visibility/override of employee preferences, if wanted (explicitly deferred this phase). Beyond that: additional business events (each needs only a `raiseEvent` call + a `MANAGEABLE_NOTIFICATION_TYPES` entry) and additional channels behind their own `DeliveryProvider`.
 
+# Phase 14 — Admin / HR Notification Preference Management
+
+**PHASE 14 COMPLETE**
+
+Full detail in [AdminPreferenceManagementReport.md](../reports/AdminPreferenceManagementReport.md).
+
+## Goal
+
+Give SUPERADMIN and HR the ability to view and override any employee's notification preferences, plus reset an override back to the system default — the exact follow-up Phase 13 deferred. No engine redesign, no manager access, no new preference table.
+
+## Implemented
+
+- `NotificationPreferenceService.resetForUser()` — removes the explicit override row (never writes a fake "default" row), backed by a new `INotificationPreferenceRepository.deleteOne()` (Prisma `deleteMany`, safe no-op if nothing to delete). `listForUser`/`setForUser` needed **zero** changes — they already took an arbitrary `userId`, never assumed "self."
+- `notification-preferences-admin.actions.ts` — `getEmployeeNotificationPreferences`, `setEmployeeNotificationPreference`, `resetEmployeeNotificationPreference`. Each independently re-checks `SUPERADMIN`/`HR` (same `isAdministrator`-style local helper `notification-admin.actions.ts` already uses), verifies the target employee exists via Prisma before touching data, and delegates all catalog validation to `NotificationPreferenceService` (rejects any non-manageable `notificationType`/`channel`).
+- `EmployeeNotificationPreferencesPanel` — new "Employee Preferences" tab on the existing `/admin/notification-center` page (via the existing `Tabs` primitive). Employee search/select follows `EmployeeNotesBoard.tsx`'s established pattern; each preference row shows a DEFAULT / EXPLICITLY ENABLED / EXPLICITLY DISABLED badge (never conflating "no row" with "disabled") plus Enable/Disable/Reset actions.
+- Every override/reset is change-logged to the existing `AuditLog` table (actor, employee, notificationType, channel, old value, new value), the same direct-write pattern `profile.actions.ts`/`loan.actions.ts`/`medical.actions.ts` already use for non-loan SUPERADMIN/HR actions — no new audit table. Deliberately does **not** fan out `createAdminNotification` (that helper is reserved for manager-privileged actions per CLAUDE.md, not routine SUPERADMIN/HR config changes).
+- Employee self-service (`notification-preferences.actions.ts`) untouched — no `userId` parameter exists on those actions at all, so an employee cannot target another user's preferences through them by construction.
+
+## Files
+
+**Created:** `src/actions/notification-preferences-admin.actions.ts`, `src/components/admin/EmployeeNotificationPreferencesPanel.tsx`, `docs/notification-engine/reports/AdminPreferenceManagementReport.md`.
+
+**Modified:** `repositories/interfaces/notification-preference-repository.interface.ts` (+`deleteOne`), `repositories/notification-preference.repository.ts` (+`deleteOne` impl), `preferences/notification-preference.service.ts` (+`resetForUser`), `preferences/notification-preference.service.test.ts` (+7 tests), `notification.service.test.ts` + both `integration/*.test.ts` files (fake repositories updated to implement the new interface method — a compile-time forcing function, no behavior change), `(admin)/admin/notification-center/page.tsx` (new tab).
+
+**Not touched:** `prisma/schema.prisma`, `NotificationEvent`, `NotificationJob`, `NotificationDeliveryAttempt`, `NotificationProvider`, `NotificationTemplate`, `NotificationSettings`, `NotificationService.raiseEvent()`, `QueueEngine`, `WorkerRuntime`, `TemplateEngine`, `DeliveryManager`, SMTP, `loan.actions.ts`, `notification-preferences.actions.ts` (employee self-service).
+
+## Database
+
+**None.** The existing Phase 13 `NotificationPreference` model already had the exact shape needed — no migration proposed, generated, or applied.
+
+## Authorization
+
+`SUPERADMIN`/`HR` only, re-checked independently in all three new actions (never relies on page-level gating). Managers deliberately excluded. Target employee id is always re-verified against `prisma.user`, never trusted as-is. One pre-existing gap surfaced, not introduced by this phase: `(admin)/layout.tsx` gates on `role === "SUPERADMIN"` only, so HR — while fully authorized at the action layer — has no page route to reach this UI today, identical to every other existing "SUPERADMIN-or-HR" feature in this codebase (loans, wallet, medical, the rest of the admin Notification Center). Flagged for a separate routing decision, not worked around silently.
+
+## Tests
+
+```
+tests 515   suites 128   pass 515   fail 0
+```
+
+508 pre-existing tests unmodified and still green + 7 new (`resetForUser` behavior: removes explicit row, never upserts a fake default, safe no-op, catalog rejection ×2, per-user/per-channel scoping — plus one test proving `setForUser` already worked for an arbitrary target `userId`). Stable across 2 consecutive clean-rebuild runs. Server Action authorization checks are not covered by `node --test` — same, unavoidable constraint as every other `.actions.ts` file in this codebase (the harness cannot import `@/lib/prisma`/Clerk); verified instead by direct code review against the proven `notification-admin.actions.ts` pattern.
+
+## TypeScript
+
+`pnpm tsc --noEmit` — zero errors, whole project.
+
+## ESLint
+
+`pnpm run lint` — zero warnings/errors, whole project.
+
+## Build
+
+Not run this phase, per standing instruction to wait for the go-ahead. No change touches `proxy.ts`/`instrumentation.ts`/anything Edge-runtime-related.
+
+## Security
+
+Every action independently authorizes the caller and independently re-verifies the target employee before any read/write. No credentials or sensitive data touch the new `AuditLog` rows — only preference true/false state and actor/employee identifiers. `employeeId`/`notificationType`/`channel` are all treated as untrusted client input at every layer (Prisma existence check + catalog validation), never passed straight into a query or trusted from a hidden field.
+
+## Known Issues
+
+HR has no page-level route to this UI today (pre-existing, cross-cutting gap — see Authorization above). `NotificationDeliveryAttempt` rows are still never written anywhere in the dispatch pipeline (pre-existing, unrelated to preferences). Manager access was deliberately not added, per the phase spec.
+
+## Next Recommended Phase
+
+If HR needs to actually use this in practice: a dedicated decision about HR page-level routing (new route group, or loosening `(admin)/layout.tsx`) — a routing/access-model change deserving its own scope discussion, not folded into this phase. Beyond that: the same extension points every phase since Phase 2 has been built around — additional business events and channels, picked up automatically by this admin panel the moment they're added to `MANAGEABLE_NOTIFICATION_TYPES`.
+

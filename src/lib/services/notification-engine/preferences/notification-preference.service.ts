@@ -68,6 +68,24 @@ export class NotificationPreferenceService {
     return this.preferenceRepository.upsert(input);
   }
 
+  /**
+   * "Reset to Default" (Phase 14) — removes the explicit override row rather
+   * than storing a fake "default" row, per this project's existing
+   * "no row = enabled by default" design (see the interface's doc comment on
+   * `deleteOne`). Same catalog validation as `setForUser`, so a caller can't
+   * be used to probe/clear an arbitrary, non-manageable `notificationType`.
+   */
+  async resetForUser(userId: string, notificationType: string, channel: NotificationChannel): Promise<void> {
+    const entry = this.findManageableEntry(notificationType, channel);
+    if (!entry) {
+      throw new ValidationError("Invalid NotificationPreference input", [
+        { field: "notificationType", message: `\"${notificationType}\" (${channel}) is not a user-manageable notification preference` },
+      ]);
+    }
+
+    await this.preferenceRepository.deleteOne(userId, notificationType, channel);
+  }
+
   private findManageableEntry(notificationType: string, channel: NotificationChannel): ManageableNotificationType | undefined {
     return MANAGEABLE_NOTIFICATION_TYPES.find(
       (entry) => entry.notificationType === notificationType && entry.channels.includes(channel)

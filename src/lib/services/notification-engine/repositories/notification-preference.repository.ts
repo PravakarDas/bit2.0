@@ -40,4 +40,12 @@ export class NotificationPreferenceRepository extends BaseRepository implements 
       })
     );
   }
+
+  async deleteOne(userId: string, notificationType: string, channel: NotificationChannel): Promise<void> {
+    return this.wrap("deleteOne", async () => {
+      // deleteMany (not delete-by-unique-key) so this is a no-op instead of
+      // throwing P2025 when there is no explicit row to remove.
+      await prisma.notificationPreference.deleteMany({ where: { userId, notificationType, channel } });
+    });
+  }
 }

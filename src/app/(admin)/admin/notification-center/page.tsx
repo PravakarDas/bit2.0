@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     NotificationFiltersBar,
     DEFAULT_NOTIFICATION_FILTERS,
@@ -12,6 +13,7 @@ import {
 import { NotificationTable, type NotificationRow } from "@/components/shared/notification-center/NotificationTable";
 import { NotificationPagination } from "@/components/shared/notification-center/NotificationPagination";
 import { NotificationDetailDrawer } from "@/components/shared/notification-center/NotificationDetailDrawer";
+import { EmployeeNotificationPreferencesPanel } from "@/components/admin/EmployeeNotificationPreferencesPanel";
 import type { AdminInboxDetail, QueueStatistics } from "@/lib/services/notification-engine";
 import {
     getAllNotifications,
@@ -20,6 +22,7 @@ import {
     retryNotificationNow,
     requeueDeadLetterNotification,
 } from "@/actions/notification-admin.actions";
+import { getUsers } from "@/actions/user.actions";
 
 const PAGE_SIZE = 20;
 
@@ -36,6 +39,8 @@ export default function AdminNotificationCenterPage() {
     const [detail, setDetail] = useState<AdminInboxDetail | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [actionPending, setActionPending] = useState(false);
+
+    const [users, setUsers] = useState<Awaited<ReturnType<typeof getUsers>>>([]);
 
     const loadQueueStatus = useCallback(async () => {
         const result = await getNotificationQueueStatus();
@@ -95,6 +100,10 @@ export default function AdminNotificationCenterPage() {
         void loadQueueStatus();
     }, [loadQueueStatus]);
 
+    useEffect(() => {
+        void getUsers().then(setUsers);
+    }, []);
+
     const openDetail = async (jobId: string) => {
         setSelectedJobId(jobId);
         setDetailLoading(true);
@@ -146,31 +155,44 @@ export default function AdminNotificationCenterPage() {
                 </div>
             </div>
 
-            {queueStatus && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Queue Status</CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-                        {Object.entries(queueStatus).map(([status, count]) => (
-                            <div key={status} className="rounded-md border p-2 text-center">
-                                <p className="text-2xl font-semibold">{count}</p>
-                                <p className="text-xs text-muted-foreground">{status.replace(/_/g, " ")}</p>
-                            </div>
-                        ))}
-                    </CardContent>
-                </Card>
-            )}
+            <Tabs defaultValue="all-notifications" className="space-y-4">
+                <TabsList>
+                    <TabsTrigger value="all-notifications">All Notifications</TabsTrigger>
+                    <TabsTrigger value="employee-preferences">Employee Preferences</TabsTrigger>
+                </TabsList>
 
-            <NotificationFiltersBar value={filters} onChange={setFilters} />
+                <TabsContent value="all-notifications" className="space-y-4">
+                    {queueStatus && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">Queue Status</CardTitle>
+                            </CardHeader>
+                            <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+                                {Object.entries(queueStatus).map(([status, count]) => (
+                                    <div key={status} className="rounded-md border p-2 text-center">
+                                        <p className="text-2xl font-semibold">{count}</p>
+                                        <p className="text-xs text-muted-foreground">{status.replace(/_/g, " ")}</p>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    )}
 
-            {loading ? (
-                <p className="text-sm text-muted-foreground">Loading notifications...</p>
-            ) : (
-                <NotificationTable items={items} showRecipient onView={openDetail} />
-            )}
+                    <NotificationFiltersBar value={filters} onChange={setFilters} />
 
-            <NotificationPagination page={page} totalPages={totalPages} total={total} onPageChange={setPage} />
+                    {loading ? (
+                        <p className="text-sm text-muted-foreground">Loading notifications...</p>
+                    ) : (
+                        <NotificationTable items={items} showRecipient onView={openDetail} />
+                    )}
+
+                    <NotificationPagination page={page} totalPages={totalPages} total={total} onPageChange={setPage} />
+                </TabsContent>
+
+                <TabsContent value="employee-preferences">
+                    <EmployeeNotificationPreferencesPanel users={users} />
+                </TabsContent>
+            </Tabs>
 
             <NotificationDetailDrawer
                 open={Boolean(selectedJobId)}

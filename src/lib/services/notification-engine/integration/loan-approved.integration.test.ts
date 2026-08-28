@@ -337,6 +337,9 @@ class AlwaysEnabledPreferenceRepository implements INotificationPreferenceReposi
   async upsert(): Promise<never> {
     throw new Error("not used in these tests");
   }
+  async deleteOne(): Promise<void> {
+    throw new Error("not used in these tests");
+  }
 }
 
 class UnusedDocumentRepository implements IDocumentRepository {

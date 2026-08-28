@@ -11,6 +11,7 @@ class FakePreferenceRepository implements INotificationPreferenceRepository {
   private readonly rows = new Map<string, NotificationPreferenceDTO>();
   private nextId = 1;
   upsertCalls: UpsertNotificationPreferenceInput[] = [];
+  deleteOneCalls: Array<{ userId: string; notificationType: string; channel: NotificationChannel }> = [];
 
   seed(userId: string, notificationType: string, channel: NotificationChannel, isEnabled: boolean): void {
     const key = this.key(userId, notificationType, channel);
@@ -38,6 +39,11 @@ class FakePreferenceRepository implements INotificationPreferenceRepository {
     this.upsertCalls.push(input);
     this.seed(input.userId, input.notificationType, input.channel, input.isEnabled);
     return (await this.findOne(input.userId, input.notificationType, input.channel))!;
+  }
+
+  async deleteOne(userId: string, notificationType: string, channel: NotificationChannel): Promise<void> {
+    this.deleteOneCalls.push({ userId, notificationType, channel });
+    this.rows.delete(this.key(userId, notificationType, channel));
   }
 
   private key(userId: string, notificationType: string, channel: string): string {
@@ -128,5 +134,79 @@ describe("NotificationPreferenceService.setForUser", () => {
     const loanApproved = list.find((item) => item.notificationType === "LOAN_APPROVED" && item.channel === "EMAIL");
     assert.equal(loanApproved!.isEnabled, false);
     assert.equal(loanApproved!.isExplicit, true);
+  });
+
+  it("also works for an arbitrary target userId (the Phase 14 admin-override use case — the service has no notion of 'self')", async () => {
+    const { service, preferenceRepository } = buildService();
+
+    await service.setForUser("employee-42", "LOAN_APPROVED", "EMAIL", false);
+
+    assert.deepEqual(preferenceRepository.upsertCalls[0], {
+      userId: "employee-42",
+      notificationType: "LOAN_APPROVED",
+      channel: "EMAIL",
+      isEnabled: false,
+    });
+  });
+});
+
+describe("NotificationPreferenceService.resetForUser (Phase 14 — Reset to Default)", () => {
+  it("removes an explicit row, returning to isEnabled=true/isExplicit=false", async () => {
+    const { service, preferenceRepository } = buildService();
+    preferenceRepository.seed("u1", "LOAN_APPROVED", "EMAIL", false);
+
+    await service.resetForUser("u1", "LOAN_APPROVED", "EMAIL");
+    const list = await service.listForUser("u1");
+
+    const loanApproved = list.find((item) => item.notificationType === "LOAN_APPROVED" && item.channel === "EMAIL");
+    assert.equal(loanApproved!.isEnabled, true);
+    assert.equal(loanApproved!.isExplicit, false);
+  });
+
+  it("does not store a fake 'default' row — the repository call is a delete, never an upsert", async () => {
+    const { service, preferenceRepository } = buildService();
+    preferenceRepository.seed("u1", "LOAN_APPROVED", "EMAIL", true);
+
+    await service.resetForUser("u1", "LOAN_APPROVED", "EMAIL");
+
+    assert.equal(preferenceRepository.upsertCalls.length, 0);
+    assert.equal(preferenceRepository.deleteOneCalls.length, 1);
+    assert.deepEqual(preferenceRepository.deleteOneCalls[0], { userId: "u1", notificationType: "LOAN_APPROVED", channel: "EMAIL" });
+  });
+
+  it("is a safe no-op when no explicit row exists", async () => {
+    const { service } = buildService();
+
+    await assert.doesNotReject(() => service.resetForUser("u1", "LOAN_APPROVED", "EMAIL"));
+    const list = await service.listForUser("u1");
+    const loanApproved = list.find((item) => item.notificationType === "LOAN_APPROVED" && item.channel === "EMAIL");
+    assert.equal(loanApproved!.isEnabled, true);
+    assert.equal(loanApproved!.isExplicit, false);
+  });
+
+  it("rejects a (notificationType, channel) pair that is not in the manageable catalog, without touching the repository", async () => {
+    const { service, preferenceRepository } = buildService();
+
+    await assert.rejects(() => service.resetForUser("u1", "LOAN_APPROVED", "SMS"), ValidationError);
+    assert.equal(preferenceRepository.deleteOneCalls.length, 0);
+  });
+
+  it("rejects an unrecognized notificationType entirely", async () => {
+    const { service, preferenceRepository } = buildService();
+
+    await assert.rejects(() => service.resetForUser("u1", "SOMETHING_MADE_UP", "EMAIL"), ValidationError);
+    assert.equal(preferenceRepository.deleteOneCalls.length, 0);
+  });
+
+  it("only resets the specific (notificationType, channel) pair — other rows for the same user are untouched", async () => {
+    const { service, preferenceRepository } = buildService();
+    preferenceRepository.seed("u1", "LOAN_APPROVED", "EMAIL", false);
+    preferenceRepository.seed("u1", "LOAN_APPROVED", "SMS", false);
+
+    await service.resetForUser("u1", "LOAN_APPROVED", "EMAIL");
+
+    const remaining = await preferenceRepository.findOne("u1", "LOAN_APPROVED", "SMS");
+    assert.ok(remaining);
+    assert.equal(remaining!.isEnabled, false);
   });
 });
