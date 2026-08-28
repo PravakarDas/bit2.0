@@ -6,6 +6,7 @@ import { getDbUser } from "./user.actions";
 import { encryptSecret } from "@/lib/crypto";
 import { getOrCreateEmailConfig } from "@/lib/email-config";
 import { emailService } from "@/lib/services/email.service";
+import { looksLikeSenderEmailMistake } from "@/lib/smtp-shared";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -61,6 +62,11 @@ export async function updateEmailConfig(payload: UpdatePayload) {
   }
   if (!senderEmail || !EMAIL_REGEX.test(senderEmail)) {
     errors.push("Sender Email must be a valid email address.");
+  }
+  if (newPassword && senderEmail && looksLikeSenderEmailMistake(newPassword, senderEmail)) {
+    errors.push(
+      "The password/API key must not be the same as the Sender Email Address. Enter your actual SMTP password or app password (e.g. a Google App Password), not the email address."
+    );
   }
 
   const current = await getOrCreateEmailConfig();

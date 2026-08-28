@@ -33,6 +33,16 @@ export function buildSmtpTransportOptions(config: ResolvedEmailConfig): Transpor
     host: config.smtpHost,
     port: config.smtpPort,
     secure: config.secure,
+    // Forces the underlying socket to connect over IPv4. Without this,
+    // Node's default DNS resolution can hand nodemailer an IPv6 address
+    // first (e.g. smtp.gmail.com resolves both A and AAAA records) — on a
+    // host/network with no IPv6 route, that connection attempt fails
+    // (ENETUNREACH) with no automatic fallback to the IPv4 address, and
+    // surfaces as the same generic connection error every other socket
+    // failure produces. Gmail (and every provider this project targets)
+    // fully supports IPv4, so this removes an entire class of
+    // environment-dependent failures with no downside.
+    family: 4,
     connectionTimeout: 15_000,
     greetingTimeout: 15_000,
     socketTimeout: 15_000,
@@ -57,13 +67,29 @@ export type SmtpErrorCategory =
   | "DNS"
   | "CONNECTION"
   | "TIMEOUT"
+  | "TLS_MISMATCH"
   | "ENVELOPE"
   | "MESSAGE"
   | "SERVER_REJECTED"
   | "UNKNOWN";
 
+/**
+ * OpenSSL's stable, version-independent error string for "a TLS ClientHello
+ * was sent to a server that replied in plaintext" — the exact signature of a
+ * `secure`/port mismatch (e.g. `secure: true` on STARTTLS port 587, or
+ * `secure: false` on implicit-TLS port 465). Nodemailer reports this under
+ * the same generic `code: "ESOCKET"` as an actual dead/unreachable
+ * connection, so without this check a config mismatch and a real timeout are
+ * indistinguishable — this was found and confirmed against a real Gmail
+ * connection while diagnosing a "Connection timed out" report that was
+ * actually this exact mismatch.
+ */
+function isTlsProtocolMismatch(err: { message?: string } | null | undefined): boolean {
+  return /wrong version number/i.test(err?.message ?? "");
+}
+
 export function classifySmtpErrorCategory(error: unknown): SmtpErrorCategory {
-  const err = error as { code?: string; responseCode?: number } | null | undefined;
+  const err = error as { code?: string; responseCode?: number; message?: string } | null | undefined;
 
   switch (err?.code) {
     case "EAUTH":
@@ -75,8 +101,9 @@ export function classifySmtpErrorCategory(error: unknown): SmtpErrorCategory {
     case "ECONNREFUSED":
       return "CONNECTION";
     case "ETIMEDOUT":
-    case "ESOCKET":
       return "TIMEOUT";
+    case "ESOCKET":
+      return isTlsProtocolMismatch(err) ? "TLS_MISMATCH" : "TIMEOUT";
     case "EENVELOPE":
       return "ENVELOPE";
     case "EMESSAGE":
@@ -92,6 +119,22 @@ export function classifySmtpErrorCategory(error: unknown): SmtpErrorCategory {
   return "UNKNOWN";
 }
 
+/**
+ * Guards against a real, confirmed production mistake: saving the sender
+ * email address itself into the password/API-key field (most likely a
+ * copy-paste or browser-autofill slip on the adjacent form field). Saving
+ * this silently "succeeds" — nothing about it is structurally invalid — and
+ * only fails much later, opaquely, when Gmail (or any provider) rejects the
+ * real SMTP AUTH attempt. Case-insensitive because email addresses are
+ * matched case-insensitively by every provider that matters here.
+ */
+export function looksLikeSenderEmailMistake(password: string, senderEmail: string): boolean {
+  const trimmedPassword = password.trim();
+  const trimmedEmail = senderEmail.trim();
+  if (!trimmedPassword || !trimmedEmail) return false;
+  return trimmedPassword.toLowerCase() === trimmedEmail.toLowerCase();
+}
+
 /** Identical output to the original `email.service.ts` `mapSmtpError` for every input — a pure refactor, not a behavior change. */
 export function mapSmtpError(error: unknown): string {
   switch (classifySmtpErrorCategory(error)) {
@@ -103,6 +146,8 @@ export function mapSmtpError(error: unknown): string {
       return "Could not connect to the SMTP server. Check the host and port.";
     case "TIMEOUT":
       return "Connection to the SMTP server timed out.";
+    case "TLS_MISMATCH":
+      return 'SSL/TLS handshake failed. The "Secure (SSL/TLS)" setting likely doesn\'t match the port — turn it OFF for port 587 (STARTTLS) or ON for port 465 (implicit TLS).';
     case "ENVELOPE":
       return "Invalid sender or recipient email address.";
     case "MESSAGE":

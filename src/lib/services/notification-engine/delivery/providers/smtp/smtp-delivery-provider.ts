@@ -77,6 +77,27 @@ export class SmtpDeliveryProvider implements DeliveryProvider {
       return this.resultMapper.toSuccess(context.providerId, this.elapsedMs(startedAt));
     } catch (error) {
       this.connectionManager.invalidate();
+      // Diagnostic only — no NotificationDeliveryAttempt row captures this
+      // error anywhere in the pipeline today (a real, separate gap; see
+      // NotificationPreferencesReport.md-adjacent SMTP investigation notes),
+      // so without this the *only* signal a real production failure leaves
+      // behind is the job's bare status/attemptCount. Never logs
+      // `config.appPassword` itself — only its presence/length.
+      const err = error as { code?: string; command?: string; responseCode?: number; response?: string; message?: string } | null;
+      console.error("[SmtpDeliveryProvider] delivery attempt failed", {
+        host: config.smtpHost,
+        port: config.smtpPort,
+        secure: config.secure,
+        authUser: config.senderEmail,
+        hasPassword: !!config.appPassword,
+        passwordLength: config.appPassword.length,
+        jobId: job.id,
+        code: err?.code,
+        command: err?.command,
+        responseCode: err?.responseCode,
+        response: err?.response,
+        message: err?.message ?? String(error),
+      });
       return this.resultMapper.toFailure(error, context.providerId, this.elapsedMs(startedAt));
     }
   }

@@ -14,6 +14,8 @@
   "include": [
     "src/lib/smtp-shared.ts",
     "src/lib/smtp-shared.test.ts",
+    "src/lib/crypto.ts",
+    "src/lib/crypto.test.ts",
     "src/lib/services/notification-engine/notification.service.ts",
     "src/lib/services/notification-engine/notification.service.test.ts",
     "src/lib/services/notification-engine/queue/**/*.ts",
