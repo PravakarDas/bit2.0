@@ -948,3 +948,70 @@ The leave-approval authorization gap above (pre-existing). `NotificationDelivery
 
 Extend the same pattern to `approveMedicalClaim`/`rejectMedicalClaim` and `approveTimelineModificationRequest`/`rejectTimelineModificationRequest` (both identified as safe candidates this phase deliberately deferred), or address the leave-approval authorization gap as its own explicitly-scoped fix.
 
+# Phase 16 — Leave Approval Authorization Hardening
+
+**PHASE 16 COMPLETE**
+
+Full detail in [LeaveAuthorizationHardeningReport.md](../reports/LeaveAuthorizationHardeningReport.md).
+
+## Goal
+
+Fix the pre-existing authorization weakness flagged during Phase 15: `approveLeaveApplication()`/`rejectLeaveApplication()` trusted a client-supplied `approvedBy` string with no server-side verification of the caller at all.
+
+## Implemented
+
+- New pure module `src/lib/leave-authorization.ts` — `canApproveLeave()` (`SUPERADMIN | HR | (EMPLOYEE && isManager)`, matching the dominant approval-action pattern already used by `loan.actions.ts`/`overtime-request.actions.ts`/`medical.actions.ts`/`wallet.actions.ts`/`timeline.actions.ts`, deliberately distinct from this file's own `canManageOrganization`, which excludes HR and is scoped to org-configuration mutations) and `resolveApproverLabel()` (real name or role-based fallback). Zero Prisma/Clerk imports — unit-testable by the dependency-free harness, same pattern as `smtp-shared.ts`/`crypto.ts`.
+- `approveLeaveApplication()`/`rejectLeaveApplication()`: now resolve the caller via `getDbUser()` and check `canApproveLeave()` as the very first statement, before any database read — an unauthorized caller triggers zero reads or writes. The old `approvedBy` client-supplied parameter is gone entirely; the verified user's resolved label now drives the DB write, the in-app notification, and the `LEAVE_APPROVED`/`LEAVE_REJECTED` email payload.
+- Fixed a second, related pre-existing bug found during the same audit: `notification.actions.ts`'s `handleNotificationAction` was passing a free-text admin note into the (now-removed) `approvedBy` slot — corrected to land in the right parameter.
+- `LeaveApprovalButtons.tsx` and its two page callers updated to stop passing the now-nonexistent identity argument.
+
+## Files
+
+**Created:** `src/lib/leave-authorization.ts`, `src/lib/leave-authorization.test.ts`, `docs/notification-engine/reports/LeaveAuthorizationHardeningReport.md`.
+
+**Modified:** `src/actions/leave.actions.ts`, `src/actions/notification.actions.ts`, `src/components/admin/LeaveApprovalButtons.tsx`, `src/app/(manager)/manager/leave-applications/page.tsx`, `tsconfig.test.json`, `package.json`.
+
+**Not touched:** `prisma/schema.prisma`, any migration, `NotificationService`, `QueueEngine`, `WorkerRuntime`, `TemplateEngine`, `DeliveryManager`, SMTP, the Notification Center, preferences actions, `overtime-request.actions.ts`, `loan.actions.ts`.
+
+## Database
+
+**None.** `LeaveApplication.approvedBy` is the same pre-existing `String?` column, now receiving a verified value instead of a trusted client string.
+
+## Authorization Behaviour — Before vs After
+
+**Before:** no server-side check at all; any caller reaching either function, passing any string, could approve/reject any pending leave application and have that string stored/displayed as the approver.
+
+**After:** `getDbUser()` resolves the real session user; `canApproveLeave()` requires `SUPERADMIN`, `HR`, or an `EMPLOYEE` with `isManager: true`, checked before any data is touched; the stored/displayed "approver" is always derived from the verified user, never from client input.
+
+## Tests
+
+```
+tests 548   suites 135   pass 548   fail 0
+```
+
+537 pre-existing tests unmodified and still green (including the full, untouched Phase 15 `business-events.integration.test.ts` and Phase 10 `loan-approved.integration.test.ts` suites) + 11 new, covering: authorized SUPERADMIN/HR/manager acceptance, unauthorized plain-employee and null-user rejection, and proof that no client-suppliable field on the authorization input can grant access. Stable across 2 consecutive clean-rebuild runs. Failed-authorization → no notification event/job, and the Phase 15 notification/preference behavior being unchanged, are verified structurally (auth check precedes the transaction and the `raiseEvent` call by several statements) and by the untouched Phase 15 suite remaining green, respectively — same action-layer verification constraint documented in every prior phase (the harness cannot import `@/lib/prisma`).
+
+## TypeScript
+
+`pnpm tsc --noEmit` — zero errors, whole project.
+
+## ESLint
+
+`pnpm run lint` — zero warnings/errors, whole project.
+
+## Build
+
+`pnpm run build` — compiles successfully. Same 5 pre-existing cosmetic Turbopack Edge-runtime warnings as every prior phase, no new warning introduced.
+
+## Security
+
+Authorization is now genuinely server-side and unforgeable via client input — the vulnerable parameter no longer exists. No new attack surface, no secret referenced, no new dependency. `handleNotificationAction`'s own lack of a top-level authorization check (a broader, pre-existing gap unrelated to leave specifically) was deliberately not touched, per this phase's explicit scope.
+
+## Known Issues
+
+`handleNotificationAction`'s missing top-level authorization check (pre-existing, broader than leave, not currently exploitable for leave decisions since the delegated action now authorizes independently). The Phase 14 HR routing gap (unrelated). `NotificationDeliveryAttempt` rows still never written (pre-existing, unrelated).
+
+## Next Recommended Phase
+
+Either extend this same authorization audit to `handleNotificationAction`'s other delegated action types, or continue the Phase 15 business-event rollout to `approveMedicalClaim`/`rejectMedicalClaim` and `approveTimelineModificationRequest`/`rejectTimelineModificationRequest`.
+

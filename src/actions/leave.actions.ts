@@ -9,6 +9,7 @@ import { logManagerOrganizationAction } from "./manager-organization.actions";
 import { logManagerEmployeeEditAction } from "./manager-employee-edit.actions";
 import { isArchivedStatus } from "@/lib/employee-status";
 import { notificationEngineContainer } from "@/lib/services/notification-engine";
+import { canApproveLeave, resolveApproverLabel } from "@/lib/leave-authorization";
 
 function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
     return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
@@ -636,12 +637,7 @@ export async function getUserLeaveApplications(userId: string, year: number = ne
     });
 }
 
-// Notify admins whenever a leave application is approved/declined (by admin or manager)
-/** Shared "who decided" label — `approveLeaveApplication`/`rejectLeaveApplication` are only ever called with `"admin"`/`"manager"` (see `LeaveApprovalButtons.tsx`), never a real name. */
-function leaveDecisionActorLabel(decidedBy: string): string {
-    return decidedBy === "manager" ? "Manager" : decidedBy === "admin" ? "Admin" : decidedBy;
-}
-
+// Notify admins whenever a leave application is approved/declined (by admin, HR, or manager)
 async function notifyLeaveDecision(
     application: {
         id: string;
@@ -657,7 +653,7 @@ async function notifyLeaveDecision(
         const employeeName = application.user.firstName && application.user.lastName
             ? `${application.user.firstName} ${application.user.lastName}`
             : application.user.email;
-        const actor = leaveDecisionActorLabel(decidedBy);
+        const actor = decidedBy;
         const verb = decision === "APPROVED" ? "approved" : "declined";
 
         await prisma.adminNotification.create({
@@ -682,9 +678,19 @@ async function notifyLeaveDecision(
     }
 }
 
-export async function approveLeaveApplication(applicationId: string, approvedBy: string = "SYSTEM", _adminNote?: string) {
+export async function approveLeaveApplication(applicationId: string, _adminNote?: string) {
     void _adminNote;
     try {
+        // Phase 16: authorization is verified server-side, before any
+        // business data is touched. `approvedBy` is never accepted as a
+        // client-supplied argument any more — the "who approved" label is
+        // derived below from the verified caller (`resolveApproverLabel`),
+        // never trusted from the request.
+        const admin = await getDbUser();
+        if (!canApproveLeave(admin)) {
+            return { success: false, error: "Unauthorized" };
+        }
+
         const application = await prisma.leaveApplication.findUnique({
             where: { id: applicationId },
             include: {
@@ -692,15 +698,15 @@ export async function approveLeaveApplication(applicationId: string, approvedBy:
                 leaveType: true
             }
         });
-        
+
         if (!application) {
             return { success: false, error: "Leave application not found" };
         }
-        
+
         if (application.status !== "PENDING") {
             return { success: false, error: "Leave application is not pending" };
         }
-        
+
         // Find user's entitlement
         const entitlement = await prisma.userLeaveEntitlement.findUnique({
             where: {
@@ -721,13 +727,15 @@ export async function approveLeaveApplication(applicationId: string, approvedBy:
             return { success: false, error: "User has no remaining leave days" };
         }
         
+        const approverLabel = resolveApproverLabel(admin);
+
         // Approve application and deduct from balance
         await prisma.$transaction([
             prisma.leaveApplication.update({
                 where: { id: applicationId },
                 data: {
                     status: "APPROVED",
-                    approvedBy,
+                    approvedBy: approverLabel,
                     approvedAt: new Date()
                 }
             }),
@@ -737,7 +745,7 @@ export async function approveLeaveApplication(applicationId: string, approvedBy:
             })
         ]);
 
-        await notifyLeaveDecision(application, "APPROVED", approvedBy);
+        await notifyLeaveDecision(application, "APPROVED", approverLabel);
 
         // Notification Engine integration (Phase 15) — best-effort, after the
         // transaction commits: a business action's own success must never
@@ -756,7 +764,7 @@ export async function approveLeaveApplication(applicationId: string, approvedBy:
                         },
                         leaveType: application.leaveType.name,
                         leaveDate: application.leaveDate.toISOString(),
-                        approvedBy: leaveDecisionActorLabel(approvedBy),
+                        approvedBy: approverLabel,
                     },
                     recipients: [
                         { channel: "EMAIL", recipientAddress: application.user.email, recipientUserId: application.userId },
@@ -778,9 +786,17 @@ export async function approveLeaveApplication(applicationId: string, approvedBy:
     }
 }
 
-export async function rejectLeaveApplication(applicationId: string, approvedBy: string = "SYSTEM", _adminNote?: string) {
+export async function rejectLeaveApplication(applicationId: string, _adminNote?: string) {
     void _adminNote;
     try {
+        // Phase 16: same server-side authorization as approveLeaveApplication
+        // — verified before any business data is touched, never trusting a
+        // client-supplied identity string.
+        const admin = await getDbUser();
+        if (!canApproveLeave(admin)) {
+            return { success: false, error: "Unauthorized" };
+        }
+
         const application = await prisma.leaveApplication.findUnique({
             where: { id: applicationId },
             include: {
@@ -797,16 +813,18 @@ export async function rejectLeaveApplication(applicationId: string, approvedBy: 
             return { success: false, error: "Leave application is not pending" };
         }
 
+        const approverLabel = resolveApproverLabel(admin);
+
         await prisma.leaveApplication.update({
             where: { id: applicationId },
             data: {
                 status: "REJECTED",
-                approvedBy,
+                approvedBy: approverLabel,
                 approvedAt: new Date()
             }
         });
 
-        await notifyLeaveDecision(application, "REJECTED", approvedBy);
+        await notifyLeaveDecision(application, "REJECTED", approverLabel);
 
         // Notification Engine integration (Phase 15) — best-effort, after the
         // update commits; see approveLeaveApplication's identical comment.
@@ -823,7 +841,7 @@ export async function rejectLeaveApplication(applicationId: string, approvedBy: 
                         },
                         leaveType: application.leaveType.name,
                         leaveDate: application.leaveDate.toISOString(),
-                        rejectedBy: leaveDecisionActorLabel(approvedBy),
+                        rejectedBy: approverLabel,
                     },
                     recipients: [
                         { channel: "EMAIL", recipientAddress: application.user.email, recipientUserId: application.userId },

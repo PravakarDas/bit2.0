@@ -236,6 +236,13 @@ export async function handleNotificationAction(notificationId: string, action: '
         break;
         
       case 'LEAVE_APPLICATION_PENDING':
+        // Phase 16: approveLeaveApplication/rejectLeaveApplication's second
+        // parameter is now genuinely an admin note (never an identity/role
+        // string — the caller's own identity is resolved and authorized
+        // server-side). Previously this call site passed `adminNote` into
+        // what was then an `approvedBy` slot — a pre-existing bug, fixed
+        // here as part of the same audit, not a behavior this call site
+        // ever correctly relied on.
         if (action === 'approve') {
           const { approveLeaveApplication } = await import('./leave.actions');
           if (!metadata.applicationId) return { success: false, error: 'Missing leave application ID' };

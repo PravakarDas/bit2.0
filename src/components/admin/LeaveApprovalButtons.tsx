@@ -8,18 +8,18 @@ import { CheckCircle, XCircle } from "lucide-react";
 
 interface ApprovalButtonsProps {
     applicationId: string;
-    approverRole?: "admin" | "manager";
 }
 
-export function ApprovalButtons({ applicationId, approverRole = "admin" }: ApprovalButtonsProps) {
+/** Server-side authorization (Phase 16) verifies the signed-in user independently on every call — this component never supplies or implies an approver identity. */
+export function ApprovalButtons({ applicationId }: ApprovalButtonsProps) {
     const [loading, setLoading] = useState(false);
 
     const handleApprove = async () => {
         setLoading(true);
 
         try {
-            const result = await approveLeaveApplication(applicationId, approverRole);
-            
+            const result = await approveLeaveApplication(applicationId);
+
             if (result.success) {
                 toast.success("Leave application approved successfully");
                 // Refresh the page to update the list
@@ -42,8 +42,8 @@ export function ApprovalButtons({ applicationId, approverRole = "admin" }: Appro
         setLoading(true);
         
         try {
-            const result = await rejectLeaveApplication(applicationId, approverRole);
-            
+            const result = await rejectLeaveApplication(applicationId);
+
             if (result.success) {
                 toast.success("Leave application rejected");
                 // Refresh the page to update the list
