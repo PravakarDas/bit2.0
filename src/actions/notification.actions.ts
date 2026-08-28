@@ -3,8 +3,14 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { EmployeeStatus, Prisma } from "@prisma/client";
-import type { AdminNotification } from "@prisma/client";
+import type { AdminNotification, NotificationStatus } from "@prisma/client";
 import { getDbUser } from "./user.actions";
+import {
+  canManageAdminNotificationInbox,
+  canProcessAdminNotificationAction,
+  hasNotificationId,
+  isValidNotificationDecision,
+} from "@/lib/notification-action-authorization";
 
 type NotificationMetadata = {
   requestId?: string;
@@ -44,7 +50,7 @@ export async function createAdminNotification(data: {
 // Get unread notifications for admin
 export async function getUnreadNotifications() {
   const user = await getDbUser();
-  if (!user || !['SUPERADMIN', 'HR'].includes(user.role)) {
+  if (!canManageAdminNotificationInbox(user)) {
     throw new Error("Unauthorized");
   }
 
@@ -65,15 +71,33 @@ export async function getUnreadNotifications() {
   }
 }
 
+/**
+ * Actual status-setting logic, with no authorization check of its own —
+ * only ever called from (a) `markNotificationAsRead`/`markNotificationAsUnread`
+ * below, both of which check `canManageAdminNotificationInbox` first, or
+ * (b) `handleNotificationAction`, which has already independently verified
+ * the caller via `canProcessAdminNotificationAction` (a intentionally wider
+ * rule — see notification-action-authorization.ts) before ever reaching
+ * this helper. Not exported — never reachable without one of those two
+ * checks having already run.
+ */
+async function setAdminNotificationStatus(notificationId: string, status: NotificationStatus) {
+  await prisma.adminNotification.update({
+    where: { id: notificationId },
+    data: { status }
+  });
+  revalidatePath('/admin');
+}
+
 // Mark notification as read
 export async function markNotificationAsRead(notificationId: string) {
+  const user = await getDbUser();
+  if (!canManageAdminNotificationInbox(user)) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
   try {
-    await prisma.adminNotification.update({
-      where: { id: notificationId },
-      data: { status: 'READ' }
-    });
-    
-    revalidatePath('/admin');
+    await setAdminNotificationStatus(notificationId, 'READ');
     return { success: true };
   } catch (error) {
     console.error('Error marking notification as read:', error);
@@ -83,12 +107,17 @@ export async function markNotificationAsRead(notificationId: string) {
 
 // Mark all notifications as read
 export async function markAllNotificationsAsRead() {
+  const user = await getDbUser();
+  if (!canManageAdminNotificationInbox(user)) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
   try {
     await prisma.adminNotification.updateMany({
       where: { status: 'UNREAD' },
       data: { status: 'READ' }
     });
-    
+
     revalidatePath('/admin');
     return { success: true };
   } catch (error) {
@@ -99,13 +128,13 @@ export async function markAllNotificationsAsRead() {
 
 // Mark notification as unread
 export async function markNotificationAsUnread(notificationId: string) {
+  const user = await getDbUser();
+  if (!canManageAdminNotificationInbox(user)) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
   try {
-    await prisma.adminNotification.update({
-      where: { id: notificationId },
-      data: { status: 'UNREAD' }
-    });
-    
-    revalidatePath('/admin');
+    await setAdminNotificationStatus(notificationId, 'UNREAD');
     return { success: true };
   } catch (error) {
     console.error('Error marking notification as unread:', error);
@@ -124,6 +153,11 @@ export async function getAllNotifications(
   | { success: true; notifications: AdminNotification[]; pagination: { current: number; total: number; count: number } }
   | { success: false; error: string }
 > {
+  const user = await getDbUser();
+  if (!canManageAdminNotificationInbox(user)) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
   try {
     const skip = (page - 1) * limit;
     const where: Prisma.AdminNotificationWhereInput = {};
@@ -180,6 +214,11 @@ export async function getUnreadCount(): Promise<
   | { success: true; count: number }
   | { success: false; error: string }
 > {
+  const user = await getDbUser();
+  if (!canManageAdminNotificationInbox(user)) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
   try {
     const count = await prisma.adminNotification.count({
       where: { status: 'UNREAD' }
@@ -194,6 +233,11 @@ export async function getUnreadCount(): Promise<
 
 // Delete notification
 export async function deleteNotification(notificationId: string) {
+  const user = await getDbUser();
+  if (!canManageAdminNotificationInbox(user)) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
   try {
     await prisma.adminNotification.delete({
       where: { id: notificationId }
@@ -210,10 +254,32 @@ export async function deleteNotification(notificationId: string) {
 // Approve/Decline actions based on notification type and metadata
 export async function handleNotificationAction(notificationId: string, action: 'approve' | 'decline', adminNote?: string) {
   try {
+    // Phase 17: authorization is verified server-side, before the target
+    // notification is even read, and before any delegated business action
+    // runs. `handleNotificationAction` previously had NO check at all —
+    // every branch below is an admin/HR/manager-approval workflow (no
+    // branch is ever legitimately self-service for a plain employee), so a
+    // caller who fails this check cannot reach any of them, including the
+    // two branches below (LOAN_APPLICATION_PENDING/WALLET_REQUEST_PENDING)
+    // that currently have no delegated authorization of their own to fall
+    // back on. See NotificationActionAuthorizationReport.md.
+    const admin = await getDbUser();
+    if (!canProcessAdminNotificationAction(admin)) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    if (!isValidNotificationDecision(action)) {
+      return { success: false, error: 'Invalid action' };
+    }
+
+    if (!hasNotificationId(notificationId)) {
+      return { success: false, error: 'Missing notification ID' };
+    }
+
     const notification = await prisma.adminNotification.findUnique({
       where: { id: notificationId }
     });
-    
+
     if (!notification) {
       return { success: false, error: 'Notification not found' };
     }
@@ -269,9 +335,14 @@ export async function handleNotificationAction(notificationId: string, action: '
     }
 
     if (result?.success) {
-      // Mark notification as read and processed after successful action
-      await markNotificationAsRead(notificationId);
-      
+      // Mark notification as read and processed after successful action.
+      // Calls the internal helper directly (not the exported
+      // `markNotificationAsRead`, which is intentionally narrower —
+      // SUPERADMIN/HR only) since this function has already authorized the
+      // caller above under the correct, wider rule for this specific flow
+      // (a manager approving their own legitimately-delegated request).
+      await setAdminNotificationStatus(notificationId, 'READ');
+
       // Update metadata to mark as processed
       const updatedMetadata = {
         ...metadata,

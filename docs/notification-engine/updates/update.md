@@ -1015,3 +1015,72 @@ Authorization is now genuinely server-side and unforgeable via client input — 
 
 Either extend this same authorization audit to `handleNotificationAction`'s other delegated action types, or continue the Phase 15 business-event rollout to `approveMedicalClaim`/`rejectMedicalClaim` and `approveTimelineModificationRequest`/`rejectTimelineModificationRequest`.
 
+# Phase 17 — Notification Action Authorization Audit & Hardening
+
+**PHASE 17 COMPLETE**
+
+Full detail in [NotificationActionAuthorizationReport.md](../reports/NotificationActionAuthorizationReport.md).
+
+## Goal
+
+Complete authorization audit of `src/actions/notification.actions.ts`, closing the broader concern Phase 16 surfaced but left untouched: `handleNotificationAction` had no top-level auth check of its own.
+
+## Findings
+
+- `handleNotificationAction` had **zero** authentication/role check. Two of its four delegated branches (`PROFILE_UPDATE_REQUEST`, `LEAVE_APPLICATION_PENDING`) already self-authorize independently (the latter as of Phase 16) and were safe called directly; the other two (`LOAN_APPLICATION_PENDING`/`WALLET_REQUEST_PENDING`) are unconditional-success **stubs with no real business action to delegate to at all** — the most severe finding, since nothing anywhere authorized them.
+- `action` was never runtime-validated — any non-`'approve'` value silently fell into the `decline` branch.
+- 5 other exported functions in the same file (`markNotificationAsRead`, `markAllNotificationsAsRead`, `markNotificationAsUnread`, `deleteNotification`, `getAllNotifications`, `getUnreadCount`) had no authorization at all — `getAllNotifications` in particular is an information-disclosure risk (full `AdminNotification` feed, zero role check).
+- `handleNotificationAction`'s only UI caller, `NotificationBell.tsx`, is **orphaned** — imported by no page or layout anywhere. Zero live workflow depended on its lack of protection.
+
+## Implemented
+
+- New pure module `src/lib/notification-action-authorization.ts`: `canProcessAdminNotificationAction()` (`SUPERADMIN | HR | (EMPLOYEE && isManager)` — the union of what every delegated action already requires) for `handleNotificationAction`; `canManageAdminNotificationInbox()` (`SUPERADMIN | HR`, matching `getUnreadNotifications`'s pre-existing precedent, no manager) for the 6 general inbox-management functions; `isValidNotificationDecision()`/`hasNotificationId()` runtime guards.
+- `handleNotificationAction`: checks `canProcessAdminNotificationAction()` before reading the notification or delegating to anything.
+- The 6 CRUD functions: each now checks `canManageAdminNotificationInbox()` first.
+- A private `setAdminNotificationStatus()` helper holds the actual write, called by the two public mark-read/unread wrappers (after their own check) and directly by `handleNotificationAction` (after its own, correctly wider check) — so a manager who legitimately approves a leave/profile request through this flow still gets it marked read.
+- Verified, not assumed: traced every real caller of every modified function; every live (non-orphaned) caller is already restricted to a strict subset of the new checks (SUPERADMIN-only route gates), so no existing workflow is broken.
+
+## Files
+
+**Created:** `src/lib/notification-action-authorization.ts`, `src/lib/notification-action-authorization.test.ts`, `docs/notification-engine/reports/NotificationActionAuthorizationReport.md`.
+
+**Modified:** `src/actions/notification.actions.ts`, `tsconfig.test.json`, `package.json`.
+
+**Not touched:** `prisma/schema.prisma`, any migration, `NotificationService`, `QueueEngine`, `WorkerRuntime`, `TemplateEngine`, `DeliveryManager`, SMTP, `instrumentation.ts`, `production-worker.ts`, `leave.actions.ts`, `profile.actions.ts`, `leave-automation.actions.ts`, any UI component/page.
+
+## Database
+
+**None.**
+
+## Tests
+
+```
+tests 563   suites 139   pass 563   fail 0
+```
+
+548 pre-existing tests unmodified and still green + 15 new, covering unauthenticated/employee rejection, manager/HR/SUPERADMIN acceptance, the deliberate difference between the two authorization rules, forged-identity resistance, and invalid action/id rejection. Stable across 2 consecutive clean-rebuild runs.
+
+## TypeScript
+
+`pnpm tsc --noEmit` — zero errors, whole project.
+
+## ESLint
+
+`pnpm run lint` — zero warnings/errors, whole project.
+
+## Build
+
+Not run by the agent this phase, per standing instruction (the user runs `pnpm run build` and reports the output back). This phase's changes touch only `src/actions/notification.actions.ts` and two new `src/lib/*.ts` files — none Edge-runtime-adjacent — so no new build warning is expected beyond the 5 pre-existing cosmetic ones.
+
+## Security
+
+IDOR/cross-user access closed (every AdminNotification read/write now requires an authorized caller regardless of the id supplied). No client-controlled identity anywhere in this file. No accidental privilege escalation — every new rule is equal to or narrower than what a legitimate caller already needed via the live UI. `LOAN_APPLICATION_PENDING`/`WALLET_REQUEST_PENDING` stub behavior is now properly access-gated (still functionally incomplete, a correctness gap not a security one — see Known Issues).
+
+## Known Issues
+
+`LOAN_APPLICATION_PENDING`/`WALLET_REQUEST_PENDING` remain functional stubs (access-gated, not feature-complete). `api/cron/daily-notifications/route.ts` has no signature/secret check of its own (different file, out of scope). Phase 14's HR routing gap (unrelated). `NotificationDeliveryAttempt` rows still never written (pre-existing, unrelated).
+
+## Next Recommended Phase
+
+Wire `LOAN_APPLICATION_PENDING`/`WALLET_REQUEST_PENDING` to real `loan.actions.ts`/`wallet.actions.ts` logic (now safe to build on top of), or continue the Phase 15 business-event rollout to `approveMedicalClaim`/`rejectMedicalClaim` and `approveTimelineModificationRequest`/`rejectTimelineModificationRequest`.
+

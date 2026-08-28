@@ -18,6 +18,8 @@
     "src/lib/crypto.test.ts",
     "src/lib/leave-authorization.ts",
     "src/lib/leave-authorization.test.ts",
+    "src/lib/notification-action-authorization.ts",
+    "src/lib/notification-action-authorization.test.ts",
     "src/lib/services/notification-engine/notification.service.ts",
     "src/lib/services/notification-engine/notification.service.test.ts",
     "src/lib/services/notification-engine/queue/**/*.ts",
