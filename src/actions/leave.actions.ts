@@ -8,6 +8,7 @@ import { createAdminNotification } from "./notification.actions";
 import { logManagerOrganizationAction } from "./manager-organization.actions";
 import { logManagerEmployeeEditAction } from "./manager-employee-edit.actions";
 import { isArchivedStatus } from "@/lib/employee-status";
+import { notificationEngineContainer } from "@/lib/services/notification-engine";
 
 function canManageOrganization(user: Awaited<ReturnType<typeof getDbUser>>) {
     return !!user && (user.role === "SUPERADMIN" || (user.role === "EMPLOYEE" && user.isManager));
@@ -636,6 +637,11 @@ export async function getUserLeaveApplications(userId: string, year: number = ne
 }
 
 // Notify admins whenever a leave application is approved/declined (by admin or manager)
+/** Shared "who decided" label — `approveLeaveApplication`/`rejectLeaveApplication` are only ever called with `"admin"`/`"manager"` (see `LeaveApprovalButtons.tsx`), never a real name. */
+function leaveDecisionActorLabel(decidedBy: string): string {
+    return decidedBy === "manager" ? "Manager" : decidedBy === "admin" ? "Admin" : decidedBy;
+}
+
 async function notifyLeaveDecision(
     application: {
         id: string;
@@ -651,7 +657,7 @@ async function notifyLeaveDecision(
         const employeeName = application.user.firstName && application.user.lastName
             ? `${application.user.firstName} ${application.user.lastName}`
             : application.user.email;
-        const actor = decidedBy === "manager" ? "Manager" : decidedBy === "admin" ? "Admin" : decidedBy;
+        const actor = leaveDecisionActorLabel(decidedBy);
         const verb = decision === "APPROVED" ? "approved" : "declined";
 
         await prisma.adminNotification.create({
@@ -733,6 +739,34 @@ export async function approveLeaveApplication(applicationId: string, approvedBy:
 
         await notifyLeaveDecision(application, "APPROVED", approvedBy);
 
+        // Notification Engine integration (Phase 15) — best-effort, after the
+        // transaction commits: a business action's own success must never
+        // hinge on a notification going out. Same pattern as
+        // approveLoan()'s LOAN_APPROVED call (loan.actions.ts).
+        if (application.user.email) {
+            try {
+                await notificationEngineContainer.notificationService.raiseEvent({
+                    eventType: "LEAVE_APPROVED",
+                    dedupeKey: `LEAVE_APPROVED:${applicationId}`,
+                    sourceDomain: "leave",
+                    payload: {
+                        employee: {
+                            id: application.userId,
+                            name: `${application.user.firstName ?? ""} ${application.user.lastName ?? ""}`.trim() || application.user.email,
+                        },
+                        leaveType: application.leaveType.name,
+                        leaveDate: application.leaveDate.toISOString(),
+                        approvedBy: leaveDecisionActorLabel(approvedBy),
+                    },
+                    recipients: [
+                        { channel: "EMAIL", recipientAddress: application.user.email, recipientUserId: application.userId },
+                    ],
+                });
+            } catch (error) {
+                console.error("notificationService.raiseEvent(LEAVE_APPROVED) failed:", error);
+            }
+        }
+
         revalidatePath("/admin/leave-applications");
         revalidatePath("/manager/leave-applications");
         revalidatePath("/leaves");
@@ -773,6 +807,32 @@ export async function rejectLeaveApplication(applicationId: string, approvedBy: 
         });
 
         await notifyLeaveDecision(application, "REJECTED", approvedBy);
+
+        // Notification Engine integration (Phase 15) — best-effort, after the
+        // update commits; see approveLeaveApplication's identical comment.
+        if (application.user.email) {
+            try {
+                await notificationEngineContainer.notificationService.raiseEvent({
+                    eventType: "LEAVE_REJECTED",
+                    dedupeKey: `LEAVE_REJECTED:${applicationId}`,
+                    sourceDomain: "leave",
+                    payload: {
+                        employee: {
+                            id: application.userId,
+                            name: `${application.user.firstName ?? ""} ${application.user.lastName ?? ""}`.trim() || application.user.email,
+                        },
+                        leaveType: application.leaveType.name,
+                        leaveDate: application.leaveDate.toISOString(),
+                        rejectedBy: leaveDecisionActorLabel(approvedBy),
+                    },
+                    recipients: [
+                        { channel: "EMAIL", recipientAddress: application.user.email, recipientUserId: application.userId },
+                    ],
+                });
+            } catch (error) {
+                console.error("notificationService.raiseEvent(LEAVE_REJECTED) failed:", error);
+            }
+        }
 
         revalidatePath("/admin/leave-applications");
         revalidatePath("/manager/leave-applications");

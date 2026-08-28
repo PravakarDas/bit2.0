@@ -885,3 +885,66 @@ HR has no page-level route to this UI today (pre-existing, cross-cutting gap —
 
 If HR needs to actually use this in practice: a dedicated decision about HR page-level routing (new route group, or loosening `(admin)/layout.tsx`) — a routing/access-model change deserving its own scope discussion, not folded into this phase. Beyond that: the same extension points every phase since Phase 2 has been built around — additional business events and channels, picked up automatically by this admin panel the moment they're added to `MANAGEABLE_NOTIFICATION_TYPES`.
 
+# Phase 15 — Additional Business Event Integration
+
+**PHASE 15 COMPLETE**
+
+Full detail in [BusinessEventsIntegrationReport.md](../reports/BusinessEventsIntegrationReport.md).
+
+## Goal
+
+Wire the next 4 real business events into `NotificationService.raiseEvent()`, using the exact `LOAN_APPROVED` (Phase 10) pattern — no engine redesign, no new table, no notification logic inside business modules.
+
+## Implemented
+
+- `LEAVE_APPROVED` / `LEAVE_REJECTED` — `approveLeaveApplication()` / `rejectLeaveApplication()` (`leave.actions.ts`), each guarded by an existing `status !== "PENDING"` check.
+- `OVERTIME_REQUEST_APPROVED` / `OVERTIME_REQUEST_DECLINED` — `approveOvertimeRequest()` / `declineOvertimeRequest()` (`overtime-request.actions.ts`), each guarded by an existing `status !== "PENDING" && status !== "MANAGER_VERIFIED"` check.
+- All 4: `raiseEvent()` called after the write commits, wrapped in its own `try/catch`, never blocking the business action; recipient resolved directly from existing query data (added `email: true` to an existing overtime `select`, no schema change); deterministic `dedupeKey` per record id; `EMAIL`-only channel.
+- All 4 added to `MANAGEABLE_NOTIFICATION_TYPES` (Phase 13/14's preference catalog) so they're toggleable through the existing self-service and admin preference UIs — `NotificationService.raiseEvent()` itself needed zero changes, since its Phase 13 preference check already reads `NotificationPreference` generically by `(recipientUserId, eventType, channel)`.
+- 4 new `NotificationTemplate`/EMAIL rows registered via the existing idempotent `prisma/seed.js` mechanism (extended with the same `findFirst`-then-`create` guard `LOAN_APPROVED`'s own template uses) and applied to the live database via a targeted, side-effect-free script — not the full `seed.js`, which also creates 2 unrelated fake `PENDING` loans.
+- Small DRY extraction in `leave.actions.ts`: `leaveDecisionActorLabel()`, pulling out the `"admin"→"Admin"`/`"manager"→"Manager"` label the file's existing `notifyLeaveDecision()` already computed inline, now shared with the new `raiseEvent` payloads.
+
+## Files
+
+**Created:** `src/lib/services/notification-engine/integration/business-events.integration.test.ts`, `docs/notification-engine/reports/BusinessEventsIntegrationReport.md`.
+
+**Modified:** `src/actions/leave.actions.ts` (2 `raiseEvent` calls + `leaveDecisionActorLabel` helper), `src/actions/overtime-request.actions.ts` (2 `raiseEvent` calls + `email: true` added to 2 existing `select` blocks), `preferences/preference-catalog.ts` (+4 catalog entries), `prisma/seed.js` (+4 idempotent template-registration blocks).
+
+**Not touched:** `prisma/schema.prisma`, `NotificationService.raiseEvent()`, `QueueEngine`, `WorkerRuntime`, `TemplateEngine`, `DeliveryManager`, SMTP, the Notification Center, `notification-preferences.actions.ts`, `notification-preferences-admin.actions.ts`, `loan.actions.ts`.
+
+## Database
+
+**None.** No migration, no schema edit — only 4 `NotificationTemplate` data rows inserted via the existing idempotent mechanism.
+
+## Tests
+
+```
+tests 537   suites 133   pass 537   fail 0
+```
+
+515 pre-existing tests unmodified and still green (including the untouched `LOAN_APPROVED` suite) + 22 new, covering per event: event/job creation with exact payload/recipient/dedupeKey, full delivery to `SENT`, SMTP-failure retry, disabled-preference isolation, and dedup on a repeated `raiseEvent` call. Stable across 2 consecutive clean-rebuild runs. Business-module trigger points (`approveLeaveApplication` etc. actually calling `raiseEvent`) are not directly unit-tested — same unavoidable constraint as every `.actions.ts` file in this codebase (the harness cannot import `@/lib/prisma`/Clerk) — verified instead by direct code review, with `tsc --noEmit` confirming every payload field referenced actually exists on the query result.
+
+## TypeScript
+
+`pnpm tsc --noEmit` — zero errors, whole project.
+
+## ESLint
+
+`pnpm run lint` — zero warnings/errors, whole project.
+
+## Build
+
+Not run this phase, per standing instruction to wait for the go-ahead.
+
+## Security
+
+No authorization logic changed. One pre-existing gap surfaced, not fixed: `approveLeaveApplication`/`rejectLeaveApplication` accept an unauthenticated `approvedBy` string with no server-side role check — unlike every other approve/reject action in this codebase, including the 2 overtime functions this phase also touches. No new dependency, no secret referenced anywhere in the new code.
+
+## Known Issues
+
+The leave-approval authorization gap above (pre-existing). `NotificationDeliveryAttempt` rows still never written anywhere (pre-existing, unrelated). The Phase 14 HR routing gap is unaffected by this phase.
+
+## Next Recommended Phase
+
+Extend the same pattern to `approveMedicalClaim`/`rejectMedicalClaim` and `approveTimelineModificationRequest`/`rejectTimelineModificationRequest` (both identified as safe candidates this phase deliberately deferred), or address the leave-approval authorization gap as its own explicitly-scoped fix.
+
