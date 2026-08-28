@@ -8,6 +8,7 @@ import type {
   IDocumentRepository,
   INotificationHistoryRepository,
   INotificationJobRepository,
+  INotificationPreferenceRepository,
   INotificationProviderRepository,
   INotificationRepository,
   INotificationTemplateRepository,
@@ -18,7 +19,10 @@ import type {
   NotificationEventQueryCriteria,
   NotificationJobDTO,
   NotificationJobQueryCriteria,
+  NotificationPreferenceDTO,
+  UpsertNotificationPreferenceInput,
 } from "./dto";
+import type { NotificationChannel } from "./types/enums";
 import { RepositoryError, ValidationError } from "./errors";
 import { FixedClock } from "./utils";
 
@@ -275,10 +279,49 @@ class UnusedDocumentRepository implements IDocumentRepository {
   }
 }
 
+/** In-memory fake of `INotificationPreferenceRepository` — a missing row means "no explicit preference," matching the real repository's contract. */
+class FakePreferenceRepository implements INotificationPreferenceRepository {
+  private readonly rows = new Map<string, NotificationPreferenceDTO>();
+  private nextId = 1;
+
+  /** Test-only seeding helper — sets an explicit preference directly, bypassing `upsert`'s normal call path. */
+  seed(userId: string, notificationType: string, channel: NotificationChannel, isEnabled: boolean): void {
+    const key = this.key(userId, notificationType, channel);
+    const existing = this.rows.get(key);
+    this.rows.set(key, {
+      id: existing?.id ?? `pref_${this.nextId++}`,
+      userId,
+      notificationType,
+      channel,
+      isEnabled,
+      createdAt: existing?.createdAt ?? new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  async findOne(userId: string, notificationType: string, channel: NotificationChannel): Promise<NotificationPreferenceDTO | null> {
+    return this.rows.get(this.key(userId, notificationType, channel)) ?? null;
+  }
+
+  async findByUser(userId: string): Promise<NotificationPreferenceDTO[]> {
+    return Array.from(this.rows.values()).filter((row) => row.userId === userId);
+  }
+
+  async upsert(input: UpsertNotificationPreferenceInput): Promise<NotificationPreferenceDTO> {
+    this.seed(input.userId, input.notificationType, input.channel, input.isEnabled);
+    return (await this.findOne(input.userId, input.notificationType, input.channel))!;
+  }
+
+  private key(userId: string, notificationType: string, channel: string): string {
+    return `${userId}:${notificationType}:${channel}`;
+  }
+}
+
 function buildService() {
   const notificationRepository = new FakeNotificationRepository();
   const queueEngine = new FakeQueueEngine();
   const jobRepository = new FakeJobRepository(queueEngine);
+  const preferenceRepository = new FakePreferenceRepository();
   const service = new NotificationService(
     notificationRepository,
     jobRepository,
@@ -287,9 +330,10 @@ function buildService() {
     new UnusedProviderRepository(),
     new UnusedDocumentRepository(),
     new ChannelAdapterFactory(),
-    queueEngine
+    queueEngine,
+    preferenceRepository
   );
-  return { service, notificationRepository, queueEngine, jobRepository };
+  return { service, notificationRepository, queueEngine, jobRepository, preferenceRepository };
 }
 
 describe("NotificationService.raiseEvent — orchestration flow", () => {
@@ -437,6 +481,147 @@ describe("NotificationService.raiseEvent — idempotency", () => {
     assert.equal(queueEngine.enqueueCalls.length, 2); // enqueue was asked twice...
     assert.equal(result.jobs.length, 2);
     assert.equal(result.jobs[0].id, result.jobs[1].id); // ...but resolved to the same underlying job both times
+  });
+});
+
+describe("NotificationService.raiseEvent — preferences (Phase 13)", () => {
+  it("A. creates a job when the recipient has no explicit preference (default enabled)", async () => {
+    const { service, queueEngine } = buildService();
+
+    const result = await service.raiseEvent({
+      eventType: "LOAN_APPROVED",
+      dedupeKey: "LOAN_APPROVED:loan_pref_default",
+      payload: { loanId: "loan_pref_default" },
+      recipients: [{ channel: "EMAIL", recipientAddress: "jane@example.com", recipientUserId: "u1" }],
+    });
+
+    assert.equal(result.jobs.length, 1);
+    assert.equal(queueEngine.enqueueCalls.length, 1);
+  });
+
+  it("B. creates a job when the recipient has explicitly enabled this notificationType/channel", async () => {
+    const { service, queueEngine, preferenceRepository } = buildService();
+    preferenceRepository.seed("u1", "LOAN_APPROVED", "EMAIL", true);
+
+    const result = await service.raiseEvent({
+      eventType: "LOAN_APPROVED",
+      dedupeKey: "LOAN_APPROVED:loan_pref_enabled",
+      payload: { loanId: "loan_pref_enabled" },
+      recipients: [{ channel: "EMAIL", recipientAddress: "jane@example.com", recipientUserId: "u1" }],
+    });
+
+    assert.equal(result.jobs.length, 1);
+    assert.equal(queueEngine.enqueueCalls.length, 1);
+  });
+
+  it("C. records the event but creates NO job when the recipient has explicitly disabled this notificationType/channel", async () => {
+    const { service, notificationRepository, queueEngine, preferenceRepository } = buildService();
+    preferenceRepository.seed("u1", "LOAN_APPROVED", "EMAIL", false);
+
+    const result = await service.raiseEvent({
+      eventType: "LOAN_APPROVED",
+      dedupeKey: "LOAN_APPROVED:loan_pref_disabled",
+      payload: { loanId: "loan_pref_disabled" },
+      recipients: [{ channel: "EMAIL", recipientAddress: "jane@example.com", recipientUserId: "u1" }],
+    });
+
+    assert.equal(result.deduplicated, false);
+    assert.equal(result.event.dedupeKey, "LOAN_APPROVED:loan_pref_disabled"); // the business event IS recorded
+    assert.equal(result.jobs.length, 0); // ...but no delivery job was created
+    assert.equal(queueEngine.enqueueCalls.length, 0);
+    assert.equal(notificationRepository.createCalls.length, 1);
+  });
+
+  it("D. a duplicate raiseEvent call for a disabled preference still deduplicates on the event and creates no job either time", async () => {
+    const { service, queueEngine, preferenceRepository } = buildService();
+    preferenceRepository.seed("u1", "LOAN_APPROVED", "EMAIL", false);
+    const request = {
+      eventType: "LOAN_APPROVED",
+      dedupeKey: "LOAN_APPROVED:loan_pref_dup",
+      payload: { loanId: "loan_pref_dup" },
+      recipients: [{ channel: "EMAIL" as const, recipientAddress: "jane@example.com", recipientUserId: "u1" }],
+    };
+
+    const first = await service.raiseEvent(request);
+    const second = await service.raiseEvent(request);
+
+    assert.equal(first.deduplicated, false);
+    assert.equal(first.jobs.length, 0);
+    assert.equal(second.deduplicated, true);
+    assert.equal(second.jobs.length, 0);
+    assert.equal(queueEngine.enqueueCalls.length, 0);
+  });
+
+  it("only opts out the specific (notificationType, channel) pair — a different channel for the same user/type is unaffected", async () => {
+    const { service, queueEngine, preferenceRepository } = buildService();
+    preferenceRepository.seed("u1", "LOAN_APPROVED", "EMAIL", false);
+
+    const result = await service.raiseEvent({
+      eventType: "LOAN_APPROVED",
+      dedupeKey: "LOAN_APPROVED:loan_pref_other_channel",
+      payload: { loanId: "loan_pref_other_channel" },
+      recipients: [{ channel: "SMS", recipientAddress: "+15551234567", recipientUserId: "u1" }],
+    });
+
+    assert.equal(result.jobs.length, 1);
+    assert.equal(queueEngine.enqueueCalls.length, 1);
+  });
+
+  it("checks each recipient independently — a mix of enabled/disabled recipients yields jobs only for the enabled ones", async () => {
+    const { service, queueEngine, preferenceRepository } = buildService();
+    preferenceRepository.seed("u2", "LOAN_APPROVED", "EMAIL", false);
+
+    const result = await service.raiseEvent({
+      eventType: "LOAN_APPROVED",
+      dedupeKey: "LOAN_APPROVED:loan_pref_mixed",
+      payload: { loanId: "loan_pref_mixed" },
+      recipients: [
+        { channel: "EMAIL", recipientAddress: "jane@example.com", recipientUserId: "u1" }, // no explicit preference -> enabled
+        { channel: "EMAIL", recipientAddress: "john@example.com", recipientUserId: "u2" }, // explicitly disabled
+      ],
+    });
+
+    assert.equal(result.jobs.length, 1);
+    assert.equal(result.jobs[0].recipientUserId, "u1");
+    assert.equal(queueEngine.enqueueCalls.length, 1);
+  });
+
+  it("re-checks the preference fresh on every raiseEvent call — a preference change between two distinct events takes effect immediately", async () => {
+    const { service, queueEngine, preferenceRepository } = buildService();
+    preferenceRepository.seed("u1", "LOAN_APPROVED", "EMAIL", false);
+
+    const disabledResult = await service.raiseEvent({
+      eventType: "LOAN_APPROVED",
+      dedupeKey: "LOAN_APPROVED:loan_pref_change_1",
+      payload: { loanId: "loan_pref_change_1" },
+      recipients: [{ channel: "EMAIL", recipientAddress: "jane@example.com", recipientUserId: "u1" }],
+    });
+    assert.equal(disabledResult.jobs.length, 0);
+
+    preferenceRepository.seed("u1", "LOAN_APPROVED", "EMAIL", true);
+
+    const enabledResult = await service.raiseEvent({
+      eventType: "LOAN_APPROVED",
+      dedupeKey: "LOAN_APPROVED:loan_pref_change_2", // a distinct event — the earlier one's dedupe key doesn't apply
+      payload: { loanId: "loan_pref_change_2" },
+      recipients: [{ channel: "EMAIL", recipientAddress: "jane@example.com", recipientUserId: "u1" }],
+    });
+    assert.equal(enabledResult.jobs.length, 1);
+    assert.equal(queueEngine.enqueueCalls.length, 1);
+  });
+
+  it("never opts out a recipient with no recipientUserId (nothing to check a preference against)", async () => {
+    const { service, queueEngine } = buildService();
+
+    const result = await service.raiseEvent({
+      eventType: "LOAN_APPROVED",
+      dedupeKey: "LOAN_APPROVED:loan_pref_no_user",
+      payload: { loanId: "loan_pref_no_user" },
+      recipients: [{ channel: "EMAIL", recipientAddress: "jane@example.com" }],
+    });
+
+    assert.equal(result.jobs.length, 1);
+    assert.equal(queueEngine.enqueueCalls.length, 1);
   });
 });
 

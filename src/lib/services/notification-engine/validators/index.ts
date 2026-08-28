@@ -6,3 +6,4 @@ export { NotificationProviderValidator } from "./notification-provider.validator
 export { DocumentValidator } from "./document.validator";
 export { DocumentUploadAttemptValidator } from "./document-upload-attempt.validator";
 export { RaiseEventRequestValidator } from "./raise-event-request.validator";
+export { NotificationPreferenceValidator } from "./notification-preference.validator";

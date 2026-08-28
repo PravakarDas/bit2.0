@@ -3,6 +3,7 @@ import type {
   IDocumentRepository,
   INotificationHistoryRepository,
   INotificationJobRepository,
+  INotificationPreferenceRepository,
   INotificationProviderRepository,
   INotificationRepository,
   INotificationTemplateRepository,
@@ -53,11 +54,13 @@ function stableStringify(value: unknown): string {
  *
  * This is the ONLY entry point business modules should ever call — see
  * NotificationServiceReport.md's "Public API" section. `raiseEvent` is a pure
- * orchestrator: it validates the request, deduplicates on `dedupeKey`, fans
- * out one `NotificationJob` per supplied recipient via the existing
- * `QueueEngine` (Phase 3, reused unmodified — enqueue's own idempotency
- * handling covers job-level dedup), and returns. It never renders a template,
- * never talks to a provider, never touches retry/worker state — those remain
+ * orchestrator: it validates the request, deduplicates on `dedupeKey`, then
+ * for each supplied recipient checks `NotificationPreference` (Phase 13 —
+ * see NotificationPreferencesReport.md) and fans out one `NotificationJob`
+ * per still-opted-in recipient via the existing `QueueEngine` (Phase 3,
+ * reused unmodified — enqueue's own idempotency handling covers job-level
+ * dedup), and returns. It never renders a template, never talks to a
+ * provider, never touches retry/worker state — those remain
  * `WorkerRuntime`'s job, unchanged since Phase 8.
  *
  * Depends only on repository/engine *interfaces* (Dependency Inversion) —
@@ -72,7 +75,8 @@ export class NotificationService {
     private readonly providerRepository: INotificationProviderRepository,
     private readonly documentRepository: IDocumentRepository,
     private readonly channelAdapterFactory: ChannelAdapterFactory,
-    private readonly queueEngine: IQueueEngine
+    private readonly queueEngine: IQueueEngine,
+    private readonly preferenceRepository: INotificationPreferenceRepository
   ) {}
 
   // ---------------------------------------------------------------------
@@ -165,6 +169,14 @@ export class NotificationService {
     const clock = request.scheduledAt ? new FixedClock(request.scheduledAt) : undefined;
     const jobs: NotificationJobDTO[] = [];
     for (const recipient of request.recipients) {
+      if (await this.isOptedOut(recipient.recipientUserId, request.eventType, recipient.channel)) {
+        // The event itself already exists (inserted above) — only this
+        // recipient's delivery job is skipped, so the fact the business
+        // event happened remains recorded and queryable even though nothing
+        // will be delivered for this (recipient, channel) pair.
+        continue;
+      }
+
       const job = await this.queueEngine.enqueue({
         eventId: event.id,
         dedupeKey,
@@ -237,6 +249,26 @@ export class NotificationService {
   private deriveSourceDomain(eventType: string): string {
     const [firstSegment] = eventType.split("_");
     return (firstSegment || eventType).toLowerCase();
+  }
+
+  /**
+   * Resolution rule (Phase 13 — see NotificationPreferencesReport.md):
+   * no `NotificationPreference` row for `(userId, notificationType, channel)`
+   * means "enabled by default" — a recipient is opted out only when an
+   * explicit row exists with `isEnabled: false`. A recipient with no
+   * `recipientUserId` (no linked `User` to check a preference against) is
+   * never opted out — there is nothing to look up.
+   */
+  private async isOptedOut(
+    recipientUserId: string | null | undefined,
+    notificationType: string,
+    channel: NotificationChannel
+  ): Promise<boolean> {
+    if (!recipientUserId) {
+      return false;
+    }
+    const preference = await this.preferenceRepository.findOne(recipientUserId, notificationType, channel);
+    return preference?.isEnabled === false;
   }
 
   private isDedupeKeyConflict(error: unknown): boolean {

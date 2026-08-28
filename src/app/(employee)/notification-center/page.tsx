@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -12,6 +12,7 @@ import {
 import { NotificationTable, type NotificationRow } from "@/components/shared/notification-center/NotificationTable";
 import { NotificationPagination } from "@/components/shared/notification-center/NotificationPagination";
 import { NotificationDetailDrawer } from "@/components/shared/notification-center/NotificationDetailDrawer";
+import { NotificationPreferencesDialog } from "@/components/shared/notification-center/NotificationPreferencesDialog";
 import type { InboxDetail } from "@/lib/services/notification-engine";
 import {
     getMyNotifications,
@@ -38,6 +39,7 @@ export default function EmployeeNotificationCenterPage() {
     const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
     const [detail, setDetail] = useState<InboxDetail | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
+    const [preferencesOpen, setPreferencesOpen] = useState(false);
 
     const loadCounts = useCallback(async () => {
         const result = await getMyNotificationCounts();
@@ -169,12 +171,18 @@ export default function EmployeeNotificationCenterPage() {
                         </p>
                     </div>
                 </div>
-                {counts.unread > 0 && (
-                    <Button variant="outline" size="sm" onClick={handleMarkAllRead}>
-                        <CheckCheck className="h-4 w-4 mr-2" />
-                        Mark All as Read
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setPreferencesOpen(true)}>
+                        <Settings className="h-4 w-4 mr-2" />
+                        Preferences
                     </Button>
-                )}
+                    {counts.unread > 0 && (
+                        <Button variant="outline" size="sm" onClick={handleMarkAllRead}>
+                            <CheckCheck className="h-4 w-4 mr-2" />
+                            Mark All as Read
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <NotificationFiltersBar value={filters} onChange={setFilters} />
@@ -204,6 +212,8 @@ export default function EmployeeNotificationCenterPage() {
                 detail={detail}
                 loading={detailLoading}
             />
+
+            <NotificationPreferencesDialog open={preferencesOpen} onOpenChange={setPreferencesOpen} />
         </div>
     );
 }

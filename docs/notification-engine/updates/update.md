@@ -771,3 +771,51 @@ Phases 0–12 complete (Phase 12's migration generated but not yet applied — s
 
 Apply the generated migration, then verify end to end against the real database. Beyond that: Notification Preferences (per-user channel opt-out), additional business events, and additional channels — the same extension points this engine has been built around since Phase 2.
 
+**Correction (recorded at the start of Phase 13):** the `20260728120000_add_notification_job_inbox_state` migration flagged above as "not yet applied" has since been applied — `prisma migrate status` reports the database schema up to date and `NotificationJobInboxState` is live and reachable. This was verified during a Linux-environment-recovery session that also fixed an unrelated, purely local issue (a stale generated Prisma Client from before the machine move, which had no `EmailConfig`/Notification Engine models — fixed with `pnpm prisma generate`; no schema or database change). No further action needed here.
+
+# Phase 13 — Notification Preferences
+
+**PHASE 13 COMPLETE**
+
+Makes `NotificationService.raiseEvent()` honor per-user `NotificationPreference` opt-outs internally, so business modules (`loan.actions.ts` and every future one) get preference enforcement for free just by calling `raiseEvent()` — no business module contains or needs to contain preference logic. `LOAN_APPROVED`/`EMAIL` is the first notification exposed to employees for self-service management. Full detail in [NotificationPreferencesReport.md](../reports/NotificationPreferencesReport.md).
+
+## Implementation Completed
+
+- Preference resolution rule implemented inside `NotificationService.raiseEvent()`'s existing per-recipient fan-out loop: no explicit `NotificationPreference` row → enabled (default); explicit `isEnabled: false` → opted out (no job created, but the `NotificationEvent` is still recorded); a recipient with no `recipientUserId` is never opted out.
+- Full repository/DTO/validator layer for `NotificationPreference`, matching the existing Phase 2 pattern exactly.
+- `NotificationPreferenceService` (list/set a user's own preferences) + a small `MANAGEABLE_NOTIFICATION_TYPES` catalog (today: `LOAN_APPROVED`/`EMAIL` only) gating which pairs are self-service-manageable.
+- Employee-only Server Actions (`notification-preferences.actions.ts`) and a new `NotificationPreferencesDialog`, added to the existing employee Notification Center page via a "Preferences" button — no new route, no redesign.
+- **No admin/manager access** — per explicit product decision on this phase's own stop condition, preferences are employee self-service only in this phase.
+
+## Files Changed
+
+**Created:** `dto/notification-preference.dto.ts`, `repositories/interfaces/notification-preference-repository.interface.ts`, `repositories/notification-preference.repository.ts`, `validators/notification-preference.validator.ts`, `preferences/preference-catalog.ts`, `preferences/notification-preference.service.ts`, `preferences/notification-preference.service.test.ts`, `preferences/index.ts`, `src/actions/notification-preferences.actions.ts`, `src/components/shared/notification-center/NotificationPreferencesDialog.tsx`, `docs/notification-engine/reports/NotificationPreferencesReport.md`.
+
+**Modified:** `notification.service.ts` (new required constructor param `preferenceRepository`, preference check in `raiseEvent`), `notification.service.test.ts` (+8 tests), `container.ts` (wiring), `dto/index.ts`, `repositories/index.ts`, `repositories/interfaces/index.ts`, `validators/index.ts`, top-level `index.ts` (barrel), `integration/loan-approved.integration.test.ts` + `integration/worker-activation.integration.test.ts` (updated `NotificationService` construction with a default-enabled fake), `(employee)/notification-center/page.tsx` (Preferences button), `tsconfig.test.json` + `package.json` (new test glob).
+
+**Not touched:** `loan.actions.ts`, `prisma/schema.prisma`, `QueueEngine`, `WorkerRuntime`, `DeliveryManager`, the SMTP provider, `TemplateEngine`, `instrumentation.ts`, any admin/manager file.
+
+## Database Changes
+
+**None.** The existing `NotificationPreference` model (Phase 1) already had the exact shape this phase needed — no migration proposed, generated, or applied.
+
+## Tests
+
+```
+tests 491   suites 124   pass 491   fail 0
+```
+
+476 pre-existing tests unmodified and still green + 15 new (8 in `notification.service.test.ts`'s preference block, 7 in `preferences/notification-preference.service.test.ts`), all deterministic, zero live-database access.
+
+## Build Result
+
+`pnpm run build` — compiles successfully. Same 5 pre-existing, previously-documented cosmetic Turbopack Edge-runtime warnings as Phase 12 (Node-only code reachable from `instrumentation.ts`'s Edge-runtime bundle); no new warnings introduced.
+
+## Known Issues
+
+None new. See NotificationPreferencesReport.md's "Known Limitations" for the pre-existing, deliberate scope boundaries (single-entry catalog, no admin/manager access, no bulk opt-out).
+
+## Next Phase Recommendation
+
+A deliberately-scoped follow-up for SUPERADMIN/HR visibility/override of employee preferences, if wanted (explicitly deferred this phase). Beyond that: additional business events (each needs only a `raiseEvent` call + a `MANAGEABLE_NOTIFICATION_TYPES` entry) and additional channels behind their own `DeliveryProvider`.
+

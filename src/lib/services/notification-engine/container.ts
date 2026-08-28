@@ -2,6 +2,7 @@ import {
   DocumentRepository,
   NotificationHistoryRepository,
   NotificationJobRepository,
+  NotificationPreferenceRepository,
   NotificationProviderRepository,
   NotificationRepository,
   NotificationTemplateRepository,
@@ -15,6 +16,7 @@ import { TemplateEngine, TemplateRegistry } from "./template";
 import { DeliveryManager, ProviderHealthMonitor, ProviderMetricsCollector, ProviderRegistry, ProviderResolver } from "./delivery";
 import { registerSmtpProvider } from "./delivery/providers/smtp";
 import { NotificationCenterJobsRepository, NotificationInboxService, NotificationInboxStateRepository } from "./inbox";
+import { NotificationPreferenceService } from "./preferences";
 
 /**
  * Manual dependency wiring — this project has no DI framework/container
@@ -40,6 +42,7 @@ export function createNotificationEngineContainer(overrides?: {
   documentRepository?: DocumentRepository;
   channelAdapterFactory?: ChannelAdapterFactory;
   queueRepository?: QueueRepository;
+  preferenceRepository?: NotificationPreferenceRepository;
 }) {
   const notificationRepository = overrides?.notificationRepository ?? new NotificationRepository();
   const jobRepository = overrides?.jobRepository ?? new NotificationJobRepository();
@@ -49,6 +52,7 @@ export function createNotificationEngineContainer(overrides?: {
   const documentRepository = overrides?.documentRepository ?? new DocumentRepository();
   const channelAdapterFactory = overrides?.channelAdapterFactory ?? new ChannelAdapterFactory();
   const queueRepository = overrides?.queueRepository ?? new QueueRepository();
+  const preferenceRepository = overrides?.preferenceRepository ?? new NotificationPreferenceRepository();
 
   // QueueEngine (Phase 3) — a standalone, directly-usable component per its
   // own scope. As of Phase 9, this is also the mechanism `NotificationService.raiseEvent`
@@ -64,8 +68,14 @@ export function createNotificationEngineContainer(overrides?: {
     providerRepository,
     documentRepository,
     channelAdapterFactory,
-    queueEngine
+    queueEngine,
+    preferenceRepository
   );
+
+  // NotificationPreferenceService (Phase 13) — read/write access to a user's
+  // own preferences, built directly on `preferenceRepository` above (the same
+  // instance `NotificationService.raiseEvent` reads from enforcement-side).
+  const preferenceService = new NotificationPreferenceService(preferenceRepository);
 
   // TemplateEngine (Phase 5) — a standalone component, per its own scope,
   // built directly on the same `templateRepository` above (Phase 2,
@@ -138,6 +148,7 @@ export function createNotificationEngineContainer(overrides?: {
       queueRepository,
       notificationCenterJobsRepository,
       inboxStateRepository,
+      preferenceRepository,
     },
     channelAdapterFactory,
     notificationService,
@@ -147,6 +158,7 @@ export function createNotificationEngineContainer(overrides?: {
     providerRegistry,
     providerHealthMonitor,
     providerMetrics,
+    preferenceService,
     deliveryManager,
     inboxService,
   };

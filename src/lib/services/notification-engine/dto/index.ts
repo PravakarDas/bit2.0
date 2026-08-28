@@ -36,3 +36,5 @@ export type {
 } from "./document-upload-attempt.dto";
 
 export type { RaiseEventRecipient, RaiseEventRequest, RaiseEventResult } from "./raise-event.dto";
+
+export type { NotificationPreferenceDTO, UpsertNotificationPreferenceInput } from "./notification-preference.dto";

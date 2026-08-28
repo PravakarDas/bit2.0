@@ -21,7 +21,8 @@
     "src/lib/services/notification-engine/template/**/*.ts",
     "src/lib/services/notification-engine/delivery/**/*.ts",
     "src/lib/services/notification-engine/integration/**/*.ts",
-    "src/lib/services/notification-engine/inbox/**/*.ts"
+    "src/lib/services/notification-engine/inbox/**/*.ts",
+    "src/lib/services/notification-engine/preferences/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

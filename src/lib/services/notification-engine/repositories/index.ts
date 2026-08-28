@@ -5,6 +5,7 @@ export { NotificationHistoryRepository } from "./notification-history.repository
 export { NotificationTemplateRepository } from "./notification-template.repository";
 export { NotificationProviderRepository } from "./notification-provider.repository";
 export { DocumentRepository } from "./document.repository";
+export { NotificationPreferenceRepository } from "./notification-preference.repository";
 
 export type {
   INotificationRepository,
@@ -13,4 +14,5 @@ export type {
   INotificationTemplateRepository,
   INotificationProviderRepository,
   IDocumentRepository,
+  INotificationPreferenceRepository,
 } from "./interfaces";

@@ -16,6 +16,7 @@ import type {
   IDocumentRepository,
   INotificationHistoryRepository,
   INotificationJobRepository,
+  INotificationPreferenceRepository,
   INotificationProviderRepository,
   INotificationRepository,
   INotificationTemplateRepository,
@@ -317,6 +318,19 @@ class UnusedProviderRepository implements INotificationProviderRepository {
   }
 }
 
+/** Every recipient has no explicit preference in these tests — the default-enabled path (Phase 13) — so delivery proceeds exactly as it did before preferences existed. */
+class AlwaysEnabledPreferenceRepository implements INotificationPreferenceRepository {
+  async findOne(): Promise<null> {
+    return null;
+  }
+  async findByUser(): Promise<never[]> {
+    return [];
+  }
+  async upsert(): Promise<never> {
+    throw new Error("not used in these tests");
+  }
+}
+
 class UnusedDocumentRepository implements IDocumentRepository {
   async create(): Promise<never> {
     throw new Error("not used in these tests");
@@ -417,7 +431,8 @@ function buildPipeline(options: { transporter?: FakeTransporter } = {}) {
     new UnusedProviderRepository(),
     new UnusedDocumentRepository(),
     new ChannelAdapterFactory(),
-    queueEngine
+    queueEngine,
+    new AlwaysEnabledPreferenceRepository()
   );
 
   return { notificationService, lifecycleManager, runtime, queueRepository, templateEngine, fakeTransporter };
