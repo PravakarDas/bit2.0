@@ -5,6 +5,18 @@ import { revalidatePath } from "next/cache";
 import { calculateEMI } from "@/lib/services/loan.service";
 import { LoanStatus, ClaimStatus, UserStatus } from "@prisma/client";
 import { shouldGeneratePayroll } from "@/lib/employee-status";
+import { createAdminNotification } from "./notification.actions";
+import { notificationEngineContainer } from "@/lib/services/notification-engine";
+import { generatePayslipPdf } from "@/lib/services/payslip-pdf.service";
+import { resolveGoogleDriveConfig } from "@/lib/services/google-drive.service";
+import { GoogleDriveService } from "@/lib/services/google-drive-client";
+import {
+    dispatchPayslipsForPayrollRun,
+    writePayslipTempFile,
+    createPayslipDriveTarget,
+    type PayslipDispatchInput,
+    type PayslipDriveTarget,
+} from "@/lib/services/payroll-payslip-dispatch.service";
 
 export async function getAllProcessedPayrolls() {
     const payments = await prisma.salaryPayment.findMany({
@@ -56,6 +68,7 @@ interface PayrollAggregation {
     email: string;
     firstName?: string;
     lastName?: string;
+    branchName?: string | null;
     bankAccountNumber?: string;
     baseSalary: number;
     walletBalance: number;
@@ -96,6 +109,9 @@ export async function getPayrollAggregation(month: number, year: number) {
             ]
         },
         include: {
+            branch: {
+                select: { name: true },
+            },
             loans: {
                 where: { status: LoanStatus.ACTIVE },
                 select: {
@@ -248,6 +264,7 @@ export async function getPayrollAggregation(month: number, year: number) {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
+            branchName: user.branch?.name ?? null,
             bankAccountNumber: user.bankAccountNumber,
             baseSalary: user.baseSalary,
             walletBalance: user.walletBalance,
@@ -325,6 +342,112 @@ export async function toggleEmiCarryForward(
     revalidatePath("/admin/payroll");
 }
 
+interface CreatedSalaryPaymentForDispatch {
+    userId: string;
+    salaryPaymentId: string;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    branchName: string | null;
+    baseSalary: number;
+    totalBonuses: number;
+    totalAllowances: number;
+    medicalReimbursement: number;
+    loanDeduction: number;
+    walletAdjustment: number;
+    netAmount: number;
+}
+
+/**
+ * Phase 18c — connects the already-built PDF generation, Google Drive
+ * folder/upload capability, Document/attachment pipeline, and Notification
+ * Engine into the real post-payroll flow. Called once, after
+ * `processPayroll()`'s transaction has committed — never inside it. Never
+ * throws: `dispatchPayslipsForPayrollRun` isolates every employee, and the
+ * one call here that reaches outside that isolation (resolving the Google
+ * Drive config) is itself guarded so a missing/broken Drive config degrades
+ * to "Drive step skipped for every employee, email still sent" rather than
+ * blocking anything.
+ */
+async function dispatchPayrollPayslips(payrollMonth: string, createdSalaryPayments: CreatedSalaryPaymentForDispatch[]): Promise<void> {
+    if (createdSalaryPayments.length === 0) {
+        return;
+    }
+
+    const [yearStr, monthStr] = payrollMonth.split('-');
+    const year = parseInt(yearStr);
+    const monthNumber = parseInt(monthStr);
+
+    // Resolved once per payroll run, not per employee — same singleton
+    // GoogleDriveConfig, same credentials, for every recipient this run.
+    let driveTarget: PayslipDriveTarget | null = null;
+    try {
+        const driveConfig = await resolveGoogleDriveConfig();
+        if (driveConfig) {
+            driveTarget = createPayslipDriveTarget(new GoogleDriveService(), driveConfig);
+        }
+    } catch (error) {
+        console.error("Failed to resolve Google Drive configuration for payroll payslip dispatch:", error);
+    }
+
+    const inputs: PayslipDispatchInput[] = createdSalaryPayments.map((sp) => {
+        const employeeName = `${sp.firstName ?? ""} ${sp.lastName ?? ""}`.trim() || sp.email;
+        return {
+            salaryPaymentId: sp.salaryPaymentId,
+            userId: sp.userId,
+            email: sp.email,
+            employeeName,
+            branchName: sp.branchName,
+            year,
+            monthNumber,
+            payslipData: {
+                employeeName,
+                employeeEmail: sp.email,
+                month: payrollMonth,
+                baseSalary: sp.baseSalary,
+                totalBonuses: sp.totalBonuses,
+                totalAllowances: sp.totalAllowances,
+                medicalReimbursement: sp.medicalReimbursement,
+                loanDeduction: sp.loanDeduction,
+                walletAdjustment: sp.walletAdjustment,
+                netAmount: sp.netAmount,
+            },
+        };
+    });
+
+    const summary = await dispatchPayslipsForPayrollRun(inputs, {
+        generatePdf: generatePayslipPdf,
+        writeLocalFile: writePayslipTempFile,
+        drive: driveTarget,
+        documentRepository: notificationEngineContainer.repositories.documentRepository,
+        notificationService: notificationEngineContainer.notificationService,
+        onFailure: (failure) => {
+            console.error(
+                `Payroll payslip dispatch failure [${failure.stage}] for user ${failure.userId} (salaryPayment ${failure.salaryPaymentId}):`,
+                failure.message
+            );
+        },
+    });
+
+    // One summary-level admin alert per payroll run on failures — not one
+    // per failed employee. Payroll itself already succeeded regardless.
+    if (summary.employeesWithFailures > 0) {
+        await createAdminNotification({
+            type: "PAYROLL_NOTIFICATION",
+            title: `Payroll payslip delivery had ${summary.employeesWithFailures} issue(s)`,
+            message: `Payroll for ${payrollMonth}: ${summary.pdfFailures} PDF generation failure(s), ${summary.driveFailures} Google Drive upload failure(s), ${summary.notificationFailures} notification failure(s), out of ${summary.total} employee(s) processed. Payroll itself was processed successfully — check DocumentUploadAttempt records and server logs for details.`,
+            metadata: {
+                payrollMonth,
+                total: summary.total,
+                employeesWithFailures: summary.employeesWithFailures,
+                pdfFailures: summary.pdfFailures,
+                driveFailures: summary.driveFailures,
+                notificationFailures: summary.notificationFailures,
+            },
+        });
+    }
+}
+
 export async function processPayroll(payrollMonth: string, selectedBonuses: Record<string, string[]>, emiDisabledUsers: string[] = []) {
     // 1. Immutability Check: Prevent duplicate runs for the same month
     const existingPayment = await prisma.salaryPayment.findFirst({
@@ -340,6 +463,27 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
 
     try {
         const result = await prisma.$transaction(async (tx) => {
+            // Phase 18c: the smallest safe addition needed so the post-commit
+            // payslip email flow (below, after the transaction) knows exactly
+            // which SalaryPayment rows this run created — previously the
+            // `create()` return value was discarded. Pure capture; does not
+            // change any calculation, amount, or transaction semantics.
+            const createdSalaryPayments: {
+                userId: string;
+                salaryPaymentId: string;
+                email: string;
+                firstName?: string | null;
+                lastName?: string | null;
+                branchName: string | null;
+                baseSalary: number;
+                totalBonuses: number;
+                totalAllowances: number;
+                medicalReimbursement: number;
+                loanDeduction: number;
+                walletAdjustment: number;
+                netAmount: number;
+            }[] = [];
+
             for (const emp of data) {
                 const userBonusIds = selectedBonuses[emp.userId] || [];
                 const appliedBonuses = emp.eligibleBonuses.filter(b => userBonusIds.includes(b.id));
@@ -351,7 +495,7 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                 const finalNetPay = emp.netPay + totalBonuses + emp.walletBalance + (emiDisabled ? emp.totalLoanDeduction : 0);
 
                 // 2. Create SalaryPayment Record
-                await tx.salaryPayment.create({
+                const salaryPayment = await tx.salaryPayment.create({
                     data: {
                         userId: emp.userId,
                         month: payrollMonth,
@@ -363,6 +507,22 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                         walletAdjustment: emp.walletBalance,
                         netAmount: finalNetPay,
                     },
+                });
+
+                createdSalaryPayments.push({
+                    userId: emp.userId,
+                    salaryPaymentId: salaryPayment.id,
+                    email: emp.email,
+                    firstName: emp.firstName,
+                    lastName: emp.lastName,
+                    branchName: emp.branchName,
+                    baseSalary: emp.baseSalary,
+                    totalBonuses,
+                    totalAllowances: emp.totalAllowances,
+                    medicalReimbursement: emp.totalMedical,
+                    loanDeduction: adjustedLoanDeduction,
+                    walletAdjustment: emp.walletBalance,
+                    netAmount: finalNetPay,
                 });
 
                 // Clear wallet balance and create adjustment transaction
@@ -519,11 +679,33 @@ export async function processPayroll(payrollMonth: string, selectedBonuses: Reco
                 },
             });
 
-            return { success: true };
+            return { success: true, createdSalaryPayments };
         });
 
         revalidatePath("/admin/payroll");
         revalidatePath("/profile");
+
+        // Phase 18c — payslip PDF + Google Drive archive + email, run only
+        // after the payroll transaction has fully committed (never inside
+        // it — PDF generation, Drive API calls, and notification dispatch
+        // are all external I/O with no place in a DB transaction).
+        // Synchronous, in this same post-commit step (not a background job):
+        // this app has no general-purpose background-job infrastructure
+        // outside the Notification Engine's own queue/worker, and generating
+        // the PDF before raiseEvent() enqueues the job (rather than after,
+        // in some later async step) is what guarantees the Document is
+        // already GENERATED_LOCAL with real bytes on disk before a worker
+        // could ever claim the job — see PayrollEmailFlowReport.md §2/§9 and
+        // PayrollEmailImplementationPlan.md §16. Entirely best-effort:
+        // wrapped in its own try/catch so nothing here can affect the
+        // already-committed, already-successful payroll run; any failure is
+        // additionally isolated per employee inside dispatchPayrollPayslips.
+        try {
+            await dispatchPayrollPayslips(payrollMonth, result.createdSalaryPayments);
+        } catch (error) {
+            console.error("dispatchPayrollPayslips failed unexpectedly:", error);
+        }
+
         return result;
     } catch (error) {
         console.error("Payroll processing failed:", error);

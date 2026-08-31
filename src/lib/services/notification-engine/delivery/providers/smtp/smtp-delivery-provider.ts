@@ -73,6 +73,12 @@ export class SmtpDeliveryProvider implements DeliveryProvider {
         subject: content.subject ?? "",
         html: content.bodyHtml,
         text: content.bodyText,
+        // Only present on the sendMail() call when there's actually an
+        // attachment to send — an absent key (not an empty array/undefined
+        // value) keeps a no-attachment call's shape byte-for-byte identical
+        // to every pre-Phase-18b call, per this engine's backward-
+        // compatibility rule for RenderedNotificationContent's new field.
+        ...(content.attachments && content.attachments.length > 0 ? { attachments: content.attachments } : {}),
       });
       return this.resultMapper.toSuccess(context.providerId, this.elapsedMs(startedAt));
     } catch (error) {

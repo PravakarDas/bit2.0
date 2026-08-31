@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { ChannelAdapterFactory } from "./factories";
 import { NotificationService } from "./notification.service";
 import { QueueEngine, QueueRepository } from "./queue";
-import { createWorkerRuntime } from "./worker";
+import { createWorkerRuntime, DocumentAttachmentResolver } from "./worker";
 import { TemplateEngine, TemplateRegistry } from "./template";
 import { DeliveryManager, ProviderHealthMonitor, ProviderMetricsCollector, ProviderRegistry, ProviderResolver } from "./delivery";
 import { registerSmtpProvider } from "./delivery/providers/smtp";
@@ -114,11 +114,18 @@ export function createNotificationEngineContainer(overrides?: {
   // to resolve each job's `NotificationEvent`) before handing
   // `RenderedNotificationContent` to the channel adapter — see
   // job-dispatcher.ts's `renderContent()`.
+  // DocumentAttachmentResolver (Phase 18b) — turns a job's `documentId` into
+  // a delivery-ready attachment (real bytes off `documentRepository`'s
+  // `Document.localTempPath`) before dispatch. Built on the same
+  // `documentRepository` instance above; see job-dispatcher.ts's
+  // `renderContent()` for exactly where this plugs in.
+  const documentAttachmentResolver = new DocumentAttachmentResolver(documentRepository);
+
   const { runtime: workerRuntime } = createWorkerRuntime(
     queueEngine,
     { workerId: `worker-${randomUUID()}` },
     undefined,
-    { deliveryManager, eventRepository: notificationRepository, templateEngine }
+    { deliveryManager, eventRepository: notificationRepository, templateEngine, documentAttachmentResolver }
   );
 
   // Notification Center (Phase 12) — pure read/management layer over the
@@ -161,6 +168,7 @@ export function createNotificationEngineContainer(overrides?: {
     preferenceService,
     deliveryManager,
     inboxService,
+    documentAttachmentResolver,
   };
 }
 

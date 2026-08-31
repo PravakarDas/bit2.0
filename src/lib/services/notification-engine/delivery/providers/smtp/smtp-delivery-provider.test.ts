@@ -101,6 +101,71 @@ describe("SmtpDeliveryProvider.deliver", () => {
   });
 });
 
+describe("SmtpDeliveryProvider.deliver — Phase 18b attachment forwarding", () => {
+  it("omits the attachments key entirely when content has none — no-attachment call shape is byte-for-byte unchanged from before Phase 18b", async () => {
+    const fake = new FakeTransporter("success");
+    const provider = buildProvider(fake);
+
+    await provider.deliver(fakeJob({ recipientAddress: "jane@example.com" }), { subject: "Hi", bodyHtml: "<p>hi</p>", bodyText: "hi" }, buildContext());
+
+    assert.deepEqual(fake.sendMailCalls[0], {
+      from: "sender@example.com",
+      to: "jane@example.com",
+      subject: "Hi",
+      html: "<p>hi</p>",
+      text: "hi",
+    });
+    assert.ok(!Object.prototype.hasOwnProperty.call(fake.sendMailCalls[0], "attachments"));
+  });
+
+  it("omits the attachments key when content.attachments is an empty array", async () => {
+    const fake = new FakeTransporter("success");
+    const provider = buildProvider(fake);
+
+    await provider.deliver(fakeJob(), { subject: "Hi", attachments: [] }, buildContext());
+
+    assert.ok(!Object.prototype.hasOwnProperty.call(fake.sendMailCalls[0], "attachments"));
+  });
+
+  it("forwards a single attachment through to the transporter with the exact filename, contentType, and bytes", async () => {
+    const fake = new FakeTransporter("success");
+    const provider = buildProvider(fake);
+    const pdfBytes = Buffer.from("%PDF-1.3 fake payslip bytes");
+
+    await provider.deliver(
+      fakeJob({ recipientAddress: "jane@example.com" }),
+      {
+        subject: "Your payslip",
+        bodyHtml: "<p>See attached</p>",
+        bodyText: "See attached",
+        attachments: [{ filename: "payslip-2026-08.pdf", contentType: "application/pdf", content: pdfBytes }],
+      },
+      buildContext()
+    );
+
+    assert.equal(fake.sendMailCalls.length, 1);
+    const call = fake.sendMailCalls[0] as { attachments?: Array<{ filename: string; contentType: string; content: Buffer }> };
+    assert.equal(call.attachments?.length, 1);
+    assert.equal(call.attachments?.[0].filename, "payslip-2026-08.pdf");
+    assert.equal(call.attachments?.[0].contentType, "application/pdf");
+    assert.ok(Buffer.isBuffer(call.attachments?.[0].content));
+    assert.deepEqual(call.attachments?.[0].content, pdfBytes); // the transporter receives the exact same bytes, not a re-encoded copy
+  });
+
+  it("delivery still reports SUCCESS when an attachment is present", async () => {
+    const fake = new FakeTransporter("success");
+    const provider = buildProvider(fake);
+
+    const result = await provider.deliver(
+      fakeJob(),
+      { subject: "Hi", attachments: [{ filename: "a.pdf", contentType: "application/pdf", content: Buffer.from("x") }] },
+      buildContext()
+    );
+
+    assert.equal(result.status, "SUCCESS");
+  });
+});
+
 describe("SmtpDeliveryProvider lifecycle", () => {
   it("initialize() resolves without touching the network", async () => {
     const provider = buildProvider(new FakeTransporter());

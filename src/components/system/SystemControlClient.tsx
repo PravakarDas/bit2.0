@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { checkZktecoServer, updateSystemControlConfig } from "@/actions/system-control.actions";
 import EmailConfigCard from "@/components/system/EmailConfigCard";
+import GoogleDriveConfigCard from "@/components/system/GoogleDriveConfigCard";
 
 type SettingsState = {
   appTimezone: string;
@@ -53,12 +54,21 @@ type EmailConfigState = {
   hasAppPassword: boolean;
 };
 
+type GoogleDriveConfigState = {
+  serviceAccountEmail: string;
+  sharedDriveId: string | null;
+  rootFolderId: string;
+  rootFolderName: string;
+  hasPrivateKey: boolean;
+};
+
 interface SystemControlClientProps {
   initialSettings: SettingsState;
   canEditSensitive: boolean;
   isManager: boolean;
   logs: ChangeLog[];
   emailConfig?: EmailConfigState;
+  googleDriveConfig?: GoogleDriveConfigState;
 }
 
 function twoDigits(value: number) {
@@ -105,6 +115,7 @@ export default function SystemControlClient({
   isManager,
   logs,
   emailConfig,
+  googleDriveConfig,
 }: SystemControlClientProps) {
   const [form, setForm] = useState<SettingsState>(initialSettings);
   const [isSaving, startSave] = useTransition();
@@ -398,6 +409,8 @@ export default function SystemControlClient({
       </Card>
 
       {emailConfig && <EmailConfigCard initialConfig={emailConfig} />}
+
+      {googleDriveConfig && <GoogleDriveConfigCard initialConfig={googleDriveConfig} />}
 
       <Card>
         <CardHeader>

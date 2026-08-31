@@ -15,6 +15,9 @@ import { ExecutionContext } from "./execution-context";
 import { ProviderNotImplementedError } from "./errors";
 import { registerStubChannelAdapters } from "./channel-adapters";
 import { TemplateNotFoundError } from "../template/errors";
+import type { IDocumentAttachmentResolver } from "./document-attachment-resolver";
+import type { NotificationAttachment } from "../factories";
+import { DocumentError } from "../errors";
 
 function fakeJob(overrides: Partial<NotificationJobDTO> = {}): NotificationJobDTO {
   const now = new Date();
@@ -301,5 +304,102 @@ describe("JobDispatcher — Phase 8 template rendering", () => {
     await dispatcher.dispatch(job, new ExecutionContext(job, "worker-1"));
     assert.equal(templateEngine.renderCalls.length, 1); // rendered exactly once, upstream of the adapter
     assert.deepEqual(adapter.receivedContent, { subject: "rendered once" });
+  });
+});
+
+/** Minimal fake of `IDocumentAttachmentResolver` — only `resolve()` is exercised by JobDispatcher. */
+class FakeDocumentAttachmentResolver implements IDocumentAttachmentResolver {
+  resolveCalls: string[] = [];
+
+  constructor(private readonly behavior: { kind: "resolve"; attachment: NotificationAttachment } | { kind: "throw"; error: unknown }) {}
+
+  async resolve(documentId: string): Promise<NotificationAttachment> {
+    this.resolveCalls.push(documentId);
+    if (this.behavior.kind === "throw") throw this.behavior.error;
+    return this.behavior.attachment;
+  }
+}
+
+function fakeAttachment(overrides: Partial<NotificationAttachment> = {}): NotificationAttachment {
+  return { filename: "payslip.pdf", contentType: "application/pdf", content: Buffer.from("%PDF-1.3"), ...overrides };
+}
+
+describe("JobDispatcher — Phase 18b document attachment resolution", () => {
+  it("does not attempt attachment resolution when the job has no documentId, even if a resolver is supplied", async () => {
+    const factory = new ChannelAdapterFactory();
+    const adapter = new MockAdapter({ kind: "succeed", result: { outcome: "SUCCESS" } });
+    factory.register(adapter);
+
+    const resolver = new FakeDocumentAttachmentResolver({ kind: "resolve", attachment: fakeAttachment() });
+    const dispatcher = new JobDispatcher(factory, undefined, undefined, undefined, resolver);
+    const job = fakeJob({ documentId: null });
+
+    await dispatcher.dispatch(job, new ExecutionContext(job, "worker-1"));
+    assert.equal(resolver.resolveCalls.length, 0);
+    assert.deepEqual(adapter.receivedContent, {});
+  });
+
+  it("does not attempt attachment resolution when the job has a documentId but no resolver is supplied (pre-Phase-18b backward compatibility)", async () => {
+    const factory = new ChannelAdapterFactory();
+    const adapter = new MockAdapter({ kind: "succeed", result: { outcome: "SUCCESS" } });
+    factory.register(adapter);
+
+    const dispatcher = new JobDispatcher(factory); // no resolver at all
+    const job = fakeJob({ documentId: "doc_1" });
+
+    const outcome = await dispatcher.dispatch(job, new ExecutionContext(job, "worker-1"));
+    assert.equal(outcome.kind, "SUCCESS");
+    assert.deepEqual(adapter.receivedContent, {});
+  });
+
+  it("resolves the document and merges it onto the rendered content as a single-element attachments array", async () => {
+    const factory = new ChannelAdapterFactory();
+    const adapter = new MockAdapter({ kind: "succeed", result: { outcome: "SUCCESS" } });
+    factory.register(adapter);
+
+    const attachment = fakeAttachment({ filename: "payslip-2026-08.pdf" });
+    const resolver = new FakeDocumentAttachmentResolver({ kind: "resolve", attachment });
+    const dispatcher = new JobDispatcher(factory, undefined, undefined, undefined, resolver);
+    const job = fakeJob({ documentId: "doc_1" });
+
+    await dispatcher.dispatch(job, new ExecutionContext(job, "worker-1"));
+
+    assert.deepEqual(resolver.resolveCalls, ["doc_1"]);
+    assert.deepEqual(adapter.receivedContent, { attachments: [attachment] });
+  });
+
+  it("merges the attachment onto template-rendered content, not in place of it", async () => {
+    const factory = new ChannelAdapterFactory();
+    const adapter = new MockAdapter({ kind: "succeed", result: { outcome: "SUCCESS" } });
+    factory.register(adapter);
+
+    const eventRepository = new FakeEventRepository();
+    eventRepository.seed(fakeEvent({ id: "evt_1" }));
+    const rendered: RenderedNotificationContent = { subject: "Payroll processed", bodyHtml: "<p>hi</p>", bodyText: "hi" };
+    const templateEngine = new FakeTemplateEngine({ kind: "render", content: rendered });
+
+    const attachment = fakeAttachment();
+    const resolver = new FakeDocumentAttachmentResolver({ kind: "resolve", attachment });
+    const dispatcher = new JobDispatcher(factory, undefined, eventRepository, templateEngine, resolver);
+    const job = fakeJob({ eventId: "evt_1", documentId: "doc_1" });
+
+    await dispatcher.dispatch(job, new ExecutionContext(job, "worker-1"));
+
+    assert.deepEqual(adapter.receivedContent, { ...rendered, attachments: [attachment] });
+  });
+
+  it("a document that fails to resolve (e.g. DocumentError) is a controlled FAILURE, not a silent send without the attachment", async () => {
+    const factory = new ChannelAdapterFactory();
+    const adapter = new MockAdapter({ kind: "succeed", result: { outcome: "SUCCESS" } });
+    factory.register(adapter);
+
+    const resolver = new FakeDocumentAttachmentResolver({ kind: "throw", error: new DocumentError("Document not found: doc_missing", "doc_missing") });
+    const dispatcher = new JobDispatcher(factory, undefined, undefined, undefined, resolver);
+    const job = fakeJob({ documentId: "doc_missing" });
+
+    const outcome = await dispatcher.dispatch(job, new ExecutionContext(job, "worker-1"));
+
+    assert.equal(outcome.kind, "FAILURE");
+    assert.equal(adapter.receivedContent, null); // the adapter (and therefore SMTP) was never called
   });
 });

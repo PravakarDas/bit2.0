@@ -5,4 +5,5 @@ export type {
   NotificationChannelAdapter,
   RenderedNotificationContent,
   ChannelDeliveryOutcome,
+  NotificationAttachment,
 } from "./channel-adapter.interface";

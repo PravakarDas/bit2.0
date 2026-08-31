@@ -95,6 +95,19 @@ async function main() {
             bodyTemplateText:
                 "Hi {{employee.name}}, your overtime request for {{totalOvertime}} hours on {{overtimeDate}} has been declined by {{declinedBy}}. Reason: {{declineReason}}",
         },
+        {
+            // Phase 18c: payload raised by payroll.actions.ts's dispatchPayrollPayslips()
+            // is { employeeName, month, year } (flat, not { employee: { name } }
+            // like the templates above — see PayrollEmailImplementationPlan.md §16).
+            // The PDF payslip itself is attached via NotificationJob.documentId,
+            // not rendered into this template.
+            key: "PAYROLL_PROCESSED",
+            subjectTemplate: "Your Payslip for {{month}} {{year}}",
+            bodyTemplateHtml:
+                "<p>Hello {{employeeName}},</p><p>Your payslip for {{month}} {{year}} is ready.</p><p>Please find your payslip attached to this email.</p><p>Regards,<br/>HR / Payroll Team</p>",
+            bodyTemplateText:
+                "Hello {{employeeName}},\n\nYour payslip for {{month}} {{year}} is ready.\n\nPlease find your payslip attached to this email.\n\nRegards,\nHR / Payroll Team",
+        },
     ];
 
     for (const template of businessEventTemplates) {

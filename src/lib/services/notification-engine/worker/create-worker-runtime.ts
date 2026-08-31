@@ -11,6 +11,7 @@ import { resolveWorkerConfig, type WorkerConfig } from "./worker-config";
 import { DeliveryManagerChannelAdapter, type DeliveryManager } from "../delivery";
 import type { INotificationRepository } from "../repositories/interfaces";
 import type { ITemplateEngine } from "../template/template-engine.interface";
+import type { IDocumentAttachmentResolver } from "./document-attachment-resolver";
 
 /**
  * Phase 8 integration dependencies — all optional, all default to "not
@@ -30,6 +31,8 @@ export interface DispatchIntegration {
   eventRepository?: INotificationRepository;
   /** Renders `RenderedNotificationContent` before dispatch — see job-dispatcher.ts's `renderContent()`. */
   templateEngine?: ITemplateEngine;
+  /** Phase 18b: resolves a job's `documentId` into a `NotificationAttachment` before dispatch — see job-dispatcher.ts's `renderContent()`. */
+  documentAttachmentResolver?: IDocumentAttachmentResolver;
 }
 
 /**
@@ -62,7 +65,13 @@ export function createWorkerRuntime(
     channelAdapterFactory.register(new DeliveryManagerChannelAdapter(NotificationChannel.EMAIL, dispatchIntegration.deliveryManager));
   }
 
-  const jobDispatcher = new JobDispatcher(channelAdapterFactory, logger, dispatchIntegration.eventRepository, dispatchIntegration.templateEngine);
+  const jobDispatcher = new JobDispatcher(
+    channelAdapterFactory,
+    logger,
+    dispatchIntegration.eventRepository,
+    dispatchIntegration.templateEngine,
+    dispatchIntegration.documentAttachmentResolver
+  );
   const metricsCollector = new WorkerMetricsCollector();
   const worker = new NotificationWorker(queueEngine, jobDispatcher, metricsCollector, config, logger);
   const runtime = new WorkerRuntime(worker, metricsCollector, config, logger);

@@ -58,4 +58,13 @@ export const NOTIFICATION_ENGINE_LIMITS = Object.freeze({
   maxProviderNameLength: 150,
   maxDocumentTypeLength: 100,
   maxSourceEntityIdLength: 100,
+  /**
+   * Phase 18b addition. A defensive upper bound on a single resolved
+   * `Document`'s file size before it's read fully into memory and attached
+   * to an outbound email — guards against an unexpectedly huge/corrupt
+   * generated file blowing up worker memory or being silently rejected by
+   * the SMTP provider (most providers cap total message size well under
+   * this). Not a business rule about any specific document type.
+   */
+  maxAttachmentBytes: 15 * 1024 * 1024, // 15 MB
 });

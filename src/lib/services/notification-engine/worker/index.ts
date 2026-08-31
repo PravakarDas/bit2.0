@@ -10,6 +10,7 @@ export { ExecutionContext } from "./execution-context";
 export { ProviderNotImplementedError } from "./errors";
 export { StubChannelAdapter, registerStubChannelAdapters } from "./channel-adapters";
 export { JobDispatcher, type DispatchOutcome } from "./job-dispatcher";
+export { DocumentAttachmentResolver, type IDocumentAttachmentResolver } from "./document-attachment-resolver";
 export { NotificationWorker, type ClaimResult, type ProcessResult } from "./notification-worker";
 export type { INotificationWorker } from "./notification-worker.interface";
 export { WorkerRuntime } from "./worker-runtime";

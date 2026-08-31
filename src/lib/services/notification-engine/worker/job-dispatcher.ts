@@ -13,6 +13,7 @@ import type { ExecutionContext } from "./execution-context";
 // from a file under `worker/` regardless.
 import type { INotificationRepository } from "../repositories/interfaces";
 import type { ITemplateEngine } from "../template/template-engine.interface";
+import type { IDocumentAttachmentResolver } from "./document-attachment-resolver";
 
 export type DispatchOutcome =
   | { kind: "SUCCESS"; result: ChannelDeliveryOutcome }
@@ -42,6 +43,20 @@ export type DispatchOutcome =
  * transient provider failure — no new `DispatchOutcome` kind, no change to
  * `NotificationWorker`'s retry routing.
  *
+ * Phase 18b integration: `documentAttachmentResolver` is likewise optional
+ * and defaults to nothing — a `JobDispatcher` built without it behaves
+ * exactly as before this phase, even for a job whose `documentId` happens
+ * to be set (the attachment is simply not resolved; existing callers that
+ * never heard of documents are unaffected). When supplied (the real
+ * `createWorkerRuntime` wiring always supplies it — see container.ts),
+ * `renderContent()` resolves `job.documentId` into a `NotificationAttachment`
+ * *after* template rendering and merges it onto the rendered content. A
+ * `documentId` that fails to resolve (missing/invalid `Document`, missing/
+ * empty/oversized file) throws `DocumentError`, caught by the same generic
+ * `catch` in `dispatch()` as any other dispatch error — routed to retry/
+ * dead-letter exactly like today's `TemplateNotFoundError`, so a job never
+ * silently sends without its required attachment.
+ *
  * No SMTP, no real delivery *of any other channel*: every non-EMAIL
  * adapter registered by `createWorkerRuntime` is still a `StubChannelAdapter`
  * (see ./channel-adapters/) that always throws `ProviderNotImplementedError`
@@ -62,7 +77,8 @@ export class JobDispatcher {
     private readonly channelAdapterFactory: ChannelAdapterFactory,
     private readonly logger: IQueueLogger = new NoopLogger(),
     private readonly eventRepository?: INotificationRepository,
-    private readonly templateEngine?: ITemplateEngine
+    private readonly templateEngine?: ITemplateEngine,
+    private readonly documentAttachmentResolver?: IDocumentAttachmentResolver
   ) {}
 
   async dispatch(job: NotificationJobDTO, context: ExecutionContext): Promise<DispatchOutcome> {
@@ -96,20 +112,25 @@ export class JobDispatcher {
    * that doesn't supply both dependencies.
    */
   private async renderContent(job: NotificationJobDTO): Promise<RenderedNotificationContent> {
-    if (!this.templateEngine || !this.eventRepository) {
-      return {};
+    let content: RenderedNotificationContent = {};
+
+    if (this.templateEngine && this.eventRepository) {
+      const event = await this.eventRepository.findById(job.eventId);
+      if (event) {
+        const payload = event.payload;
+        const renderContext: Record<string, unknown> =
+          payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {};
+
+        content = await this.templateEngine.render({ key: event.eventType, channel: job.channel, context: renderContext });
+      }
     }
 
-    const event = await this.eventRepository.findById(job.eventId);
-    if (!event) {
-      return {};
+    if (job.documentId && this.documentAttachmentResolver) {
+      const attachment = await this.documentAttachmentResolver.resolve(job.documentId);
+      content = { ...content, attachments: [attachment] };
     }
 
-    const payload = event.payload;
-    const renderContext: Record<string, unknown> =
-      payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {};
-
-    return this.templateEngine.render({ key: event.eventType, channel: job.channel, context: renderContext });
+    return content;
   }
 
   /**

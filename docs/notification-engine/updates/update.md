@@ -1084,3 +1084,89 @@ IDOR/cross-user access closed (every AdminNotification read/write now requires a
 
 Wire `LOAN_APPLICATION_PENDING`/`WALLET_REQUEST_PENDING` to real `loan.actions.ts`/`wallet.actions.ts` logic (now safe to build on top of), or continue the Phase 15 business-event rollout to `approveMedicalClaim`/`rejectMedicalClaim` and `approveTimelineModificationRequest`/`rejectTimelineModificationRequest`.
 
+# Post-Phase-17 Gap / Unfinished-Work Audit
+
+**AUDIT ONLY — no code, schema, or migration changes.** Full detail in [PostPhase17GapAuditReport.md](../reports/PostPhase17GapAuditReport.md).
+
+Reviewed every phase report, the design doc, and the current codebase (plus read-only live-database queries) for everything planned-but-incomplete, deferred, stubbed, or flagged as a known issue across Phases 0–17. Two items an old (pre-Phase-11) audit table still listed as open — the crash-recovery reaper never firing, and `NotificationSettings` never being read — were verified to have actually been resolved in Phase 11 and are corrected here, not carried forward.
+
+**Nothing rises to "must fix before new features."** The engine is correct and safe as of Phase 17. The only item with live, real-world impact right now is operational, not code: 4 historical `LOAN_APPROVED` jobs sit in `DEAD_LETTER` from before the earlier SMTP outage was fixed (confirmed via a read-only query) — worth requeuing or dismissing via the existing Admin Notification Center, no code change needed.
+
+**Should fix next**: (1) the 4 stuck dead-letter jobs (action, not code); (2) a combined "Delivery Observability & Resilience" phase — `NotificationDeliveryAttempt` rows are never written (confirmed 0 rows live) and the single SMTP provider has no auto-recovery once marked `OFFLINE`; (3) the Phase 14 HR routing gap, repeatedly surfaced but never resolved — the `HR` role is authorized at the action layer almost everywhere in this codebase but has zero reachable page routes, making it currently non-functional in the app (an app-wide decision, not a notification-engine one, but worth sequencing here since this project keeps rediscovering it).
+
+**Future/optional**: unused `NotificationProvider` health-persistence table, partial `DeliveryPolicy` enforcement, no job-retention/cleanup job, non-functional `IN_APP_ADMIN`/`IN_APP_EMPLOYEE` channels (latent, unused by any current event), medical/timeline-modification/wallet/payroll notification events, a missing shared-secret check on `api/cron/daily-notifications`, and a documentation note distinguishing the legacy `AdminNotification` system from the new `NotificationJob`-based one.
+
+**Intentionally out of scope**: `LOAN_APPLICATION_PENDING`/`WALLET_REQUEST_PENDING` should **remain unused stubs** — their only caller (`NotificationBell.tsx`) is dead, unreferenced UI, and real loan/wallet approval already works correctly elsewhere (`/admin/loans`, `/admin/wallet`); implementing them would only duplicate existing functionality behind unreachable code. The 5 cosmetic Edge-runtime build warnings remain out of scope per your own earlier explicit decision.
+
+**Recommended order**: (1) manually resolve the 4 stuck jobs; (2) Phase 18 — Delivery Observability & Resilience; (3) Phase 19 — HR Routing & Access Model (app-wide); (4) Phase 20 — medical claim + timeline-modification notification events; (5) everything else, opportunistically.
+
+# Phase 18a — Payslip PDF Generation
+
+Priorities shifted after the gap audit: loan notifications are disabled across all branches and de-prioritized; the immediate business need became **payroll email with a payslip PDF attachment**. A read-only audit (payroll flow, existing PDF/email code, Notification Engine attachment support) preceded this phase and found: no payroll email anywhere, no PDF generation anywhere, no schema change needed (`NotificationJob.documentId` and the `Document` model already exist, wired, and tested end-to-end — just never used), and the Notification Engine's `RenderedNotificationContent` has no attachment field yet. Phase 18a builds **only** the standalone PDF-rendering layer; wiring it into payroll/email is explicitly deferred to 18b/18c pending review.
+
+Full detail in [PayrollPayslipPdfReport.md](../reports/PayrollPayslipPdfReport.md).
+
+**What was built**: `generatePayslipPdf(data: PayslipData): Promise<Buffer>` (`src/lib/services/payslip-pdf.service.ts`) using **pdfkit** (pure Node, no browser/Chromium dependency). Input fields mirror the real `SalaryPayment` model exactly — no invented fields. The function touches no database, SMTP, or Notification Engine code; it only renders.
+
+**Currency symbol fix**: pdfkit's built-in Helvetica has no glyph for `৳` (renders at zero width — silently invisible). Rather than alter the app's `formatCurrency()`, a small **Bengali-script-only subset of Noto Sans Bengali** (OFL-1.1 licensed, ~110 KB for both weights) is bundled and embedded directly into the PDF, used only for the single currency-symbol character; digits/grouping still render in Helvetica on the same line.
+
+**A real bug the test upgrade caught**: initial content-verification tests used naive `buffer.toString().includes(...)` checks, which cannot reliably decode pdfkit's per-font text encoding. Switching to a genuine independent parser (**`pdfjs-dist`**, devDependency only) to extract real text immediately surfaced an actual rendering defect — the "Deductions" heading was silently truncated to "Deductio" because pdfkit's cursor was left at the wrong x-position after a right-aligned amount line. Fixed with a one-line cursor reset; a regression test now guards it.
+
+**Verification**: `pnpm tsc --noEmit` — clean. `pnpm eslint` — clean. `pnpm run test` — **579/579 passing** (16 new, 563 unchanged). `pnpm run build` (run by the user) — succeeded, same 5 pre-existing cosmetic Edge Runtime warnings, none related to this phase. A real generated payslip PDF was independently re-parsed and manually confirmed to contain the correct employee name, month, company name, the actual `৳` glyph, and correctly grouped amounts.
+
+**Not touched**: `prisma/schema.prisma`, any migration, `payroll.actions.ts`, `NotificationService`/`NotificationJob`/`JobDispatcher`/`SmtpDeliveryProvider`, any loan-notification code, any UI.
+
+**Next**: pending review — Phase 18b (additive `RenderedNotificationContent.attachments` field + `JobDispatcher`/`SmtpDeliveryProvider` wiring) and Phase 18c (`processPayroll()` integration + `PAYROLL_PROCESSED` event), per the plan from the earlier audit.
+
+# Google Drive Config — Migration Safety (Stage 1, partial)
+
+Started building Google Drive integration for payroll payslip archival (per the approved `PayrollEmailFlowReport.md` Part 2 design). Installed `googleapis`, added a `GoogleDriveConfig` model to `schema.prisma`, and wrote `src/lib/services/google-drive.service.ts` (`resolveGoogleDriveConfig()` mirroring `resolveEmailConfig()`; `testConnection()` implementing a permission-check-only test via Drive API's `files.get(...).capabilities` field — no test file is created or deleted).
+
+The first `prisma migrate dev` attempt hit **pre-existing schema drift, unrelated to this feature**: `Branch.isLatePenaltyEnabled` exists live (deployed from `main` via commit `91254be`, never merged into this branch) but wasn't in this branch's migration history, and Prisma suggested a full `migrate reset` — refused, per this project's standing database-safety rule.
+
+A full read-only audit (full detail in [GoogleDriveMigrationSafetyAuditReport.md](../reports/GoogleDriveMigrationSafetyAuditReport.md)) found: the *only* real difference between the live DB and this branch's schema (confirmed via an authoritative `migrate diff --from-url ... --to-schema-datamodel`) was `Branch.isLatePenaltyEnabled` and the new `GoogleDriveConfig` table — everything else `migrate dev`'s replay-based drift check flagged was already-known, already-documented bookkeeping noise from a prior migration recovery (`MigrationRecoveryReport.md`), re-confirmed harmless. The missing `20260804120000_add_branch_late_penalty_toggle` migration was fully recovered from git (commit `91254be`, still on `main`/`origin/fix`).
+
+**Resolved via the approved "Option A"**: generated an isolated schema-to-schema diff (never touching the live DB, so the unrelated Branch drift structurally could not appear), reviewed the resulting SQL with the user (confirmed: only a `CREATE TABLE "GoogleDriveConfig"`, nothing else), wrote it into a new migration folder, applied it via `prisma db execute` + `prisma migrate resolve --applied` — the same safe pattern already proven in this project's prior `EmailConfig` recovery. `Branch.isLatePenaltyEnabled` was deliberately left untouched throughout.
+
+**Verification**: `prisma migrate status` → up to date. `GoogleDriveConfig`'s columns/PK verified via `information_schema`, matching `schema.prisma` exactly. `Branch.isLatePenaltyEnabled` and `Branch`'s total column count independently re-verified identical before/after. `pnpm tsc --noEmit` — clean. `pnpm eslint` — clean. `pnpm run test` — **600/600 passing**. Build not run (deferred per instruction).
+
+**Not touched**: any existing migration file, `Branch` or any other unrelated table/index/default, loan notification code, SMTP delivery logic, `QueueEngine`, `WorkerRuntime`, `JobDispatcher` attachment logic, `payslip-pdf.service.ts`.
+
+**Next**: Google Drive admin settings actions/UI (rest of Stage 1), then Stage 2 (Drive folder/upload logic), Stage 3 (payroll integration), Stage 4 (template/preference) — each a separate, explicitly-approved step per the user's staged rollout plan.
+
+# Google Drive Folder & File Capability (Stage 2)
+
+Google Drive admin config (Stage 1: `google-drive-config.ts`, `google-drive-config.actions.ts`, `GoogleDriveConfigCard.tsx`) and a read-only implementation plan (`PayrollEmailImplementationPlan.md`) were completed and reviewed first. With the branch-fallback (`"Unassigned"`) and filename-scheme (`SalaryPayment.userId`-based) decisions confirmed, this stage built **only** the Drive-side folder/file capability the upcoming payroll flow will call — no `payroll.actions.ts` changes, no `PAYROLL_PROCESSED` event, no email wiring.
+
+**Added**: `GoogleDriveService.findOrCreateFolder(config, parentId, name)` and `GoogleDriveService.uploadFile(config, input)` in `src/lib/services/google-drive-client.ts` (additive — `testConnection()` untouched). `findOrCreateFolder` does a `files.list` lookup before ever calling `files.create`, so repeated payroll runs against the same `Payroll/{Month Year}/{Branch}/` path never create duplicate folders; `uploadFile` streams a `Buffer` into Drive with `application/pdf` as the default MIME type and returns the file id/name/parent/`webViewLink`. Both wrap Drive API errors through the existing `mapDriveError()` — no new error-handling pattern introduced, no credentials or file content ever appear in a thrown message.
+
+**Added**: `src/lib/payslip-filename.ts` (new, pure, no Prisma) — `generatePayslipFilename()` produces `{userId}_{sanitized name}_{Month}_{Year}.pdf` (e.g. `cmn123456_Abdul_Kader_February_2026.pdf`); `generatePayrollMonthFolderName()` produces `"February 2026"`; `resolveBranchFolderName()` returns the confirmed `"Unassigned"` fallback for a `null`/blank branch.
+
+**Tests**: 15 new cases in `google-drive-client.test.ts` (folder reuse/create at both the month and branch level, `"Unassigned"` handled with no special-casing, idempotent on repeated calls, no delete/update ever invoked, mapped errors, no secret leakage; upload MIME type, returned metadata, exact buffer forwarding, mapped errors, no secret/content leakage) and a new `payslip-filename.test.ts` (month naming, sanitization, determinism, the documented example, branch fallback). `tsconfig.test.json` and `package.json`'s `test` script updated to include both.
+
+**Not touched**: `payroll.actions.ts`, `NotificationService`/`QueueEngine`/`WorkerRuntime`/`JobDispatcher`/`SmtpDeliveryProvider`, `DocumentAttachmentResolver`, `payslip-pdf.service.ts`, any loan-notification code, `prisma/schema.prisma` (no migration — no schema change needed), `google-drive-config.actions.ts`/`GoogleDriveConfigCard.tsx`. No new dependency — `googleapis` and Node's built-in `stream` module were already available.
+
+Full detail in [PayrollEmailImplementationPlan.md](../reports/PayrollEmailImplementationPlan.md) §16.
+
+**Next**: `payroll.actions.ts` wiring (capture `salaryPaymentId`s, include `branch`, post-commit per-employee loop calling PDF generation → `findOrCreateFolder` → `uploadFile` → `Document` row → `raiseEvent("PAYROLL_PROCESSED")`), plus the new event/template/preference entry and an end-to-end integration test — each pending explicit approval per the staged rollout plan.
+
+# Payroll Email Flow — Full Wiring (Phase 18c)
+
+Connected every already-built piece into the real post-payroll flow: `processPayroll()`'s transaction now captures each created `SalaryPayment`'s id (previously discarded) and `getPayrollAggregation()` now includes the employee's branch. After the transaction commits, a new post-commit step (`dispatchPayrollPayslips`, awaited, in its own `try/catch`, never inside the transaction) runs, for each employee independently: generate the payslip PDF (`generatePayslipPdf`, unmodified) → best-effort Google Drive upload (`findOrCreateFolder`/`uploadFile`, unmodified) → create the `Document` row → `raiseEvent("PAYROLL_PROCESSED")`, with a stable `PAYROLL_PROCESSED:{salaryPaymentId}` dedupeKey reusing `NotificationService`'s existing dedup. The new `PAYROLL_PROCESSED`/`EMAIL` template (seed.js) and preference-catalog entry follow the exact existing patterns.
+
+**Two real integration gaps found and fixed, not part of the original plan**: (1) `DocumentAttachmentResolver` (frozen, Phase 18b) only resolves an attachment when `Document.status === "GENERATED_LOCAL"` — the original plan's "transition to UPLOADED on Drive success" would have silently broken the email attachment for any job processed after that transition. Fixed by never transitioning a payslip `Document`'s status away from `GENERATED_LOCAL`; Drive's outcome is recorded via `driveFileId`/`driveFileUrl`/`uploadedAt` and a `DocumentUploadAttempt` row instead. (2) `production-worker.ts` — the file `instrumentation.ts` actually starts at boot — never had a `documentAttachmentResolver` wired into its own `createWorkerRuntime()` call; only the *dormant*, never-started container `workerRuntime` did. Every attachment-bearing email (payslips included) would have sent with no attachment, silently, in the real running app. Fixed additively: `container.ts` now also exposes the `documentAttachmentResolver` it already builds; `production-worker.ts` passes it through. `JobDispatcher`/`WorkerRuntime`/`QueueEngine` themselves were not touched.
+
+**Business rule verified end to end**: a Google Drive failure never blocks the payslip email — proven by a full-pipeline integration test using the real `generatePayslipPdf`, real local files, and the real `NotificationService → QueueEngine → NotificationWorker → JobDispatcher → DocumentAttachmentResolver → DeliveryManager → SmtpDeliveryProvider` chain (only Drive and the SMTP transporter are faked), asserting the exact generated PDF bytes reach the fake transporter's attachment even when the Drive upload throws. Also proven: one employee's PDF-generation failure doesn't stop another employee's email in the same run, and re-dispatching the same `salaryPaymentId` doesn't create a second `NotificationJob`.
+
+**Added**: `src/lib/services/payroll-payslip-dispatch.service.ts` (+ unit test) and `src/lib/services/notification-engine/integration/payroll-processed.integration.test.ts`.
+
+**Modified**: `src/actions/payroll.actions.ts`, `src/lib/services/notification-engine/container.ts`, `src/lib/services/notification-engine/production-worker.ts`, `prisma/seed.js`, `src/lib/services/notification-engine/preferences/preference-catalog.ts`, `tsconfig.test.json`, `package.json`.
+
+**Not touched**: `prisma/schema.prisma`, any migration, `payslip-pdf.service.ts`, `document-attachment-resolver.ts`, `JobDispatcher`, `DeliveryManager`, `SmtpDeliveryProvider`, `QueueEngine`, `WorkerRuntime` (class), existing SMTP config, Google Drive config UI/actions/authentication, any loan-notification code, any payroll calculation formula. No database change, no new migration, no new dependency.
+
+Full detail in [PayrollEmailImplementationPlan.md](../reports/PayrollEmailImplementationPlan.md) §17.
+
+**Known limitation, explicitly accepted**: no Document/Drive-level idempotency for a hypothetical repeated dispatch call for the same `salaryPaymentId` (only the `NotificationJob`-level dedupeKey guard exists) — not reachable via any real path today since `processPayroll()`'s own month-level immutability guard prevents a month from ever being processed twice.
+
+**Pre-existing gap, flagged not fixed**: `processPayroll()` has no inline `getDbUser()`/role check — enforcement is page-level `(admin)` layout gating only. Out of scope for this phase (connect the pieces, don't touch payroll authorization).
+

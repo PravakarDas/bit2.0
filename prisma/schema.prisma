@@ -631,6 +631,29 @@ model EmailConfig {
   updatedAt            DateTime @updatedAt
 }
 
+// Google Drive service-account config (Payroll PDF archival) — singleton row,
+// same "global" id + encrypted-secret pattern as EmailConfig above.
+// serviceAccountEmail + privateKeyEncrypted are the two fields a Google
+// service account needs to authenticate (JWT auth, no OAuth consent flow).
+// rootFolderId is the Drive folder ID (shared with the service account, or
+// inside sharedDriveId) under which the "Payroll" folder tree is found/
+// created — a bare service account has no usable personal Drive storage of
+// its own, so this anchor must point at a location a human has already
+// shared with it.
+model GoogleDriveConfig {
+  id                  String   @id @default("global")
+  serviceAccountEmail String   @default("")
+  privateKeyEncrypted String   @default("")
+  sharedDriveId       String? // set only when rootFolderId lives inside a Shared Drive
+  rootFolderId        String   @default("")
+  rootFolderName      String   @default("Payroll")
+  updatedById         String?
+  updatedByEmail      String?
+  updatedByRole       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
 // Leave Management Models
 model LeaveType {
   id               String           @id @default(cuid())

@@ -54,4 +54,10 @@ export const MANAGEABLE_NOTIFICATION_TYPES: readonly ManageableNotificationType[
     description: "Email when an overtime request you submitted is declined.",
     channels: Object.freeze(["EMAIL"]) as NotificationChannel[],
   }),
+  Object.freeze({
+    notificationType: "PAYROLL_PROCESSED",
+    label: "Payslip ready",
+    description: "Email with your payslip PDF attached when payroll is processed.",
+    channels: Object.freeze(["EMAIL"]) as NotificationChannel[],
+  }),
 ]);

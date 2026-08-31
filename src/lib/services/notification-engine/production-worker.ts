@@ -91,6 +91,12 @@ export async function startProductionNotificationWorker(): Promise<void> {
           deliveryManager: notificationEngineContainer.deliveryManager,
           eventRepository: notificationEngineContainer.repositories.notificationRepository,
           templateEngine: notificationEngineContainer.templateEngine,
+          // Phase 18c fix: without this, a job's `documentId` (e.g. a payslip
+          // PDF) was never resolved into an attachment by the actual running
+          // worker — `notificationEngineContainer.workerRuntime` has this
+          // wired (container.ts) but is never started; this is the
+          // dispatcher that really runs. See PayrollEmailImplementationPlan.md §16.
+          documentAttachmentResolver: notificationEngineContainer.documentAttachmentResolver,
         }
       : {}
   );
