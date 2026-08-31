@@ -55,11 +55,17 @@ type EmailConfigState = {
 };
 
 type GoogleDriveConfigState = {
+  authenticationMethod: "SERVICE_ACCOUNT" | "OAUTH2";
   serviceAccountEmail: string;
   sharedDriveId: string | null;
   rootFolderId: string;
   rootFolderName: string;
   hasPrivateKey: boolean;
+  oauthClientId: string;
+  hasOauthClientSecret: boolean;
+  hasOauthRefreshToken: boolean;
+  oauthConnectedEmail: string | null;
+  oauthRedirectUri: string | null;
 };
 
 interface SystemControlClientProps {

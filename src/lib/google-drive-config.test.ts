@@ -41,8 +41,13 @@ describe("canManageGoogleDriveConfig — matches the SMTP config authorization r
 
 function fakeRecord(overrides: Partial<GoogleDriveConfigRecord> = {}): GoogleDriveConfigRecord {
   return {
+    authenticationMethod: "SERVICE_ACCOUNT",
     serviceAccountEmail: "payroll-bot@my-project.iam.gserviceaccount.com",
     privateKeyEncrypted: "iv:tag:cipher",
+    oauthClientId: "",
+    oauthClientSecretEncrypted: "",
+    oauthRefreshTokenEncrypted: "",
+    oauthConnectedEmail: null,
     sharedDriveId: null,
     rootFolderId: "folder_abc123",
     rootFolderName: "Payroll",
@@ -52,10 +57,28 @@ function fakeRecord(overrides: Partial<GoogleDriveConfigRecord> = {}): GoogleDri
 }
 
 describe("maskGoogleDriveConfig — secret masking", () => {
-  it("never includes the encrypted private key value in the returned view", () => {
+  it("never includes any encrypted secret value (private key, OAuth client secret, refresh token) in the returned view", () => {
     const view = maskGoogleDriveConfig(fakeRecord());
-    assert.deepEqual(Object.keys(view).sort(), ["hasPrivateKey", "rootFolderId", "rootFolderName", "serviceAccountEmail", "sharedDriveId", "updatedAt"]);
-    assert.equal((view as unknown as Record<string, unknown>).privateKeyEncrypted, undefined);
+    assert.deepEqual(
+      Object.keys(view).sort(),
+      [
+        "authenticationMethod",
+        "hasOauthClientSecret",
+        "hasOauthRefreshToken",
+        "hasPrivateKey",
+        "oauthClientId",
+        "oauthConnectedEmail",
+        "rootFolderId",
+        "rootFolderName",
+        "serviceAccountEmail",
+        "sharedDriveId",
+        "updatedAt",
+      ],
+    );
+    const raw = view as unknown as Record<string, unknown>;
+    assert.equal(raw.privateKeyEncrypted, undefined);
+    assert.equal(raw.oauthClientSecretEncrypted, undefined);
+    assert.equal(raw.oauthRefreshTokenEncrypted, undefined);
   });
 
   it("reports hasPrivateKey: true when a key is stored", () => {
@@ -75,12 +98,37 @@ describe("maskGoogleDriveConfig — secret masking", () => {
     assert.equal(view.rootFolderName, "Payslips");
     assert.equal(view.sharedDriveId, "sd1");
   });
+
+  it("reports hasOauthClientSecret / hasOauthRefreshToken booleans without leaking either secret, and passes through oauthClientId/oauthConnectedEmail (not secrets)", () => {
+    const view = maskGoogleDriveConfig(
+      fakeRecord({
+        authenticationMethod: "OAUTH2",
+        oauthClientId: "123-abc.apps.googleusercontent.com",
+        oauthClientSecretEncrypted: "iv:tag:cipher",
+        oauthRefreshTokenEncrypted: "iv:tag:cipher2",
+        oauthConnectedEmail: "someone@gmail.com",
+      }),
+    );
+    assert.equal(view.authenticationMethod, "OAUTH2");
+    assert.equal(view.oauthClientId, "123-abc.apps.googleusercontent.com");
+    assert.equal(view.hasOauthClientSecret, true);
+    assert.equal(view.hasOauthRefreshToken, true);
+    assert.equal(view.oauthConnectedEmail, "someone@gmail.com");
+  });
+
+  it("reports hasOauthClientSecret / hasOauthRefreshToken: false when not connected yet", () => {
+    const view = maskGoogleDriveConfig(fakeRecord({ authenticationMethod: "OAUTH2" }));
+    assert.equal(view.hasOauthClientSecret, false);
+    assert.equal(view.hasOauthRefreshToken, false);
+    assert.equal(view.oauthConnectedEmail, null);
+  });
 });
 
 describe("buildGoogleDriveConfigUpdateData — encryption + preserving an existing secret", () => {
   it("encrypts a newly submitted private key (real encryptSecret, real round-trip via decryptSecret)", () => {
     const plaintext = "-----BEGIN PRIVATE KEY-----\nSOME-REAL-LOOKING-KEY-MATERIAL\n-----END PRIVATE KEY-----\n";
     const data = buildGoogleDriveConfigUpdateData({
+      authenticationMethod: "SERVICE_ACCOUNT",
       serviceAccountEmail: "bot@x.iam.gserviceaccount.com",
       sharedDriveId: null,
       rootFolderId: "f1",
@@ -101,6 +149,7 @@ describe("buildGoogleDriveConfigUpdateData — encryption + preserving an existi
 
   it("omits privateKeyEncrypted entirely when no new key is submitted — preserves whatever is already stored", () => {
     const data = buildGoogleDriveConfigUpdateData({
+      authenticationMethod: "SERVICE_ACCOUNT",
       serviceAccountEmail: "bot@x.iam.gserviceaccount.com",
       sharedDriveId: null,
       rootFolderId: "f1",
@@ -113,6 +162,7 @@ describe("buildGoogleDriveConfigUpdateData — encryption + preserving an existi
 
   it("omits privateKeyEncrypted when the submitted key is blank/whitespace-only", () => {
     const data = buildGoogleDriveConfigUpdateData({
+      authenticationMethod: "SERVICE_ACCOUNT",
       serviceAccountEmail: "bot@x.iam.gserviceaccount.com",
       sharedDriveId: null,
       rootFolderId: "f1",
@@ -125,6 +175,7 @@ describe("buildGoogleDriveConfigUpdateData — encryption + preserving an existi
 
   it("always includes the non-secret fields regardless of whether a key was submitted", () => {
     const data = buildGoogleDriveConfigUpdateData({
+      authenticationMethod: "SERVICE_ACCOUNT",
       serviceAccountEmail: "bot@x.iam.gserviceaccount.com",
       sharedDriveId: "sd1",
       rootFolderId: "f1",
@@ -136,31 +187,203 @@ describe("buildGoogleDriveConfigUpdateData — encryption + preserving an existi
     assert.equal(data.rootFolderId, "f1");
     assert.equal(data.rootFolderName, "Custom Folder");
   });
+
+  it("encrypts a newly submitted OAuth client secret (real encryptSecret/decryptSecret round-trip), leaving the private key path untouched", () => {
+    const data = buildGoogleDriveConfigUpdateData({
+      authenticationMethod: "OAUTH2",
+      serviceAccountEmail: "",
+      sharedDriveId: null,
+      rootFolderId: "f1",
+      rootFolderName: "Payroll",
+      oauthClientId: "123-abc.apps.googleusercontent.com",
+      oauthClientSecret: "GOCSPX-fake-secret-value",
+    });
+
+    assert.equal(data.authenticationMethod, "OAUTH2");
+    assert.equal(data.oauthClientId, "123-abc.apps.googleusercontent.com");
+    assert.ok(data.oauthClientSecretEncrypted);
+    assert.notEqual(data.oauthClientSecretEncrypted, "GOCSPX-fake-secret-value");
+    assert.equal(decryptSecret(data.oauthClientSecretEncrypted as string), "GOCSPX-fake-secret-value");
+    assert.equal(Object.prototype.hasOwnProperty.call(data, "privateKeyEncrypted"), false);
+  });
+
+  it("omits oauthClientSecretEncrypted when no new secret is submitted — preserves whatever is already stored", () => {
+    const data = buildGoogleDriveConfigUpdateData({
+      authenticationMethod: "OAUTH2",
+      serviceAccountEmail: "",
+      sharedDriveId: null,
+      rootFolderId: "f1",
+      rootFolderName: "Payroll",
+      oauthClientId: "123-abc.apps.googleusercontent.com",
+      // no oauthClientSecret field at all
+    });
+
+    assert.equal(Object.prototype.hasOwnProperty.call(data, "oauthClientSecretEncrypted"), false);
+    assert.equal(data.oauthClientId, "123-abc.apps.googleusercontent.com");
+  });
+
+  it("never sets oauthRefreshTokenEncrypted or oauthConnectedEmail — those are only ever written by the OAuth connect/callback flow, never this form", () => {
+    const data = buildGoogleDriveConfigUpdateData({
+      authenticationMethod: "OAUTH2",
+      serviceAccountEmail: "",
+      sharedDriveId: null,
+      rootFolderId: "f1",
+      rootFolderName: "Payroll",
+      oauthClientId: "123-abc.apps.googleusercontent.com",
+      oauthClientSecret: "GOCSPX-fake-secret-value",
+    });
+
+    const raw = data as unknown as Record<string, unknown>;
+    assert.equal("oauthRefreshTokenEncrypted" in raw, false);
+    assert.equal("oauthConnectedEmail" in raw, false);
+  });
 });
 
-describe("validateGoogleDriveConfigInput", () => {
+describe("validateGoogleDriveConfigInput — SERVICE_ACCOUNT mode", () => {
   it("requires a valid service account email", () => {
-    const errors = validateGoogleDriveConfigInput({ serviceAccountEmail: "not-an-email", rootFolderId: "f1", privateKey: "k", hasExistingPrivateKey: false });
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "SERVICE_ACCOUNT",
+      serviceAccountEmail: "not-an-email",
+      rootFolderId: "f1",
+      privateKey: "k",
+      hasExistingPrivateKey: false,
+    });
     assert.ok(errors.some((e) => /Service Account Email/.test(e)));
   });
 
   it("requires a Root Folder ID", () => {
-    const errors = validateGoogleDriveConfigInput({ serviceAccountEmail: "a@b.iam.gserviceaccount.com", rootFolderId: "", privateKey: "k", hasExistingPrivateKey: false });
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "SERVICE_ACCOUNT",
+      serviceAccountEmail: "a@b.iam.gserviceaccount.com",
+      rootFolderId: "",
+      privateKey: "k",
+      hasExistingPrivateKey: false,
+    });
     assert.ok(errors.some((e) => /Root Folder ID/.test(e)));
   });
 
   it("requires a private key on first save (no existing key, none submitted)", () => {
-    const errors = validateGoogleDriveConfigInput({ serviceAccountEmail: "a@b.iam.gserviceaccount.com", rootFolderId: "f1", privateKey: "", hasExistingPrivateKey: false });
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "SERVICE_ACCOUNT",
+      serviceAccountEmail: "a@b.iam.gserviceaccount.com",
+      rootFolderId: "f1",
+      privateKey: "",
+      hasExistingPrivateKey: false,
+    });
     assert.ok(errors.some((e) => /Private Key/.test(e)));
   });
 
   it("does not require a private key when one is already stored and none is resubmitted", () => {
-    const errors = validateGoogleDriveConfigInput({ serviceAccountEmail: "a@b.iam.gserviceaccount.com", rootFolderId: "f1", privateKey: "", hasExistingPrivateKey: true });
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "SERVICE_ACCOUNT",
+      serviceAccountEmail: "a@b.iam.gserviceaccount.com",
+      rootFolderId: "f1",
+      privateKey: "",
+      hasExistingPrivateKey: true,
+    });
     assert.equal(errors.length, 0);
   });
 
   it("passes with a complete, valid input", () => {
-    const errors = validateGoogleDriveConfigInput({ serviceAccountEmail: "a@b.iam.gserviceaccount.com", rootFolderId: "f1", privateKey: "key", hasExistingPrivateKey: false });
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "SERVICE_ACCOUNT",
+      serviceAccountEmail: "a@b.iam.gserviceaccount.com",
+      rootFolderId: "f1",
+      privateKey: "key",
+      hasExistingPrivateKey: false,
+    });
+    assert.equal(errors.length, 0);
+  });
+
+  it("does not require OAuth fields in SERVICE_ACCOUNT mode", () => {
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "SERVICE_ACCOUNT",
+      serviceAccountEmail: "a@b.iam.gserviceaccount.com",
+      rootFolderId: "f1",
+      privateKey: "key",
+      hasExistingPrivateKey: false,
+    });
+    assert.equal(errors.length, 0);
+  });
+});
+
+describe("validateGoogleDriveConfigInput — OAUTH2 mode", () => {
+  it("requires a Root Folder ID", () => {
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "OAUTH2",
+      serviceAccountEmail: "",
+      rootFolderId: "",
+      oauthClientId: "123-abc.apps.googleusercontent.com",
+      oauthClientSecret: "secret",
+      hasExistingPrivateKey: false,
+      hasExistingOauthClientSecret: false,
+    });
+    assert.ok(errors.some((e) => /Root Folder ID/.test(e)));
+  });
+
+  it("requires an OAuth Client ID", () => {
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "OAUTH2",
+      serviceAccountEmail: "",
+      rootFolderId: "f1",
+      oauthClientId: "",
+      oauthClientSecret: "secret",
+      hasExistingPrivateKey: false,
+      hasExistingOauthClientSecret: false,
+    });
+    assert.ok(errors.some((e) => /OAuth Client ID/.test(e)));
+  });
+
+  it("requires an OAuth Client Secret on first save (no existing secret, none submitted)", () => {
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "OAUTH2",
+      serviceAccountEmail: "",
+      rootFolderId: "f1",
+      oauthClientId: "123-abc.apps.googleusercontent.com",
+      oauthClientSecret: "",
+      hasExistingPrivateKey: false,
+      hasExistingOauthClientSecret: false,
+    });
+    assert.ok(errors.some((e) => /OAuth Client Secret/.test(e)));
+  });
+
+  it("does not require an OAuth Client Secret when one is already stored and none is resubmitted", () => {
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "OAUTH2",
+      serviceAccountEmail: "",
+      rootFolderId: "f1",
+      oauthClientId: "123-abc.apps.googleusercontent.com",
+      oauthClientSecret: "",
+      hasExistingPrivateKey: false,
+      hasExistingOauthClientSecret: true,
+    });
+    assert.equal(errors.length, 0);
+  });
+
+  it("does not require Service Account fields in OAUTH2 mode, even if serviceAccountEmail is blank/invalid", () => {
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "OAUTH2",
+      serviceAccountEmail: "not-an-email",
+      rootFolderId: "f1",
+      privateKey: "",
+      oauthClientId: "123-abc.apps.googleusercontent.com",
+      oauthClientSecret: "secret",
+      hasExistingPrivateKey: false,
+      hasExistingOauthClientSecret: false,
+    });
+    assert.equal(errors.length, 0);
+  });
+
+  it("passes with a complete, valid OAuth input", () => {
+    const errors = validateGoogleDriveConfigInput({
+      authenticationMethod: "OAUTH2",
+      serviceAccountEmail: "",
+      rootFolderId: "f1",
+      oauthClientId: "123-abc.apps.googleusercontent.com",
+      oauthClientSecret: "secret",
+      hasExistingPrivateKey: false,
+      hasExistingOauthClientSecret: false,
+    });
     assert.equal(errors.length, 0);
   });
 });
@@ -200,6 +423,7 @@ describe("normalizePrivateKeyLineBreaks — fixes 'error:1E08010C:DECODER routin
 
   it("round-trips correctly through the real save path even when submitted with literal backslash-n escapes — proving the exact bug report's scenario is now handled end to end", () => {
     const data = buildGoogleDriveConfigUpdateData({
+      authenticationMethod: "SERVICE_ACCOUNT",
       serviceAccountEmail: "bot@x.iam.gserviceaccount.com",
       sharedDriveId: null,
       rootFolderId: "f1",

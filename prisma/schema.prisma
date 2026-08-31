@@ -306,8 +306,8 @@ model User {
   notesCreated  EmployeeNote[] @relation("EmployeeNoteCreator")
 
   // Notification Engine relations (see NotificationEngineDesign.md) — additive only, no new columns on User itself
-  notificationJobs        NotificationJob[]
-  notificationPreferences NotificationPreference[]
+  notificationJobs           NotificationJob[]
+  notificationPreferences    NotificationPreference[]
   // Phase 12 (Notification Center) — same additive convention as the two lines above.
   notificationJobInboxStates NotificationJobInboxState[]
 
@@ -640,18 +640,41 @@ model EmailConfig {
 // created — a bare service account has no usable personal Drive storage of
 // its own, so this anchor must point at a location a human has already
 // shared with it.
+// Phase 19: authenticationMethod defaults to SERVICE_ACCOUNT so the existing
+// singleton row (and every row created before this enum existed) is treated
+// as Service Account mode with no data migration and no forced reconnect.
+// The four oauth* fields are additive and unused until authenticationMethod
+// is switched to OAUTH2 — see GoogleDriveOAuthPlan.md.
+enum GoogleDriveAuthMethod {
+  SERVICE_ACCOUNT
+  OAUTH2
+}
+
 model GoogleDriveConfig {
-  id                  String   @id @default("global")
-  serviceAccountEmail String   @default("")
-  privateKeyEncrypted String   @default("")
-  sharedDriveId       String? // set only when rootFolderId lives inside a Shared Drive
-  rootFolderId        String   @default("")
-  rootFolderName      String   @default("Payroll")
-  updatedById         String?
-  updatedByEmail      String?
-  updatedByRole       String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                   String                @id @default("global")
+  authenticationMethod GoogleDriveAuthMethod @default(SERVICE_ACCOUNT)
+
+  // Service Account fields — unchanged, still the default/only-used path
+  // until authenticationMethod is switched to OAUTH2.
+  serviceAccountEmail String @default("")
+  privateKeyEncrypted String @default("")
+
+  // OAuth 2.0 fields — populated only in OAUTH2 mode. No access-token column:
+  // googleapis's OAuth2 client refreshes short-lived access tokens in memory
+  // from oauthRefreshTokenEncrypted, so no access token is ever persisted.
+  oauthClientId              String  @default("")
+  oauthClientSecretEncrypted String  @default("")
+  oauthRefreshTokenEncrypted String  @default("")
+  oauthConnectedEmail        String?
+
+  sharedDriveId  String? // set only when rootFolderId lives inside a Shared Drive
+  rootFolderId   String   @default("")
+  rootFolderName String   @default("Payroll")
+  updatedById    String?
+  updatedByEmail String?
+  updatedByRole  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 // Leave Management Models
@@ -1324,7 +1347,7 @@ model NotificationJobInboxState {
   id String @id @default(cuid())
 
   notificationJobId String
-  notificationJob    NotificationJob @relation(fields: [notificationJobId], references: [id], onDelete: Cascade)
+  notificationJob   NotificationJob @relation(fields: [notificationJobId], references: [id], onDelete: Cascade)
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

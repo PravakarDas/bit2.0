@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { GoogleDriveService, mapDriveError } from "./google-drive-client";
-import type { DriveClientFactory, ResolvedGoogleDriveConfig } from "./google-drive-client";
+import { GoogleDriveService, mapDriveError, buildDriveClient } from "./google-drive-client";
+import type { DriveClientFactory, ResolvedGoogleDriveConfig, ResolvedServiceAccountDriveConfig, ResolvedOAuthDriveConfig } from "./google-drive-client";
 
 async function collectStream(stream: NodeJS.ReadableStream): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -11,10 +11,25 @@ async function collectStream(stream: NodeJS.ReadableStream): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-function fakeConfig(overrides: Partial<ResolvedGoogleDriveConfig> = {}): ResolvedGoogleDriveConfig {
+function fakeConfig(overrides: Partial<ResolvedServiceAccountDriveConfig> = {}): ResolvedServiceAccountDriveConfig {
   return {
+    authMethod: "SERVICE_ACCOUNT",
     serviceAccountEmail: "payroll-bot@my-project.iam.gserviceaccount.com",
     privateKey: "-----BEGIN PRIVATE KEY-----\nTHIS-IS-A-FAKE-SECRET-KEY-NEVER-REAL\n-----END PRIVATE KEY-----\n",
+    sharedDriveId: null,
+    rootFolderId: "folder_abc123",
+    rootFolderName: "Payroll",
+    ...overrides,
+  };
+}
+
+function fakeOAuthConfig(overrides: Partial<ResolvedOAuthDriveConfig> = {}): ResolvedGoogleDriveConfig {
+  return {
+    authMethod: "OAUTH2",
+    clientId: "123-abc.apps.googleusercontent.com",
+    clientSecret: "THIS-IS-A-FAKE-CLIENT-SECRET-NEVER-REAL",
+    refreshToken: "THIS-IS-A-FAKE-REFRESH-TOKEN-NEVER-REAL",
+    redirectUri: "https://hrm.example.com/api/google-drive/oauth/callback",
     sharedDriveId: null,
     rootFolderId: "folder_abc123",
     rootFolderName: "Payroll",
@@ -512,5 +527,113 @@ describe("GoogleDriveService.uploadFile", () => {
         return true;
       },
     );
+  });
+});
+
+describe("buildDriveClient — auth method dispatcher (Phase 19)", () => {
+  it("builds a client without throwing for a SERVICE_ACCOUNT config (JWT branch)", () => {
+    const drive = buildDriveClient(fakeConfig() as ResolvedServiceAccountDriveConfig);
+    assert.ok(drive);
+  });
+
+  it("builds a client without throwing for an OAUTH2 config (OAuth2 branch) — no network call happens at construction time", () => {
+    const drive = buildDriveClient(fakeOAuthConfig() as ResolvedOAuthDriveConfig);
+    assert.ok(drive);
+  });
+});
+
+describe("GoogleDriveService — identical behavior for OAuth2 as for Service Account (auth-method-agnostic)", () => {
+  it("testConnection succeeds with an OAuth2-shaped config using the exact same code path as Service Account", async () => {
+    const factory = fakeDriveClient({
+      filesGet: async () => ({
+        data: { id: "folder_abc123", name: "Payroll", mimeType: "application/vnd.google-apps.folder", capabilities: { canAddChildren: true, canListChildren: true } },
+      }),
+    });
+    const service = new GoogleDriveService(factory);
+
+    const result = await service.testConnection(fakeOAuthConfig());
+
+    assert.equal(result.success, true);
+    assert.match(result.message, /Connected successfully/);
+  });
+
+  it("findOrCreateFolder creates a missing folder with an OAuth2-shaped config", async () => {
+    const factory: DriveClientFactory = () =>
+      ({
+        files: {
+          list: async () => ({ data: { files: [] } }),
+          create: async () => ({ data: { id: "month_folder_new", name: "February 2026" } }),
+        },
+      }) as any;
+    const service = new GoogleDriveService(factory);
+
+    const folder = await service.findOrCreateFolder(fakeOAuthConfig(), "root_1", "February 2026");
+
+    assert.equal(folder.id, "month_folder_new");
+  });
+
+  it("uploadFile uploads the exact buffer with an OAuth2-shaped config", async () => {
+    const original = Buffer.from("%PDF-1.4 fake payslip content");
+    let uploaded: Buffer | null = null;
+    const factory: DriveClientFactory = () =>
+      ({
+        files: {
+          create: async ({ media }: any) => {
+            uploaded = await collectStream(media.body);
+            return { data: { id: "file_1", name: "payslip.pdf" } };
+          },
+        },
+      }) as any;
+    const service = new GoogleDriveService(factory);
+
+    await service.uploadFile(fakeOAuthConfig(), { parentFolderId: "branch_folder_1", filename: "payslip.pdf", content: original });
+
+    assert.ok(uploaded);
+    assert.equal(Buffer.compare(uploaded as unknown as Buffer, original), 0);
+  });
+
+  it("never includes the OAuth client secret or refresh token in any error message (no secret leakage)", async () => {
+    const config = fakeOAuthConfig();
+    const secretMarker = "THIS-IS-A-FAKE-CLIENT-SECRET-NEVER-REAL";
+    const tokenMarker = "THIS-IS-A-FAKE-REFRESH-TOKEN-NEVER-REAL";
+    const factory: DriveClientFactory = () =>
+      ({
+        files: {
+          get: async () => {
+            throw Object.assign(new Error(`failed for ${(config as ResolvedOAuthDriveConfig).clientSecret} / ${(config as ResolvedOAuthDriveConfig).refreshToken}`), {
+              response: { status: 500 },
+            });
+          },
+        },
+        drives: { get: async () => ({}) },
+      }) as any;
+
+    const result = await new GoogleDriveService(factory).testConnection(config);
+
+    assert.equal(result.message.includes(secretMarker), false);
+    assert.equal(result.message.includes(tokenMarker), false);
+  });
+});
+
+describe("mapDriveError — OAuth token-endpoint error shapes", () => {
+  it("maps invalid_grant to an expired/revoked-authorization message", () => {
+    const message = mapDriveError({ response: { data: { error: "invalid_grant", error_description: "Token has been expired or revoked." } } });
+    assert.match(message, /expired or been revoked/);
+    assert.match(message, /Reconnect/);
+  });
+
+  it("maps invalid_client to an invalid-credentials message", () => {
+    const message = mapDriveError({ response: { data: { error: "invalid_client" } } });
+    assert.match(message, /Invalid OAuth Client ID or Client Secret/);
+  });
+
+  it("maps access_denied to a denied-request message", () => {
+    const message = mapDriveError({ response: { data: { error: "access_denied" } } });
+    assert.match(message, /denied this OAuth request/);
+  });
+
+  it("still maps Drive-API-shaped errors (object error.message) correctly alongside the new OAuth string-error handling", () => {
+    const message = mapDriveError({ response: { status: 403, data: { error: { message: "insufficientPermissions" } } } });
+    assert.match(message, /Permission denied: insufficientPermissions/);
   });
 });

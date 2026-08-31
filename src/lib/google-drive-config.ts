@@ -49,9 +49,16 @@ export function canManageGoogleDriveConfig(user: GoogleDriveConfigActor | null |
   return !!user && (user.role === "SUPERADMIN" || user.role === "HR");
 }
 
+export type GoogleDriveAuthMethod = "SERVICE_ACCOUNT" | "OAUTH2";
+
 export interface GoogleDriveConfigRecord {
+  authenticationMethod: GoogleDriveAuthMethod;
   serviceAccountEmail: string;
   privateKeyEncrypted: string;
+  oauthClientId: string;
+  oauthClientSecretEncrypted: string;
+  oauthRefreshTokenEncrypted: string;
+  oauthConnectedEmail: string | null;
   sharedDriveId: string | null;
   rootFolderId: string;
   rootFolderName: string;
@@ -59,52 +66,77 @@ export interface GoogleDriveConfigRecord {
 }
 
 export interface GoogleDriveConfigView {
+  authenticationMethod: GoogleDriveAuthMethod;
   serviceAccountEmail: string;
+  hasPrivateKey: boolean;
+  oauthClientId: string;
+  hasOauthClientSecret: boolean;
+  /** Whether an OAuth connection is currently established — the UI's "Connected"/"Not Connected" indicator. Never the refresh token itself. */
+  hasOauthRefreshToken: boolean;
+  oauthConnectedEmail: string | null;
   sharedDriveId: string | null;
   rootFolderId: string;
   rootFolderName: string;
-  hasPrivateKey: boolean;
   updatedAt: Date;
 }
 
-/** Masks the stored record for the browser — the encrypted (or plaintext) private key is never included, only whether one is set. */
+/** Masks the stored record for the browser — no encrypted or plaintext secret (private key, OAuth client secret, refresh token) is ever included, only whether each is set. */
 export function maskGoogleDriveConfig(record: GoogleDriveConfigRecord): GoogleDriveConfigView {
   return {
+    authenticationMethod: record.authenticationMethod,
     serviceAccountEmail: record.serviceAccountEmail,
+    hasPrivateKey: !!record.privateKeyEncrypted,
+    oauthClientId: record.oauthClientId,
+    hasOauthClientSecret: !!record.oauthClientSecretEncrypted,
+    hasOauthRefreshToken: !!record.oauthRefreshTokenEncrypted,
+    oauthConnectedEmail: record.oauthConnectedEmail,
     sharedDriveId: record.sharedDriveId,
     rootFolderId: record.rootFolderId,
     rootFolderName: record.rootFolderName,
-    hasPrivateKey: !!record.privateKeyEncrypted,
     updatedAt: record.updatedAt,
   };
 }
 
 export interface GoogleDriveConfigUpdateInput {
+  authenticationMethod: GoogleDriveAuthMethod;
   serviceAccountEmail: string;
   sharedDriveId: string | null;
   rootFolderId: string;
   rootFolderName: string;
   /** Plaintext, submitted from the form. Empty/undefined means "keep the existing key unchanged." */
   privateKey?: string;
+  oauthClientId?: string;
+  /** Plaintext, submitted from the form. Empty/undefined means "keep the existing secret unchanged." Never the refresh token — that is only ever set by the OAuth connect/callback flow, never typed by hand. */
+  oauthClientSecret?: string;
 }
 
 export interface GoogleDriveConfigUpdateData {
+  authenticationMethod: GoogleDriveAuthMethod;
   serviceAccountEmail: string;
   sharedDriveId: string | null;
   rootFolderId: string;
   rootFolderName: string;
   privateKeyEncrypted?: string;
+  oauthClientId?: string;
+  oauthClientSecretEncrypted?: string;
 }
 
 /**
- * Builds the Prisma update payload. `privateKeyEncrypted` is only present on
- * the returned object when a new plaintext key was actually submitted —
- * mirrors `updateEmailConfig`'s exact `if (newPassword) data.appPasswordEncrypted
- * = encryptSecret(newPassword)` rule, so saving the form without retyping
- * the key leaves whatever is already stored untouched.
+ * Builds the Prisma update payload for the general "Save" form (both auth
+ * modes' non-connection fields). `privateKeyEncrypted`/`oauthClientSecretEncrypted`
+ * are only present on the returned object when a new plaintext value was
+ * actually submitted — mirrors `updateEmailConfig`'s exact `if (newPassword)
+ * data.appPasswordEncrypted = encryptSecret(newPassword)` rule, so saving the
+ * form without retyping a secret leaves whatever is already stored untouched.
+ *
+ * Deliberately has no `oauthRefreshTokenEncrypted`/`oauthConnectedEmail`
+ * fields at all — those are set only by the OAuth connect/callback flow
+ * (`beginGoogleDriveOAuth`/the callback route), never by hand-typing a token
+ * into this form.
  */
 export function buildGoogleDriveConfigUpdateData(input: GoogleDriveConfigUpdateInput): GoogleDriveConfigUpdateData {
   const data: GoogleDriveConfigUpdateData = {
+    authenticationMethod: input.authenticationMethod,
     serviceAccountEmail: input.serviceAccountEmail,
     sharedDriveId: input.sharedDriveId,
     rootFolderId: input.rootFolderId,
@@ -116,29 +148,53 @@ export function buildGoogleDriveConfigUpdateData(input: GoogleDriveConfigUpdateI
     data.privateKeyEncrypted = encryptSecret(normalizePrivateKeyLineBreaks(trimmedKey));
   }
 
+  if (input.oauthClientId !== undefined) {
+    data.oauthClientId = input.oauthClientId.trim();
+  }
+
+  const trimmedClientSecret = input.oauthClientSecret?.trim();
+  if (trimmedClientSecret) {
+    data.oauthClientSecretEncrypted = encryptSecret(trimmedClientSecret);
+  }
+
   return data;
 }
 
 export interface GoogleDriveConfigValidationInput {
+  authenticationMethod: GoogleDriveAuthMethod;
   serviceAccountEmail: string;
   rootFolderId: string;
   privateKey?: string;
   hasExistingPrivateKey: boolean;
+  oauthClientId?: string;
+  oauthClientSecret?: string;
+  hasExistingOauthClientSecret?: boolean;
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Only the fields relevant to the selected `authenticationMethod` are validated — a SERVICE_ACCOUNT save doesn't require OAuth fields to be filled in, and vice versa. */
 export function validateGoogleDriveConfigInput(input: GoogleDriveConfigValidationInput): string[] {
   const errors: string[] = [];
 
-  if (!input.serviceAccountEmail.trim() || !EMAIL_REGEX.test(input.serviceAccountEmail.trim())) {
-    errors.push("Service Account Email must be a valid email address.");
-  }
   if (!input.rootFolderId.trim()) {
     errors.push("Root Folder ID is required.");
   }
-  if (!input.privateKey?.trim() && !input.hasExistingPrivateKey) {
-    errors.push("Service Account Private Key is required.");
+
+  if (input.authenticationMethod === "OAUTH2") {
+    if (!input.oauthClientId?.trim()) {
+      errors.push("OAuth Client ID is required.");
+    }
+    if (!input.oauthClientSecret?.trim() && !input.hasExistingOauthClientSecret) {
+      errors.push("OAuth Client Secret is required.");
+    }
+  } else {
+    if (!input.serviceAccountEmail.trim() || !EMAIL_REGEX.test(input.serviceAccountEmail.trim())) {
+      errors.push("Service Account Email must be a valid email address.");
+    }
+    if (!input.privateKey?.trim() && !input.hasExistingPrivateKey) {
+      errors.push("Service Account Private Key is required.");
+    }
   }
 
   return errors;

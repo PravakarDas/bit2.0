@@ -22,6 +22,8 @@
     "src/lib/notification-action-authorization.test.ts",
     "src/lib/google-drive-config.ts",
     "src/lib/google-drive-config.test.ts",
+    "src/lib/google-drive-oauth.ts",
+    "src/lib/google-drive-oauth.test.ts",
     "src/lib/payslip-filename.ts",
     "src/lib/payslip-filename.test.ts",
     "src/lib/services/payroll-payslip-dispatch.service.ts",

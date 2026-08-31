@@ -362,8 +362,23 @@ describe("createPayslipDriveTarget — month/branch folder caching within one pa
 
   function fakeConfig(): ResolvedGoogleDriveConfig {
     return {
+      authMethod: "SERVICE_ACCOUNT",
       serviceAccountEmail: "bot@x.iam.gserviceaccount.com",
       privateKey: "fake-key",
+      sharedDriveId: null,
+      rootFolderId: "root_1",
+      rootFolderName: "Payroll",
+    };
+  }
+
+  /** Phase 19: proves `createPayslipDriveTarget`/`dispatchPayslipForEmployee` are fully authentication-method-agnostic — an OAuth2-shaped config drives the identical Drive upload flow with no code branch anywhere in this file. */
+  function fakeOAuthConfig(): ResolvedGoogleDriveConfig {
+    return {
+      authMethod: "OAUTH2",
+      clientId: "123-abc.apps.googleusercontent.com",
+      clientSecret: "fake-oauth-client-secret",
+      refreshToken: "fake-oauth-refresh-token",
+      redirectUri: "https://hrm.example.com/api/google-drive/oauth/callback",
       sharedDriveId: null,
       rootFolderId: "root_1",
       rootFolderName: "Payroll",
@@ -396,5 +411,18 @@ describe("createPayslipDriveTarget — month/branch folder caching within one pa
     assert.equal(queries.filter((q) => q.includes("'February 2026'")).length, 1);
     assert.equal(queries.filter((q) => q.includes("'Dhaka_Main'")).length, 1);
     assert.equal(queries.filter((q) => q.includes("'Unassigned'")).length, 1);
+  });
+
+  it("Phase 19: resolves folders and uploads identically when given an OAuth2-shaped ResolvedGoogleDriveConfig instead of Service Account — createPayslipDriveTarget never branches on authMethod", async () => {
+    const queries: string[] = [];
+    const driveService = new GoogleDriveService(fakeDriveClientFactory((q) => queries.push(q)));
+    const target = createPayslipDriveTarget(driveService, fakeOAuthConfig());
+
+    const folder = await target.resolveFolder(2026, 2, "Dhaka Main");
+    assert.ok(folder.id);
+
+    const uploaded = await target.upload({ parentFolderId: folder.id, filename: "payslip.pdf", content: Buffer.from("fake pdf bytes") });
+    assert.ok(uploaded.id);
+    assert.equal(queries.filter((q) => q.includes("'February 2026'")).length, 1);
   });
 });
