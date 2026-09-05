@@ -29,6 +29,9 @@ type SettingsState = {
   zktecoBaseUrl: string;
   zktecoUsername: string;
   zktecoPassword: string;
+  attendanceCalculationMethod: string;
+  zktAttendancePollEnabled: boolean;
+  zktAttendancePollIntervalSeconds: number;
 };
 
 type ChangeLog = {
@@ -83,6 +86,9 @@ function formatHistoryField(field: string) {
     zktecoBaseUrl: "ZKTeco Base URL",
     zktecoUsername: "ZKTeco Username",
     zktecoPassword: "ZKTeco Password",
+    attendanceCalculationMethod: "Attendance Calculation Method",
+    zktAttendancePollEnabled: "Attendance DB Polling",
+    zktAttendancePollIntervalSeconds: "Attendance DB Poll Interval (sec)",
   };
 
   return labels[field] || field;
@@ -364,6 +370,70 @@ export default function SystemControlClient({
                 Manager changes are allowed and will automatically notify admin.
               </p>
             )}
+          </div>
+
+          <div className="space-y-3">
+            <Label>Attendance Data Source</Label>
+            <p className="text-xs text-muted-foreground">
+              Choose where check-in/check-out/break data is captured from. Switching this does not affect
+              already-saved timeline records.
+            </p>
+            <RadioGroup
+              value={form.attendanceCalculationMethod === "ZKT_ATTENDANCE_TABLE" ? "ZKT_ATTENDANCE_TABLE" : "ZKTECO_API"}
+              onValueChange={(value: string) => setForm((prev) => ({ ...prev, attendanceCalculationMethod: value }))}
+              className="gap-3"
+            >
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <RadioGroupItem value="ZKTECO_API" id="attendance-method-api" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <Label htmlFor="attendance-method-api" className="font-medium">
+                    ZKTeco Live API
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    The existing method: pulls punches from the ZKTeco device server above on the schedule
+                    configured in the ZKTeco Sync Schedule section.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <RadioGroupItem value="ZKT_ATTENDANCE_TABLE" id="attendance-method-db" className="mt-0.5" />
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="attendance-method-db" className="font-medium">
+                    Local DB Table (zkt_attendance)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Continuously ingests punches from the locally-synced public.zkt_attendance table as they
+                    arrive, instead of polling the ZKTeco device server directly.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      checked={form.zktAttendancePollEnabled}
+                      disabled={form.attendanceCalculationMethod !== "ZKT_ATTENDANCE_TABLE"}
+                      onCheckedChange={(checked) => setForm((prev) => ({ ...prev, zktAttendancePollEnabled: checked }))}
+                    />
+                    <Label className="text-xs">Enabled</Label>
+                    <Label htmlFor="attendance-poll-interval" className="text-xs">
+                      Poll every
+                    </Label>
+                    <Input
+                      id="attendance-poll-interval"
+                      type="number"
+                      min={1}
+                      max={3600}
+                      value={form.zktAttendancePollIntervalSeconds}
+                      disabled={form.attendanceCalculationMethod !== "ZKT_ATTENDANCE_TABLE"}
+                      onChange={(e) => {
+                        const next = Math.min(3600, Math.max(1, Number.isNaN(Number(e.target.value)) ? 1 : Number(e.target.value)));
+                        setForm((prev) => ({ ...prev, zktAttendancePollIntervalSeconds: next }));
+                      }}
+                      className="w-24"
+                    />
+                    <span className="text-xs text-muted-foreground">seconds</span>
+                  </div>
+                </div>
+              </div>
+            </RadioGroup>
           </div>
 
           <div className="flex items-center gap-3">

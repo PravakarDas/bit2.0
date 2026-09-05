@@ -8,7 +8,8 @@
     "dev:fresh": "npm run dev:clean",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "tsc -p tsconfig.test.json && node --test ./.test-build/lib/services/zkt-attendance-sync.service.test.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

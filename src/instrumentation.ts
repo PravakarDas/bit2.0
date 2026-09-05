@@ -2,10 +2,12 @@ import { checkAndGenerateToday } from "@/actions/timeline.actions";
 import { syncAllEmployeesTimeData } from "@/actions/zkteco-sync.actions";
 import { runLeaveAutomationPipeline } from "@/actions/leave-automation.actions";
 import { getRuntimeSystemControlConfig } from "@/lib/system-control";
+import { processNewZktAttendanceRows, reconcileUnprocessedDailyTimeRecords } from "@/lib/services/zkt-attendance-poller.service";
 
 const CRON_GLOBAL_FLAG = "__dailyTimelineCronStarted";
 const ZKTECO_CRON_GLOBAL_FLAG = "__zkTecoSyncCronStarted";
 const LEAVE_AUTOMATION_CRON_GLOBAL_FLAG = "__leaveAutomationCronStarted";
+const ZKT_ATTENDANCE_POLL_GLOBAL_FLAG = "__zktAttendancePollStarted";
 
 function getLocalTimeParts(timeZone?: string) {
   if (!timeZone) {
@@ -280,10 +282,88 @@ function startLeaveAutomationCron() {
   setInterval(runIfDue, 60_000);
 }
 
+/**
+ * Continuous ingestion from `public.zkt_attendance` (the "Local DB Table"
+ * attendance calculation method — see zkt-attendance-poller.service.ts).
+ * Active only when `attendanceCalculationMethod === "ZKT_ATTENDANCE_TABLE"`
+ * and `zktAttendancePollEnabled`; otherwise every tick is a no-op, so the
+ * existing "ZKTECO_API" method (default) is completely unaffected. Ticks
+ * every 5s (fast enough that the admin-configurable
+ * `zktAttendancePollIntervalSeconds` — which can be as low as a few
+ * seconds — is honored promptly) but only actually polls once that many
+ * seconds have elapsed since the previous run finished, same gap-measured-
+ * from-finish pattern as the ZKTeco INTERVAL cron above.
+ */
+function startZktAttendancePollCron() {
+  const globalAny = global as unknown as Record<string, boolean>;
+  if (globalAny[ZKT_ATTENDANCE_POLL_GLOBAL_FLAG]) {
+    return;
+  }
+  globalAny[ZKT_ATTENDANCE_POLL_GLOBAL_FLAG] = true;
+
+  let lastRunFinishedAt = 0;
+  let isPolling = false;
+
+  const runIfDue = async () => {
+    if (isPolling) {
+      return;
+    }
+
+    const runtime = await getRuntimeSystemControlConfig();
+    if (runtime.attendanceCalculationMethod !== "ZKT_ATTENDANCE_TABLE" || !runtime.zktAttendancePollEnabled) {
+      return;
+    }
+
+    const intervalSeconds = getValidTime(String(runtime.zktAttendancePollIntervalSeconds), 30, 1, 3600);
+    const elapsed = Date.now() - lastRunFinishedAt;
+    if (lastRunFinishedAt !== 0 && elapsed < intervalSeconds * 1000) {
+      return;
+    }
+
+    isPolling = true;
+    try {
+      const result = await processNewZktAttendanceRows();
+      if (result.processedDays > 0) {
+        console.log("zkt_attendance poll:", result);
+      }
+    } catch (error) {
+      console.error("zkt_attendance poll failed:", error);
+    } finally {
+      isPolling = false;
+      lastRunFinishedAt = Date.now();
+    }
+  };
+
+  runIfDue();
+  setInterval(runIfDue, 5_000);
+}
+
+/**
+ * One-time-at-boot reconciliation for the "Local DB Table" method — see
+ * `reconcileUnprocessedDailyTimeRecords`'s own doc comment. Only runs when
+ * that method is currently selected; a no-op (and no error) otherwise.
+ */
+async function runZktAttendanceStartupReconciliation() {
+  try {
+    const runtime = await getRuntimeSystemControlConfig();
+    if (runtime.attendanceCalculationMethod !== "ZKT_ATTENDANCE_TABLE") {
+      return;
+    }
+
+    console.log("Running zkt_attendance startup reconciliation...");
+    const result = await reconcileUnprocessedDailyTimeRecords();
+    console.log("zkt_attendance startup reconciliation completed:", result);
+  } catch (error) {
+    console.error("zkt_attendance startup reconciliation failed:", error);
+  }
+}
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     startDailyTimelineCron();
     startZKTecoSyncCron();
     startLeaveAutomationCron();
+    startZktAttendancePollCron();
+    void runZktAttendanceStartupReconciliation();
   }
 }
