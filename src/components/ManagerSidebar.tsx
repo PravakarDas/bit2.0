@@ -18,6 +18,7 @@ import {
     Building2,
     Settings,
     Megaphone,
+    Fingerprint,
 } from "lucide-react";
 
 import {
@@ -92,6 +93,11 @@ const managerNavItems = [
         title: "Timeline",
         url: "/manager/timeline",
         icon: Clock,
+    },
+    {
+        title: "Attendance Log",
+        url: "/manager/zkt-attendance",
+        icon: Fingerprint,
     },
     {
         title: "Timeline Modify Requests",
