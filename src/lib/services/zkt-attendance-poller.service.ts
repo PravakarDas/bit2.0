@@ -217,12 +217,21 @@ export interface ReconcileResult {
 }
 
 /**
- * Startup reconciliation: finds every `DailyTimeRecord` that's `PRESENT`,
- * not yet `isProcessed`, and still missing at least one actual field, then
- * checks `zkt_attendance` for that (user, day) — filling it in if punch data
- * already exists there. Unbounded (scans all history, not just recent days)
- * per explicit instruction; safe because the query is a normal indexed
- * `WHERE` filter, not a full-table scan, regardless of date range.
+ * Reconciliation sweep: finds every `DailyTimeRecord` that's `PRESENT`, not
+ * yet `isProcessed`, and either still missing at least one actual field or
+ * flagged `hasOpenBreak` (a break anomaly that can resolve itself once the
+ * underlying `zkt_attendance` data becomes consistent — e.g. a missing punch
+ * gets backfilled, or a duplicate row gets corrected), then checks
+ * `zkt_attendance` for that (user, day) — filling it in if punch data
+ * already exists there, leaving it untouched otherwise. Unbounded (scans
+ * all history, not just recent days) per explicit instruction; safe because
+ * the query is a normal indexed `WHERE` filter, not a full-table scan,
+ * regardless of date range. Runs once at server boot
+ * (`runZktAttendanceStartupReconciliation`) AND on every periodic poll tick
+ * (`startZktAttendancePollCron`, gated by the same admin-configurable
+ * `zktAttendancePollIntervalSeconds`) — not just at startup — so a day that
+ * was stuck (missing data, or flagged) gets picked up automatically as soon
+ * as the data catches up, without needing a server restart.
  */
 export async function reconcileUnprocessedDailyTimeRecords(): Promise<ReconcileResult> {
   const settings = await getRuntimeSystemControlConfig();
@@ -232,7 +241,7 @@ export async function reconcileUnprocessedDailyTimeRecords(): Promise<ReconcileR
     where: {
       status: "PRESENT",
       isProcessed: false,
-      OR: [{ actualCheckIn: null }, { actualCheckOut: null }, { actualBreakTime: null }],
+      OR: [{ actualCheckIn: null }, { actualCheckOut: null }, { actualBreakTime: null }, { hasOpenBreak: true }],
     },
     select: {
       date: true,

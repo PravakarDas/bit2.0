@@ -290,9 +290,17 @@ function startLeaveAutomationCron() {
  * existing "ZKTECO_API" method (default) is completely unaffected. Ticks
  * every 5s (fast enough that the admin-configurable
  * `zktAttendancePollIntervalSeconds` — which can be as low as a few
- * seconds — is honored promptly) but only actually polls once that many
+ * seconds — is honored promptly) but only actually runs once that many
  * seconds have elapsed since the previous run finished, same gap-measured-
  * from-finish pattern as the ZKTeco INTERVAL cron above.
+ *
+ * Each due run does two things, on the same admin-configured interval:
+ *  1. `processNewZktAttendanceRows` — cursor-based, only rows newer than
+ *     what's already been seen.
+ *  2. `reconcileUnprocessedDailyTimeRecords` — a broader sweep of every
+ *     still-unprocessed day (missing data, or flagged `hasOpenBreak`), so a
+ *     day whose punches arrived out of order, or whose anomaly later
+ *     resolves, gets picked up without needing a server restart.
  */
 function startZktAttendancePollCron() {
   const globalAny = global as unknown as Record<string, boolean>;
@@ -326,6 +334,11 @@ function startZktAttendancePollCron() {
       if (result.processedDays > 0) {
         console.log("zkt_attendance poll:", result);
       }
+
+      const reconcileResult = await reconcileUnprocessedDailyTimeRecords();
+      if (reconcileResult.updated > 0) {
+        console.log("zkt_attendance periodic reconciliation:", reconcileResult);
+      }
     } catch (error) {
       console.error("zkt_attendance poll failed:", error);
     } finally {
@@ -341,7 +354,10 @@ function startZktAttendancePollCron() {
 /**
  * One-time-at-boot reconciliation for the "Local DB Table" method — see
  * `reconcileUnprocessedDailyTimeRecords`'s own doc comment. Only runs when
- * that method is currently selected; a no-op (and no error) otherwise.
+ * that method is currently selected; a no-op (and no error) otherwise. Runs
+ * regardless of `zktAttendancePollEnabled` (unlike the periodic version
+ * folded into `startZktAttendancePollCron`'s tick), so switching to this
+ * method gets an immediate catch-up sweep even before polling is turned on.
  */
 async function runZktAttendanceStartupReconciliation() {
   try {
