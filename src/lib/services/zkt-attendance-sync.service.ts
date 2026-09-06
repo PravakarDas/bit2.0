@@ -118,14 +118,21 @@ export function resolveLocalDatePartsFromRecordDateKey(recordDateKey: Date, time
  * = last punch=1 (same as `zkteco.service.ts`'s `processTransactions()`).
  *
  * Break pairing is STRICT by punch code — not "whichever comes first" —
- * per `zkt_attendance.punch_type`'s own labels: punch=2 ("Break Out") opens
- * a break, punch=3 ("Break In") closes it. Two edge cases, decided
- * explicitly against real anomalies seen in production data:
+ * but NOT by the naive Check-In/Check-Out analogy either. Verified against
+ * 1,092 real adjacent break-punch pairs in production `zkt_attendance` data:
+ * punch=3 ("Break In") -> punch=2 ("Break Out") is the dominant pattern
+ * (~90%, median gap ~92 minutes — a normal lunch break), while the reverse
+ * order only occurs where one break's close is immediately followed by a
+ * second break's open that same day. So: punch=3 (Break In) OPENS a break,
+ * punch=2 (Break Out) CLOSES it — the device's own labels read "in/out of
+ * the break state", not "out of/into the building" as the Check-In/Out
+ * naming would suggest. Two edge cases, decided explicitly against real
+ * anomalies seen in production data:
  *
- *  - A Break Out arriving while one is already open (e.g. a device
+ *  - A Break In arriving while one is already open (e.g. a device
  *    double-scan) RESETS the open time to the newer punch — the earlier
  *    one is discarded as a duplicate, not turned into two sessions.
- *  - A Break In arriving with no open Break Out to close (an orphan) is
+ *  - A Break Out arriving with no open Break In to close (an orphan) is
  *    NOT paired and contributes no duration — it's a data anomaly, and
  *    sets `hasOpenBreak` for the rest of this function's life (it does not
  *    self-clear from a later punch in the same call; only a fully
@@ -146,8 +153,8 @@ export function aggregateDailyPunches(rows: ZktAttendanceRow[], timeZone: string
   let actualCheckIn: Date | null = null;
   let actualCheckOut: Date | null = null;
   let openBreakStart: Date | null = null;
-  let hasOrphanBreakIn = false;
-  const breakSessions: { breakOut: Date; breakIn: Date }[] = [];
+  let hasOrphanBreakOut = false;
+  const breakSessions: { breakIn: Date; breakOut: Date }[] = [];
 
   for (const row of sorted) {
     const instant = resolveAttendanceInstant(row.attendanceTime, timeZone);
@@ -163,16 +170,16 @@ export function aggregateDailyPunches(rows: ZktAttendanceRow[], timeZone: string
         actualCheckOut = instant;
         break;
 
-      case 2: // Break Out — opens (or re-opens, on a duplicate) a break.
+      case 3: // Break In — opens (or re-opens, on a duplicate) a break.
         openBreakStart = instant;
         break;
 
-      case 3: // Break In — closes the open break, if there is one.
+      case 2: // Break Out — closes the open break, if there is one.
         if (openBreakStart) {
-          breakSessions.push({ breakOut: openBreakStart, breakIn: instant });
+          breakSessions.push({ breakIn: openBreakStart, breakOut: instant });
           openBreakStart = null;
         } else {
-          hasOrphanBreakIn = true;
+          hasOrphanBreakOut = true;
         }
         break;
     }
@@ -180,7 +187,7 @@ export function aggregateDailyPunches(rows: ZktAttendanceRow[], timeZone: string
 
   let totalBreakMinutes = 0;
   for (const session of breakSessions) {
-    const duration = session.breakIn.getTime() - session.breakOut.getTime();
+    const duration = session.breakOut.getTime() - session.breakIn.getTime();
     if (duration > 0) {
       totalBreakMinutes += Math.floor(duration / (1000 * 60));
     }
@@ -189,7 +196,7 @@ export function aggregateDailyPunches(rows: ZktAttendanceRow[], timeZone: string
   const actualBreakTime =
     totalBreakMinutes > 0 ? `${Math.floor(totalBreakMinutes / 60).toString().padStart(2, "0")}:${(totalBreakMinutes % 60).toString().padStart(2, "0")}` : null;
 
-  const hasOpenBreak = hasOrphanBreakIn || openBreakStart !== null;
+  const hasOpenBreak = hasOrphanBreakOut || openBreakStart !== null;
 
   return { actualCheckIn, actualCheckOut, actualBreakTime, hasOpenBreak };
 }

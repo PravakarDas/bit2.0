@@ -2393,6 +2393,7 @@ export async function setTimelineRecordProcessed(recordId: string, isProcessed: 
             lateCheckInMinutes: 0,
             lateCheckInPenalty: 0,
             autoDeductedLeaveType: null,
+            hasOpenBreak: false,
             updatedAt: new Date(),
           },
         });

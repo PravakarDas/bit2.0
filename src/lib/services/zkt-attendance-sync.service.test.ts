@@ -94,11 +94,11 @@ describe("aggregateDailyPunches", () => {
     assert.equal(result.actualCheckOut?.toISOString(), "2026-02-27T12:00:00.000Z");
   });
 
-  it("pairs a break-out/break-in into one break session and computes total minutes", () => {
+  it("pairs a break-in/break-out into one break session and computes total minutes", () => {
     const rows = [
       row("56", rawLocal(2026, 2, 27, 9, 0, 0), 0),
-      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 2), // break out
-      row("56", rawLocal(2026, 2, 27, 14, 0, 0), 3), // break in (1 hour break)
+      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 3), // break in (opens the break)
+      row("56", rawLocal(2026, 2, 27, 14, 0, 0), 2), // break out (closes it — 1 hour break)
       row("56", rawLocal(2026, 2, 27, 18, 0, 0), 1),
     ];
     const result = aggregateDailyPunches(rows, DHAKA);
@@ -109,10 +109,10 @@ describe("aggregateDailyPunches", () => {
   it("sums multiple break sessions in the same day", () => {
     const rows = [
       row("56", rawLocal(2026, 2, 27, 9, 0, 0), 0),
-      row("56", rawLocal(2026, 2, 27, 11, 0, 0), 2),
-      row("56", rawLocal(2026, 2, 27, 11, 15, 0), 3), // 15 min break
-      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 2),
-      row("56", rawLocal(2026, 2, 27, 13, 45, 0), 3), // 45 min break
+      row("56", rawLocal(2026, 2, 27, 11, 0, 0), 3),
+      row("56", rawLocal(2026, 2, 27, 11, 15, 0), 2), // 15 min break
+      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 3),
+      row("56", rawLocal(2026, 2, 27, 13, 45, 0), 2), // 45 min break
       row("56", rawLocal(2026, 2, 27, 18, 0, 0), 1),
     ];
     const result = aggregateDailyPunches(rows, DHAKA);
@@ -120,10 +120,10 @@ describe("aggregateDailyPunches", () => {
     assert.equal(result.hasOpenBreak, false);
   });
 
-  it("leaves an unclosed trailing Break Out open — no auto-close at check-out", () => {
+  it("leaves an unclosed trailing Break In open — no auto-close at check-out", () => {
     const rows = [
       row("56", rawLocal(2026, 2, 27, 9, 0, 0), 0),
-      row("56", rawLocal(2026, 2, 27, 17, 0, 0), 2), // break out, never returned
+      row("56", rawLocal(2026, 2, 27, 17, 0, 0), 3), // break in, never returned
       row("56", rawLocal(2026, 2, 27, 18, 0, 0), 1), // check-out does NOT close the break
     ];
     const result = aggregateDailyPunches(rows, DHAKA);
@@ -138,12 +138,12 @@ describe("aggregateDailyPunches", () => {
     assert.equal(result.hasOpenBreak, false);
   });
 
-  it("a duplicate Break Out while one is already open resets the open time to the newer punch", () => {
+  it("a duplicate Break In while one is already open resets the open time to the newer punch", () => {
     const rows = [
       row("56", rawLocal(2026, 2, 27, 9, 0, 0), 0),
-      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 2), // break out (duplicate, discarded)
-      row("56", rawLocal(2026, 2, 27, 13, 0, 5), 2), // break out again 5s later — this is the real open time
-      row("56", rawLocal(2026, 2, 27, 13, 10, 5), 3), // break in — 10 min break from the RESET open time
+      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 3), // break in (duplicate, discarded)
+      row("56", rawLocal(2026, 2, 27, 13, 0, 5), 3), // break in again 5s later — this is the real open time
+      row("56", rawLocal(2026, 2, 27, 13, 10, 5), 2), // break out — 10 min break from the RESET open time
       row("56", rawLocal(2026, 2, 27, 18, 0, 0), 1),
     ];
     const result = aggregateDailyPunches(rows, DHAKA);
@@ -151,10 +151,10 @@ describe("aggregateDailyPunches", () => {
     assert.equal(result.hasOpenBreak, false);
   });
 
-  it("an orphan Break In with no open Break Out is not paired and flags the day", () => {
+  it("an orphan Break Out with no open Break In is not paired and flags the day", () => {
     const rows = [
       row("56", rawLocal(2026, 2, 27, 9, 0, 0), 0),
-      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 3), // break in with nothing to close
+      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 2), // break out with nothing to close
       row("56", rawLocal(2026, 2, 27, 18, 0, 0), 1),
     ];
     const result = aggregateDailyPunches(rows, DHAKA);
@@ -162,12 +162,12 @@ describe("aggregateDailyPunches", () => {
     assert.equal(result.hasOpenBreak, true);
   });
 
-  it("still counts a valid closed break pair even when a later orphan Break In flags the day", () => {
+  it("still counts a valid closed break pair even when a later orphan Break Out flags the day", () => {
     const rows = [
       row("56", rawLocal(2026, 2, 27, 9, 0, 0), 0),
-      row("56", rawLocal(2026, 2, 27, 11, 0, 0), 2), // break out
-      row("56", rawLocal(2026, 2, 27, 11, 30, 0), 3), // break in — valid 30 min pair
-      row("56", rawLocal(2026, 2, 27, 15, 0, 0), 3), // later orphan break in
+      row("56", rawLocal(2026, 2, 27, 11, 0, 0), 3), // break in
+      row("56", rawLocal(2026, 2, 27, 11, 30, 0), 2), // break out — valid 30 min pair
+      row("56", rawLocal(2026, 2, 27, 15, 0, 0), 2), // later orphan break out
       row("56", rawLocal(2026, 2, 27, 18, 0, 0), 1),
     ];
     const result = aggregateDailyPunches(rows, DHAKA);
@@ -271,7 +271,7 @@ describe("computeDailyTimeRecordAttendanceUpdate", () => {
   it("propagates hasOpenBreak so the caller can block isProcessed even though check-in/out are complete", () => {
     const rows = [
       row("56", rawLocal(2026, 2, 27, 9, 0, 0), 0),
-      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 2), // break out, never returned
+      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 3), // break in, never returned
       row("56", rawLocal(2026, 2, 27, 18, 0, 0), 1),
     ];
     const result = computeDailyTimeRecordAttendanceUpdate(rows, { requiredActiveTime: "08:00", requestedOvertime: null }, DHAKA);
