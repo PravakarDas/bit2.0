@@ -8,6 +8,7 @@ import type { Prisma } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 import { createAdminNotification } from "./notification.actions";
 import { getRuntimeSystemControlConfig } from "@/lib/system-control";
+import { recomputeAttendanceForUserOnDemand } from "@/lib/services/zkt-attendance-poller.service";
 
 export interface SyncResult {
   success: boolean;
@@ -602,10 +603,27 @@ export async function manualSyncEmployee(userId: string, date?: Date): Promise<S
       };
     }
 
-    const result = date
-      ? await syncEmployeeTimeData(userId, date)
-      : await syncEmployeeTimeDataRange(userId);
-    
+    const runtimeConfig = await getRuntimeSystemControlConfig();
+
+    const result =
+      runtimeConfig.attendanceCalculationMethod === "ZKT_ATTENDANCE_TABLE" && date
+        ? await (async (): Promise<SyncResult> => {
+            const outcome = await recomputeAttendanceForUserOnDemand(userId, date);
+            if (outcome.updated) {
+              return { success: true, message: "Attendance data found and applied.", syncedRecords: 1, skippedRecords: 0, errors: [] };
+            }
+            return {
+              success: outcome.found,
+              message: outcome.reason || "No new attendance data available.",
+              syncedRecords: 0,
+              skippedRecords: outcome.found ? 1 : 0,
+              errors: outcome.found ? [] : [outcome.reason || "No attendance data found."],
+            };
+          })()
+        : date
+          ? await syncEmployeeTimeData(userId, date)
+          : await syncEmployeeTimeDataRange(userId);
+
     console.log(`Manual sync completed for user: ${userId}`, {
       success: result.success,
       syncedRecords: result.syncedRecords,

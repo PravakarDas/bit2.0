@@ -142,6 +142,22 @@ export function resolveLocalDatePartsFromRecordDateKey(recordDateKey: Date, time
  * fallback (unlike `zkteco.service.ts`) — an unclosed break at day's end
  * stays open (`hasOpenBreak: true`) so the caller can block `isProcessed`
  * until it's resolved, rather than being silently force-closed.
+ *
+ * Duplicate handling is deliberately ASYMMETRIC between the two punch codes,
+ * per a real production case (a device double-scan producing two Break Out
+ * rows 2 seconds apart, immediately after a perfectly valid break):
+ *
+ *  - A repeated Break Out immediately after one that already closed the
+ *    open break (no Break In in between) is a harmless duplicate scan —
+ *    silently ignored, no flag, doesn't affect the already-closed pair.
+ *  - A repeated Break In while one is already open is NOT treated the same
+ *    way — unlike a duplicate close, there's no way to tell which open
+ *    attempt is the "real" one, so it's flagged as an anomaly. The FIRST
+ *    Break In's time is kept as the open time (so a valid closing Break Out
+ *    later still produces a correct duration), but the day stays flagged.
+ *  - A Break Out with nothing open, that is NOT an immediate repeat of a
+ *    Break Out that just closed something (i.e. a genuine standalone
+ *    orphan), is still flagged exactly as before.
  */
 export function aggregateDailyPunches(rows: ZktAttendanceRow[], timeZone: string): ProcessedAttendanceTimeData {
   if (!rows || rows.length === 0) {
@@ -153,7 +169,8 @@ export function aggregateDailyPunches(rows: ZktAttendanceRow[], timeZone: string
   let actualCheckIn: Date | null = null;
   let actualCheckOut: Date | null = null;
   let openBreakStart: Date | null = null;
-  let hasOrphanBreakOut = false;
+  let lastBreakPunch: 2 | 3 | null = null;
+  let hasBreakAnomaly = false;
   const breakSessions: { breakIn: Date; breakOut: Date }[] = [];
 
   for (const row of sorted) {
@@ -170,17 +187,28 @@ export function aggregateDailyPunches(rows: ZktAttendanceRow[], timeZone: string
         actualCheckOut = instant;
         break;
 
-      case 3: // Break In — opens (or re-opens, on a duplicate) a break.
-        openBreakStart = instant;
+      case 3: // Break In — opens a break, unless one is already open.
+        if (openBreakStart === null) {
+          openBreakStart = instant;
+        } else {
+          // Duplicate open — flag it, but keep the first open time.
+          hasBreakAnomaly = true;
+        }
+        lastBreakPunch = 3;
         break;
 
       case 2: // Break Out — closes the open break, if there is one.
-        if (openBreakStart) {
+        if (openBreakStart !== null) {
           breakSessions.push({ breakIn: openBreakStart, breakOut: instant });
           openBreakStart = null;
+        } else if (lastBreakPunch === 2) {
+          // Immediate repeat of the Break Out that already closed this
+          // break — a harmless duplicate scan, silently ignored.
         } else {
-          hasOrphanBreakOut = true;
+          // A genuine orphan: nothing was open, and this isn't a repeat.
+          hasBreakAnomaly = true;
         }
+        lastBreakPunch = 2;
         break;
     }
   }
@@ -196,7 +224,7 @@ export function aggregateDailyPunches(rows: ZktAttendanceRow[], timeZone: string
   const actualBreakTime =
     totalBreakMinutes > 0 ? `${Math.floor(totalBreakMinutes / 60).toString().padStart(2, "0")}:${(totalBreakMinutes % 60).toString().padStart(2, "0")}` : null;
 
-  const hasOpenBreak = hasOrphanBreakOut || openBreakStart !== null;
+  const hasOpenBreak = hasBreakAnomaly || openBreakStart !== null;
 
   return { actualCheckIn, actualCheckOut, actualBreakTime, hasOpenBreak };
 }

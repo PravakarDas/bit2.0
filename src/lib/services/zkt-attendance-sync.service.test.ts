@@ -138,23 +138,38 @@ describe("aggregateDailyPunches", () => {
     assert.equal(result.hasOpenBreak, false);
   });
 
-  it("a duplicate Break In while one is already open resets the open time to the newer punch", () => {
+  it("a duplicate Break In while one is already open is flagged, keeping the FIRST open time", () => {
     const rows = [
       row("56", rawLocal(2026, 2, 27, 9, 0, 0), 0),
-      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 3), // break in (duplicate, discarded)
-      row("56", rawLocal(2026, 2, 27, 13, 0, 5), 3), // break in again 5s later — this is the real open time
-      row("56", rawLocal(2026, 2, 27, 13, 10, 5), 2), // break out — 10 min break from the RESET open time
+      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 3), // break in — real open time
+      row("56", rawLocal(2026, 2, 27, 13, 0, 5), 3), // duplicate break in 5s later — flags the day, discarded
+      row("56", rawLocal(2026, 2, 27, 13, 10, 0), 2), // break out — 10 min break from the FIRST open time
       row("56", rawLocal(2026, 2, 27, 18, 0, 0), 1),
     ];
     const result = aggregateDailyPunches(rows, DHAKA);
     assert.equal(result.actualBreakTime, "00:10");
+    assert.equal(result.hasOpenBreak, true);
+  });
+
+  it("a duplicate Break Out immediately after the one that closed a break is silently ignored (real production case)", () => {
+    // Matches an actual device double-scan: a valid Break In/Break Out pair,
+    // then the same Break Out fired again 2 seconds later.
+    const rows = [
+      row("56", rawLocal(2026, 2, 27, 8, 47, 44), 0),
+      row("56", rawLocal(2026, 2, 27, 13, 9, 10), 3), // break in
+      row("56", rawLocal(2026, 2, 27, 14, 36, 46), 2), // break out — closes it, valid pair
+      row("56", rawLocal(2026, 2, 27, 14, 36, 48), 2), // duplicate break out 2s later — ignored, no flag
+      row("56", rawLocal(2026, 2, 27, 19, 29, 56), 1),
+    ];
+    const result = aggregateDailyPunches(rows, DHAKA);
+    assert.equal(result.actualBreakTime, "01:27");
     assert.equal(result.hasOpenBreak, false);
   });
 
-  it("an orphan Break Out with no open Break In is not paired and flags the day", () => {
+  it("an orphan Break Out with no open Break In, and not a repeat of a preceding close, is flagged", () => {
     const rows = [
       row("56", rawLocal(2026, 2, 27, 9, 0, 0), 0),
-      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 2), // break out with nothing to close
+      row("56", rawLocal(2026, 2, 27, 13, 0, 0), 2), // break out with nothing to close, and nothing preceded it
       row("56", rawLocal(2026, 2, 27, 18, 0, 0), 1),
     ];
     const result = aggregateDailyPunches(rows, DHAKA);
@@ -162,16 +177,18 @@ describe("aggregateDailyPunches", () => {
     assert.equal(result.hasOpenBreak, true);
   });
 
-  it("still counts a valid closed break pair even when a later orphan Break Out flags the day", () => {
+  it("still counts valid closed break pairs even when a later duplicate Break In flags the day", () => {
     const rows = [
       row("56", rawLocal(2026, 2, 27, 9, 0, 0), 0),
       row("56", rawLocal(2026, 2, 27, 11, 0, 0), 3), // break in
       row("56", rawLocal(2026, 2, 27, 11, 30, 0), 2), // break out — valid 30 min pair
-      row("56", rawLocal(2026, 2, 27, 15, 0, 0), 2), // later orphan break out
+      row("56", rawLocal(2026, 2, 27, 14, 0, 0), 3), // second break opens
+      row("56", rawLocal(2026, 2, 27, 14, 5, 0), 3), // duplicate break in while one is open — flags the day
+      row("56", rawLocal(2026, 2, 27, 14, 20, 0), 2), // closes the second break, using the FIRST open time (14:00)
       row("56", rawLocal(2026, 2, 27, 18, 0, 0), 1),
     ];
     const result = aggregateDailyPunches(rows, DHAKA);
-    assert.equal(result.actualBreakTime, "00:30");
+    assert.equal(result.actualBreakTime, "00:50"); // 30 min + 20 min
     assert.equal(result.hasOpenBreak, true);
   });
 

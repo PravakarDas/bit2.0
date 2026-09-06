@@ -161,6 +161,56 @@ export async function processNewZktAttendanceRows(batchSize = 2000): Promise<Pol
   return { processedDays, skippedDays, cursorAdvancedTo: maxId.toString() };
 }
 
+export interface OnDemandRecomputeResult {
+  /** Whether any zkt_attendance punch rows exist for this (user, day) at all. */
+  found: boolean;
+  /** Whether the DailyTimeRecord was actually written to. */
+  updated: boolean;
+  reason?: string;
+}
+
+/**
+ * On-demand counterpart to the periodic poll/startup reconciliation, for a
+ * single (user, day) — used when an admin explicitly asks the system to
+ * check `zkt_attendance` right now: the "Sync" button, or immediately after
+ * "Mark as Unprocessed & Re-fetch". The periodic poll (`processNewZktAttendanceRows`)
+ * only looks at rows newer than its stored cursor, so an already-seen day's
+ * punches are otherwise invisible to it again until a full server restart
+ * runs `reconcileUnprocessedDailyTimeRecords` — an admin shouldn't have to
+ * wait for that, or restart the server, just to re-check one day.
+ */
+export async function recomputeAttendanceForUserOnDemand(userId: string, recordDate: Date): Promise<OnDemandRecomputeResult> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { attendanceId: true, isArchived: true, employeeStatus: true },
+  });
+
+  if (!user?.attendanceId) {
+    return { found: false, updated: false, reason: "This employee has no attendance device ID configured." };
+  }
+  if (user.isArchived || user.employeeStatus !== "ACTIVE") {
+    return { found: false, updated: false, reason: "This employee is not active." };
+  }
+
+  const settings = await getRuntimeSystemControlConfig();
+  const timeZone = settings.appTimezone || "Asia/Dhaka";
+  const { year, month, day } = resolveLocalDatePartsFromRecordDateKey(recordDate, timeZone);
+
+  const dayStart = new Date(Date.UTC(year, month, day, 0, 0, 0));
+  const dayEnd = new Date(Date.UTC(year, month, day + 1, 0, 0, 0));
+  const punchRows = await fetchDayPunchesForAttendanceId(user.attendanceId, dayStart, dayEnd);
+  if (punchRows.length === 0) {
+    return { found: false, updated: false, reason: "No attendance data found yet in zkt_attendance for this day." };
+  }
+
+  const updated = await recomputeDayForAttendanceId(user.attendanceId, year, month, day, timeZone);
+  return {
+    found: true,
+    updated,
+    reason: updated ? undefined : "Attendance data exists but this day is already finalized or has no matching record to update.",
+  };
+}
+
 export interface ReconcileResult {
   scanned: number;
   updated: number;
