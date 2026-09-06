@@ -26,7 +26,8 @@ import {
   type ZktAttendanceLogFilters,
   type ZktAttendanceLogSortField,
   PUNCH_TYPE_OPTIONS,
-  punchBadgeClass
+  punchBadgeClass,
+  formatRawAttendanceTime
 } from "@/components/admin/zkt-attendance-log-types";
 
 interface UserOption {
@@ -365,7 +366,7 @@ export default function ZktAttendanceLogTableView({
               records.map((record) => (
                 <TableRow key={record.id} className="hover:bg-gray-50/80">
                   <TableCell className="sticky left-0 z-10 bg-white text-sm group-hover:bg-gray-50/80">
-                    {format(new Date(record.attendanceTime), "MMM dd, yyyy h:mm:ss a")}
+                    {formatRawAttendanceTime(new Date(record.attendanceTime))}
                   </TableCell>
                   <TableCell>
                     <div className="font-medium text-foreground">{record.userName || "—"}</div>

@@ -45,15 +45,12 @@ export default function ZktAttendanceLogClient() {
   const [searchInput, setSearchInput] = useState("");
   const [sort, setSort] = useState<{ field: ZktAttendanceLogSortField | null; order: "asc" | "desc" }>({ field: "time", order: "desc" });
 
-  // Debounce the free-text search box before it becomes a real filter/query —
-  // short enough to feel instant while typing, still avoiding a query per keystroke.
-  useEffect(() => {
-    const handle = setTimeout(() => {
-      setFilters((prev) => (prev.search === searchInput ? prev : { ...prev, search: searchInput }));
-      setPagination((prev) => ({ ...prev, page: 1 }));
-    }, 150);
-    return () => clearTimeout(handle);
-  }, [searchInput]);
+  // Search only runs when the user explicitly asks for it (Search button or
+  // Enter) — no auto-query-per-keystroke, which was making typing feel slow.
+  const runSearch = () => {
+    setFilters((prev) => (prev.search === searchInput ? prev : { ...prev, search: searchInput }));
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
 
   const loadRecords = useCallback(async () => {
     // Only the very first load blanks the table with a skeleton — every
@@ -156,17 +153,23 @@ export default function ZktAttendanceLogClient() {
             <p className="text-sm text-muted-foreground">Showing raw check-in/out and break punches</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search by ID or name…"
-                className="h-8 w-64 pl-8 pr-7"
-              />
-              {isFetching && !loading && (
-                <Loader2 className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
-              )}
+            <div className="flex items-center gap-1.5">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
+                  placeholder="Search by ID or name…"
+                  className="h-8 w-64 pl-8 pr-7"
+                />
+                {isFetching && !loading && (
+                  <Loader2 className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              <Button size="sm" className="h-8" onClick={runSearch}>
+                Search
+              </Button>
             </div>
             {filtersActive && (
               <Button variant="ghost" size="sm" onClick={handleClearAllFilters} className="text-muted-foreground">

@@ -46,6 +46,32 @@ export const PUNCH_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "255", label: "Unknown" },
 ];
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Formats a raw `zkt_attendance.attendance_time` value EXACTLY as it's
+ * stored in the database — no timezone conversion at all. The column is
+ * "timestamp without time zone" and the sync bridge writes local wall-clock
+ * values into it verbatim (see zkt-attendance-sync.service.ts's doc
+ * comments), so `Date`'s UTC-getters already equal what's in the DB row.
+ * Deliberately NOT using `date-fns`'s `format()` here — it reads the
+ * Date's LOCAL (browser/server) time getters, which silently shifts the
+ * displayed value by whatever timezone the viewer happens to be in (e.g.
+ * 08:45:28 in the DB rendering as 2:45:28 PM for a GMT+6 viewer). This page
+ * shows the raw stored value as-is, by explicit request.
+ */
+export function formatRawAttendanceTime(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = MONTH_NAMES[date.getUTCMonth()];
+  const day = date.getUTCDate().toString().padStart(2, "0");
+  const minutes = date.getUTCMinutes().toString().padStart(2, "0");
+  const seconds = date.getUTCSeconds().toString().padStart(2, "0");
+  const rawHours = date.getUTCHours();
+  const ampm = rawHours >= 12 ? "PM" : "AM";
+  const hours = rawHours % 12 === 0 ? 12 : rawHours % 12;
+  return `${month} ${day}, ${year} ${hours}:${minutes}:${seconds} ${ampm}`;
+}
+
 export function punchBadgeClass(punch: number | null): string {
   switch (punch) {
     case 0:
