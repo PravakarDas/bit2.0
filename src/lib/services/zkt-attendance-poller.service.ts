@@ -99,6 +99,7 @@ async function recomputeDayForAttendanceId(attendanceId: string, year: number, m
       actualActiveTime: update.actualActiveTime,
       overtimeUndertime: update.overtimeUndertime,
       officialOvertimeundertime: update.officialOvertimeundertime,
+      hasOpenBreak: update.hasOpenBreak,
     },
   });
 

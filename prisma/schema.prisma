@@ -726,6 +726,14 @@ model DailyTimeRecord {
   autoDeductedLeaveType String? // Leave type name that was auto-deducted
   isProcessed           Boolean @default(false) // Whether auto-processing has been done for this date
 
+  // True while this day has an unresolved break punch (an open Break Out
+  // awaiting its Break In, or an orphan Break In with no matching Break Out)
+  // from the ZKT_ATTENDANCE_TABLE calculation method. Blocks isProcessed
+  // from being set to true by leave-automation until it clears — either by
+  // the underlying zkt_attendance data becoming consistent on a later
+  // recompute, or by an admin's manual override.
+  hasOpenBreak Boolean @default(false)
+
   // Relations
   userId String
   user   User   @relation(fields: [userId], references: [id])
@@ -763,6 +771,7 @@ model DailyTimeRecordTemporary {
 
   autoDeductedLeaveType String?
   isProcessed           Boolean @default(false)
+  hasOpenBreak          Boolean @default(false)
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

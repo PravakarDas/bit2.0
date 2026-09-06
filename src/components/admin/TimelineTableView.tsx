@@ -46,7 +46,8 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
-  CalendarX
+  CalendarX,
+  AlertTriangle
 } from "lucide-react";
 import { updateTimelineRecord, adjustLeaveType, setTimelineRecordProcessed, reverseLatePenalty } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
@@ -582,6 +583,22 @@ export default function TimelineTableView({
     );
   };
 
+  const getOpenBreakIndicator = (record: TimeRecord) => {
+    if (!record.hasOpenBreak || record.isProcessed) return null;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">
+            <AlertTriangle className="h-4 w-4 text-yellow-600" aria-label="Unresolved break punch" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          Unresolved break punch — check zkt_attendance data or resolve manually. This day will not auto-process until it clears.
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
+
   if (loading) {
     return (
       <div className="space-y-3 rounded-xl border p-4">
@@ -786,7 +803,10 @@ export default function TimelineTableView({
                     </div>
                   </TableCell>
                   <TableCell>
-                    {getAttendanceStatus(record)}
+                    <div className="flex items-center gap-1.5">
+                      {getAttendanceStatus(record)}
+                      {getOpenBreakIndicator(record)}
+                    </div>
                   </TableCell>
                   <TableCell className="text-sm">
                     {formatTime12(record.actualCheckIn)}

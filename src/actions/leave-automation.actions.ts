@@ -622,6 +622,17 @@ async function handleWorkDay(employee: ActiveEmployee, processDate: Date, existi
     );
 
     if (existingRecord && hasRequiredFilled && hasActualFilled) {
+        // A ZKT_ATTENDANCE_TABLE-sourced day with an unresolved break punch
+        // (open Break Out awaiting its Break In, or an orphan Break In) must
+        // not auto-finalize — even though check-in/out are already present —
+        // until the break data resolves itself or an admin manually
+        // intervenes. Skip entirely rather than falling through to the
+        // absent/auto-leave-deduction branch below, since the employee
+        // clearly was present that day.
+        if (existingRecord.hasOpenBreak) {
+            return;
+        }
+
         const requiredCheckIn = existingRecord.requiredCheckIn as Date;
         const requiredCheckOut = existingRecord.requiredCheckOut as Date;
         const requiredBreakTime = existingRecord.requiredBreakTime || "00:00";

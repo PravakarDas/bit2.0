@@ -33,6 +33,13 @@ export interface ProcessedAttendanceTimeData {
   actualCheckIn: Date | null;
   actualCheckOut: Date | null;
   actualBreakTime: string | null; // HH:MM format
+  /**
+   * True while this day has an unresolved break punch: an open Break Out
+   * (punch=2) still awaiting its Break In (punch=3), or an orphan Break In
+   * with no matching Break Out to close. See `aggregateDailyPunches`'s doc
+   * comment for the exact pairing/edge-case rules.
+   */
+  hasOpenBreak: boolean;
 }
 
 /**
@@ -107,23 +114,40 @@ export function resolveLocalDatePartsFromRecordDateKey(recordDateKey: Date, time
 
 /**
  * Processes one (user, business day)'s full set of raw punch rows into
- * actual check-in/check-out/break-time — same algorithm as
- * `zkteco.service.ts`'s `processTransactions()` (first check-in, last
- * check-out, break sessions from paired punch=2/3 toggle events, an
- * unclosed trailing break closed at the last check-out), adapted for
- * `punch` as a number (0/1/2/3) instead of a `punch_state` string.
+ * actual check-in/check-out/break-time. Check-in = first punch=0, check-out
+ * = last punch=1 (same as `zkteco.service.ts`'s `processTransactions()`).
+ *
+ * Break pairing is STRICT by punch code — not "whichever comes first" —
+ * per `zkt_attendance.punch_type`'s own labels: punch=2 ("Break Out") opens
+ * a break, punch=3 ("Break In") closes it. Two edge cases, decided
+ * explicitly against real anomalies seen in production data:
+ *
+ *  - A Break Out arriving while one is already open (e.g. a device
+ *    double-scan) RESETS the open time to the newer punch — the earlier
+ *    one is discarded as a duplicate, not turned into two sessions.
+ *  - A Break In arriving with no open Break Out to close (an orphan) is
+ *    NOT paired and contributes no duration — it's a data anomaly, and
+ *    sets `hasOpenBreak` for the rest of this function's life (it does not
+ *    self-clear from a later punch in the same call; only a fully
+ *    consistent recompute, once the underlying data is fixed, clears it).
+ *
+ * There is deliberately NO "close an unclosed trailing break at check-out"
+ * fallback (unlike `zkteco.service.ts`) — an unclosed break at day's end
+ * stays open (`hasOpenBreak: true`) so the caller can block `isProcessed`
+ * until it's resolved, rather than being silently force-closed.
  */
 export function aggregateDailyPunches(rows: ZktAttendanceRow[], timeZone: string): ProcessedAttendanceTimeData {
   if (!rows || rows.length === 0) {
-    return { actualCheckIn: null, actualCheckOut: null, actualBreakTime: null };
+    return { actualCheckIn: null, actualCheckOut: null, actualBreakTime: null, hasOpenBreak: false };
   }
 
   const sorted = [...rows].sort((a, b) => a.attendanceTime.getTime() - b.attendanceTime.getTime());
 
   let actualCheckIn: Date | null = null;
   let actualCheckOut: Date | null = null;
-  let activeBreakStart: Date | null = null;
-  const breakSessions: { breakIn: Date; breakOut: Date }[] = [];
+  let openBreakStart: Date | null = null;
+  let hasOrphanBreakIn = false;
+  const breakSessions: { breakOut: Date; breakIn: Date }[] = [];
 
   for (const row of sorted) {
     const instant = resolveAttendanceInstant(row.attendanceTime, timeZone);
@@ -139,36 +163,35 @@ export function aggregateDailyPunches(rows: ZktAttendanceRow[], timeZone: string
         actualCheckOut = instant;
         break;
 
-      case 2: // Break Out
-      case 3: // Break In
-        if (activeBreakStart) {
-          breakSessions.push({ breakIn: activeBreakStart, breakOut: instant });
-          activeBreakStart = null;
+      case 2: // Break Out — opens (or re-opens, on a duplicate) a break.
+        openBreakStart = instant;
+        break;
+
+      case 3: // Break In — closes the open break, if there is one.
+        if (openBreakStart) {
+          breakSessions.push({ breakOut: openBreakStart, breakIn: instant });
+          openBreakStart = null;
         } else {
-          activeBreakStart = instant;
+          hasOrphanBreakIn = true;
         }
         break;
     }
   }
 
-  // Policy: an unclosed trailing break is closed at the last check-out — matches zkteco.service.ts.
-  if (activeBreakStart && actualCheckOut && actualCheckOut.getTime() > activeBreakStart.getTime()) {
-    breakSessions.push({ breakIn: activeBreakStart, breakOut: actualCheckOut });
-  }
-
   let totalBreakMinutes = 0;
   for (const session of breakSessions) {
-    const duration = session.breakOut.getTime() - session.breakIn.getTime();
+    const duration = session.breakIn.getTime() - session.breakOut.getTime();
     if (duration > 0) {
       totalBreakMinutes += Math.floor(duration / (1000 * 60));
     }
   }
-  totalBreakMinutes = Math.max(0, totalBreakMinutes);
 
   const actualBreakTime =
     totalBreakMinutes > 0 ? `${Math.floor(totalBreakMinutes / 60).toString().padStart(2, "0")}:${(totalBreakMinutes % 60).toString().padStart(2, "0")}` : null;
 
-  return { actualCheckIn, actualCheckOut, actualBreakTime };
+  const hasOpenBreak = hasOrphanBreakIn || openBreakStart !== null;
+
+  return { actualCheckIn, actualCheckOut, actualBreakTime, hasOpenBreak };
 }
 
 // --- Derived-time math: a deliberate, standalone copy of the same formulas
@@ -227,6 +250,7 @@ export interface DailyTimeRecordAttendanceUpdate {
   actualActiveTime: string | null;
   overtimeUndertime: string | null;
   officialOvertimeundertime: string | null;
+  hasOpenBreak: boolean;
 }
 
 /**
@@ -240,13 +264,20 @@ export interface DailyTimeRecordAttendanceUpdate {
  * reverse of what the two fields' own schema doc-comments describe, but it's
  * the existing, already-relied-upon behavior and this function deliberately
  * matches it rather than "fixing" a naming mismatch that's out of scope here.
+ *
+ * The `actualBreakTime` returned here is coalesced from `aggregateDailyPunches`'s
+ * `null` (pure "no break" signal) to `"00:00"` — matching exactly what
+ * `zkteco-sync.actions.ts`'s live-API path persists to the DB for a no-break
+ * day (`timeData.actualBreakTime || "00:00"`). Returning the raw `null`
+ * instead would make `leave-automation.actions.ts`'s `isFilledString` check
+ * fail for every break-less workday, permanently blocking `isProcessed`.
  */
 export function computeDailyTimeRecordAttendanceUpdate(
   punches: ZktAttendanceRow[],
   existing: ExistingDailyTimeRecordSnapshot,
   timeZone: string,
 ): DailyTimeRecordAttendanceUpdate {
-  const { actualCheckIn, actualCheckOut, actualBreakTime } = aggregateDailyPunches(punches, timeZone);
+  const { actualCheckIn, actualCheckOut, actualBreakTime, hasOpenBreak } = aggregateDailyPunches(punches, timeZone);
   const effectiveBreakTime = actualBreakTime ?? "00:00";
 
   let actualActiveTime: string | null = null;
@@ -265,9 +296,10 @@ export function computeDailyTimeRecordAttendanceUpdate(
   return {
     actualCheckIn,
     actualCheckOut,
-    actualBreakTime,
+    actualBreakTime: effectiveBreakTime,
     actualActiveTime,
     overtimeUndertime,
     officialOvertimeundertime,
+    hasOpenBreak,
   };
 }

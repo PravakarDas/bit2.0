@@ -7,6 +7,8 @@ export interface TimeRecord {
   id: string;
   date: Date;
   isProcessed: boolean;
+  /** True when this day has an unresolved break punch (ZKT_ATTENDANCE_TABLE method) blocking auto-finalization. */
+  hasOpenBreak: boolean;
   status: TimelineStatusValue;
   lateCheckInMinutes: number | null;
   lateCheckInPenalty: number | null;
