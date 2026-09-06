@@ -20,9 +20,7 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, Filter, ArrowUp, ArrowDown, ArrowUpDown, CalendarX, AlertCircle } from "lucide-react";
-import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
+import { ChevronLeft, ChevronRight, Filter, ArrowUp, ArrowDown, ArrowUpDown, CalendarX } from "lucide-react";
 import {
   type ZktAttendanceLogRecord,
   type ZktAttendanceLogFilters,
@@ -31,7 +29,7 @@ import {
   punchBadgeClass
 } from "@/components/admin/zkt-attendance-log-types";
 
-interface EmployeeOption {
+interface UserOption {
   id: string;
   name: string;
 }
@@ -46,7 +44,7 @@ interface ZktAttendanceLogTableViewProps {
     totalPages: number;
   };
   onPageChange: (page: number) => void;
-  employees: EmployeeOption[];
+  users: UserOption[];
   branchNames: string[];
   sort: { field: ZktAttendanceLogSortField | null; order: "asc" | "desc" };
   onSortChange: (field: ZktAttendanceLogSortField) => void;
@@ -54,7 +52,7 @@ interface ZktAttendanceLogTableViewProps {
   onFiltersChange: (patch: Partial<ZktAttendanceLogFilters>) => void;
 }
 
-const COLUMN_COUNT = 5;
+const COLUMN_COUNT = 4;
 
 function SortButton({
   active,
@@ -259,40 +257,12 @@ function getPageNumbers(current: number, total: number): (number | "ellipsis")[]
   return pages;
 }
 
-function EmployeeCell({ record }: { record: ZktAttendanceLogRecord }) {
-  if (record.appUserId) {
-    const name = record.appFirstName && record.appLastName ? `${record.appFirstName} ${record.appLastName}` : undefined;
-    return (
-      <div className="font-medium text-foreground">
-        <EmployeeProfileLink employeeId={record.appUserId} name={name} email={record.appEmail} className="hover:underline" />
-        <div className="text-xs text-muted-foreground">Device ID {record.deviceUserId}</div>
-      </div>
-    );
-  }
-  return (
-    <div>
-      <div className="flex items-center gap-1.5 font-medium text-foreground">
-        {record.deviceUserName || `Device ID ${record.deviceUserId}`}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex">
-              <AlertCircle className="h-3.5 w-3.5 text-yellow-600" aria-label="No matching employee profile" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>No employee profile has attendance device ID {record.deviceUserId}.</TooltipContent>
-        </Tooltip>
-      </div>
-      <div className="text-xs text-muted-foreground">Device ID {record.deviceUserId}</div>
-    </div>
-  );
-}
-
 export default function ZktAttendanceLogTableView({
   records,
   loading,
   pagination,
   onPageChange,
-  employees,
+  users,
   branchNames,
   sort,
   onSortChange,
@@ -308,7 +278,6 @@ export default function ZktAttendanceLogTableView({
             <Skeleton className="h-4 w-40" />
             <Skeleton className="h-5 w-20 rounded-full" />
             <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-4 w-28" />
           </div>
         ))}
       </div>
@@ -337,14 +306,14 @@ export default function ZktAttendanceLogTableView({
 
               <ColumnHeaderCell label="Employee" className="min-w-50">
                 <SortButton label="Employee" active={sort.field === "employee"} order={sort.order} onClick={() => onSortChange("employee")} />
-                <FilterPopoverButton active={filters.employeeIds.length > 0} label="Employee">
+                <FilterPopoverButton active={filters.userIds.length > 0} label="Employee">
                   {(close) => (
                     <CheckboxListFilterBody
                       label="Employee"
-                      searchPlaceholder="Search employees…"
-                      options={employees.map((e) => ({ value: e.id, label: e.name }))}
-                      selected={filters.employeeIds}
-                      onApply={(v) => onFiltersChange({ employeeIds: v })}
+                      searchPlaceholder="Search…"
+                      options={users.map((u) => ({ value: u.id, label: u.name }))}
+                      selected={filters.userIds}
+                      onApply={(v) => onFiltersChange({ userIds: v })}
                       onClose={close}
                     />
                   )}
@@ -380,20 +349,12 @@ export default function ZktAttendanceLogTableView({
                   )}
                 </FilterPopoverButton>
               </ColumnHeaderCell>
-
-              <ColumnHeaderCell label="Device">
-                <SortButton label="Device" active={sort.field === "device"} order={sort.order} onClick={() => onSortChange("device")} />
-              </ColumnHeaderCell>
-
-              <ColumnHeaderCell label="Serial Number">
-                <SortButton label="Serial Number" active={sort.field === "serial"} order={sort.order} onClick={() => onSortChange("serial")} />
-              </ColumnHeaderCell>
             </TableRow>
           </TableHeader>
           <TableBody>
             {records.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={COLUMN_COUNT + 1} className="py-16 text-center">
+                <TableCell colSpan={COLUMN_COUNT} className="py-16 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <CalendarX className="h-8 w-8" />
                     <p className="text-sm font-medium">No attendance log entries found.</p>
@@ -407,7 +368,8 @@ export default function ZktAttendanceLogTableView({
                     {format(new Date(record.attendanceTime), "MMM dd, yyyy h:mm:ss a")}
                   </TableCell>
                   <TableCell>
-                    <EmployeeCell record={record} />
+                    <div className="font-medium text-foreground">{record.userName || "—"}</div>
+                    <div className="text-xs text-muted-foreground">ID {record.userId}</div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={cn("font-medium", punchBadgeClass(record.punch))}>
@@ -415,11 +377,6 @@ export default function ZktAttendanceLogTableView({
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm">{record.branchName || "—"}</TableCell>
-                  <TableCell className="text-sm">
-                    <div>{record.deviceName || "—"}</div>
-                    <div className="text-xs text-muted-foreground">{record.deviceIp || ""}</div>
-                  </TableCell>
-                  <TableCell className="text-sm">{record.serialNumber || "—"}</TableCell>
                 </TableRow>
               ))
             )}

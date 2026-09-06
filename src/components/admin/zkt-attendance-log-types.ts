@@ -1,25 +1,25 @@
+/**
+ * Row shape shown on the Attendance Log page — sourced ENTIRELY from
+ * `public.zkt_attendance`. Deliberately no join/cross-reference to the
+ * app's own `User` model: this page is a read-only window onto exactly
+ * what the device sync bridge wrote, nothing resolved or enriched.
+ */
 export interface ZktAttendanceLogRecord {
   id: string;
   attendanceTime: Date;
   punch: number | null;
   punchType: string | null;
-  deviceUserId: string;
-  deviceUserName: string | null;
+  userId: string;
+  userName: string | null;
   branchName: string | null;
-  deviceName: string | null;
-  deviceIp: string | null;
-  serialNumber: string | null;
-  appUserId: string | null;
-  appFirstName: string | null;
-  appLastName: string | null;
-  appEmail: string | null;
 }
 
-export type ZktAttendanceLogSortField = "time" | "employee" | "punch" | "branch" | "device" | "serial";
+export type ZktAttendanceLogSortField = "time" | "employee" | "punch" | "branch";
 
 export interface ZktAttendanceLogFilters {
   search: string;
-  employeeIds: string[];
+  /** Raw zkt_attendance.user_id values. */
+  userIds: string[];
   /** Punch codes as strings ("0".."5", "255") — matches the string-keyed checkbox filter body. */
   punchCodes: string[];
   branchNames: string[];
@@ -29,7 +29,7 @@ export interface ZktAttendanceLogFilters {
 
 export const EMPTY_ZKT_ATTENDANCE_LOG_FILTERS: ZktAttendanceLogFilters = {
   search: "",
-  employeeIds: [],
+  userIds: [],
   punchCodes: [],
   branchNames: [],
   dateFrom: "",

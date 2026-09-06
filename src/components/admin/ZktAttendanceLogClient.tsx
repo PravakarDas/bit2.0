@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Search, X } from "lucide-react";
+import { Search, X, Loader2 } from "lucide-react";
 import ZktAttendanceLogTableView from "@/components/admin/ZktAttendanceLogTableView";
-import { getZktAttendanceLogRecords, getZktAttendanceBranchNames } from "@/actions/zkt-attendance-log.actions";
-import { getUsers } from "@/actions/user.actions";
+import { getZktAttendanceLogRecords, getZktAttendanceFilterOptions } from "@/actions/zkt-attendance-log.actions";
 import {
   type ZktAttendanceLogRecord,
   type ZktAttendanceLogFilters,
@@ -16,7 +15,7 @@ import {
   EMPTY_ZKT_ATTENDANCE_LOG_FILTERS
 } from "@/components/admin/zkt-attendance-log-types";
 
-interface EmployeeOption {
+interface UserOption {
   id: string;
   name: string;
 }
@@ -32,30 +31,42 @@ function hasActiveFilters(filters: ZktAttendanceLogFilters): boolean {
 
 export default function ZktAttendanceLogClient() {
   const [records, setRecords] = useState<ZktAttendanceLogRecord[]>([]);
-  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [branchNames, setBranchNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+  // A ref (not state) on purpose: flipping it must not change loadRecords's
+  // identity or re-trigger the load effect — it only decides, at call time,
+  // whether THIS call should show the full skeleton.
+  const hasLoadedOnceRef = useRef(false);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
 
   const [filters, setFilters] = useState<ZktAttendanceLogFilters>(EMPTY_ZKT_ATTENDANCE_LOG_FILTERS);
   const [searchInput, setSearchInput] = useState("");
   const [sort, setSort] = useState<{ field: ZktAttendanceLogSortField | null; order: "asc" | "desc" }>({ field: "time", order: "desc" });
 
-  // Debounce the free-text search box before it becomes a real filter/query.
+  // Debounce the free-text search box before it becomes a real filter/query —
+  // short enough to feel instant while typing, still avoiding a query per keystroke.
   useEffect(() => {
     const handle = setTimeout(() => {
       setFilters((prev) => (prev.search === searchInput ? prev : { ...prev, search: searchInput }));
       setPagination((prev) => ({ ...prev, page: 1 }));
-    }, 350);
+    }, 150);
     return () => clearTimeout(handle);
   }, [searchInput]);
 
   const loadRecords = useCallback(async () => {
-    setLoading(true);
+    // Only the very first load blanks the table with a skeleton — every
+    // subsequent search/filter/sort keeps the current rows visible (with a
+    // small spinner) so typing in the search box feels instant, not jumpy.
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
+    setIsFetching(true);
     try {
       const result = await getZktAttendanceLogRecords({
         search: filters.search || undefined,
-        employeeIds: filters.employeeIds.length > 0 ? filters.employeeIds : undefined,
+        userIds: filters.userIds.length > 0 ? filters.userIds : undefined,
         punchCodes: filters.punchCodes.length > 0 ? filters.punchCodes.map(Number) : undefined,
         branchNames: filters.branchNames.length > 0 ? filters.branchNames : undefined,
         dateFrom: filters.dateFrom || undefined,
@@ -78,25 +89,20 @@ export default function ZktAttendanceLogClient() {
       console.error("Error loading zkt_attendance log:", error);
     } finally {
       setLoading(false);
+      setIsFetching(false);
+      hasLoadedOnceRef.current = true;
     }
   }, [filters, pagination.page, pagination.limit, sort]);
 
   const loadInitialData = useCallback(async () => {
     try {
-      const [usersResult, branchResult] = await Promise.all([getUsers(), getZktAttendanceBranchNames()]);
-      setEmployees(
-        (usersResult || [])
-          .filter((u) => !!u.attendanceId)
-          .map((u) => ({
-            id: u.id,
-            name: u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.email,
-          }))
-      );
-      if (branchResult.success) {
-        setBranchNames(branchResult.branchNames);
+      const result = await getZktAttendanceFilterOptions();
+      if (result.success) {
+        setUsers(result.users);
+        setBranchNames(result.branchNames);
       }
     } catch (error) {
-      console.error("Error loading initial data:", error);
+      console.error("Error loading filter options:", error);
     }
   }, []);
 
@@ -155,9 +161,12 @@ export default function ZktAttendanceLogClient() {
               <Input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search employee, device, serial…"
-                className="h-8 w-64 pl-8"
+                placeholder="Search by ID or name…"
+                className="h-8 w-64 pl-8 pr-7"
               />
+              {isFetching && !loading && (
+                <Loader2 className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
+              )}
             </div>
             {filtersActive && (
               <Button variant="ghost" size="sm" onClick={handleClearAllFilters} className="text-muted-foreground">
@@ -188,7 +197,7 @@ export default function ZktAttendanceLogClient() {
             loading={loading}
             pagination={pagination}
             onPageChange={(page: number) => setPagination((prev) => ({ ...prev, page }))}
-            employees={employees}
+            users={users}
             branchNames={branchNames}
             sort={sort}
             onSortChange={handleSortChange}
