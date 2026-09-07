@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2021",
+    "outDir": "./.test-build",
+    "rootDir": "./src",
+    "noEmit": false,
+    "declaration": false,
+    "sourceMap": false,
+    "incremental": false
+  },
+  "include": [
+    "src/lib/services/zkt-attendance-sync.service.ts",
+    "src/lib/services/zkt-attendance-sync.service.test.ts"
+  ],
+  "exclude": ["node_modules"]
+}

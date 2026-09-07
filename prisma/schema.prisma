@@ -11,7 +11,7 @@ enum EmployeeStatus {
   // Active type statuses
   ACTIVE
   PROBATION
-  
+
   // Archived type statuses
   RESIGNED
   TERMINATED
@@ -43,6 +43,7 @@ enum LoanStatus {
   MANAGER_VERIFIED
   MANAGER_REJECTED
 }
+
 enum PaymentType {
   EMI
   MANUAL
@@ -50,6 +51,7 @@ enum PaymentType {
   MANAGER_VERIFIED
   MANAGER_REJECTED
 }
+
 enum ValueType {
   FIXED
   PERCENTAGE
@@ -111,144 +113,144 @@ enum TimelineModificationRequestStatus {
 }
 
 model PublicHoliday {
-  id          String   @id @default(cuid())
-  name        String   // Holiday name (e.g., "New Year's Day", "Independence Day")
-  date        DateTime // Holiday date
-  description String?  // Optional description
-  isRecurring Boolean  @default(false) // Whether it repeats annually
-  appliesToAllBranches Boolean @default(true)
+  id                   String   @id @default(cuid())
+  name                 String // Holiday name (e.g., "New Year's Day", "Independence Day")
+  date                 DateTime // Holiday date
+  description          String? // Optional description
+  isRecurring          Boolean  @default(false) // Whether it repeats annually
+  appliesToAllBranches Boolean  @default(true)
   applicableBranchIds  String[] @default([])
-  isActive    Boolean  @default(true)  // Can be disabled
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive             Boolean  @default(true) // Can be disabled
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@map("public_holidays")
 }
 
 model Department {
-  id          String   @id @default(cuid())
-  name        String   @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
   description String?
-  isActive    Boolean  @default(true)
-  
+  isActive    Boolean @default(true)
+
   // Self-referencing for parent-child hierarchy
-  parentId    String?
-  parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
-  children    Department[] @relation("DepartmentHierarchy")
-  
+  parentId String?
+  parent   Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children Department[] @relation("DepartmentHierarchy")
+
   // Relations
   designations Designation[]
   users        User[]
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Designation {
-  id           String   @id @default(cuid())
-  name         String
-  description  String?
-  isActive     Boolean  @default(true)
-  
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  
+
   // Relations
-  users        User[]
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  
+  users User[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([name, departmentId])
 }
 
 model User {
-  id            String     @id @default(cuid())
-  clerkId       String     @unique
-  email         String     @unique
-  firstName     String?
-  lastName      String?
-  imageUrl      String?
-  role          Role       @default(EMPLOYEE)
-  isManager     Boolean    @default(false)
-  status        UserStatus @default(PENDING)
-  employeeStatus EmployeeStatus? @default(ACTIVE)
-  isArchived    Boolean    @default(false)
-  archivedAt    DateTime?  // Timestamp when employee was archived
-  payrollContinuationMonths Int @default(2) // Number of months to continue payroll after archive
-  walletBalance Float      @default(0)
-  
+  id                        String          @id @default(cuid())
+  clerkId                   String          @unique
+  email                     String          @unique
+  firstName                 String?
+  lastName                  String?
+  imageUrl                  String?
+  role                      Role            @default(EMPLOYEE)
+  isManager                 Boolean         @default(false)
+  status                    UserStatus      @default(PENDING)
+  employeeStatus            EmployeeStatus? @default(ACTIVE)
+  isArchived                Boolean         @default(false)
+  archivedAt                DateTime? // Timestamp when employee was archived
+  payrollContinuationMonths Int             @default(2) // Number of months to continue payroll after archive
+  walletBalance             Float           @default(0)
+
   // Current active salary for quick lookups
-  baseSalary Float      @default(0)
-  
-  branchId   String?
-  branch     Branch?    @relation(fields: [branchId], references: [id])
-  
+  baseSalary Float @default(0)
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
   // Personal Information
-  gender               String?
-  dateOfBirth          DateTime?
-  bloodGroup           String?
-  nidNumber            String?
-  
+  gender      String?
+  dateOfBirth DateTime?
+  bloodGroup  String?
+  nidNumber   String?
+
   // Contact Information
-  phoneNumber          String?
-  personalEmail        String?
-  
+  phoneNumber   String?
+  personalEmail String?
+
   // Current Address
-  currentStreet        String?
-  currentCity          String?
-  currentState         String?
-  currentCountry       String?
-  currentPostalCode    String?
-  
+  currentStreet     String?
+  currentCity       String?
+  currentState      String?
+  currentCountry    String?
+  currentPostalCode String?
+
   // Permanent Address
-  permanentStreet      String?
-  permanentCity        String?
-  permanentState       String?
-  permanentCountry     String?
-  permanentPostalCode  String?
-  
+  permanentStreet     String?
+  permanentCity       String?
+  permanentState      String?
+  permanentCountry    String?
+  permanentPostalCode String?
+
   // Employment Details
-  departmentId     String?
-  department       Department? @relation(fields: [departmentId], references: [id])
-  designationId    String?
-  designation      Designation? @relation(fields: [designationId], references: [id])
-  dateOfJoining    DateTime?
-  attendanceId     String?
-  workingDaysInMonth Int?       @default(22)
-  
+  departmentId       String?
+  department         Department?  @relation(fields: [departmentId], references: [id])
+  designationId      String?
+  designation        Designation? @relation(fields: [designationId], references: [id])
+  dateOfJoining      DateTime?
+  attendanceId       String?
+  workingDaysInMonth Int?         @default(22)
+
   // Emergency Contact
-  emergencyContactName          String?
-  emergencyContactRelationship  String?
-  emergencyContactPhone         String?
-  emergencyContactEmail         String?
-  emergencyContactAddress       String?
-  emergencyContactNid           String?
-  
+  emergencyContactName         String?
+  emergencyContactRelationship String?
+  emergencyContactPhone        String?
+  emergencyContactEmail        String?
+  emergencyContactAddress      String?
+  emergencyContactNid          String?
+
   // Nominee Details
-  nomineeName                   String?
-  nomineeRelationship           String?
-  nomineePhone                  String?
-  nomineeEmail                  String?
-  nomineeNid                    String?
-  nomineeAddress                String?
-  
+  nomineeName         String?
+  nomineeRelationship String?
+  nomineePhone        String?
+  nomineeEmail        String?
+  nomineeNid          String?
+  nomineeAddress      String?
+
   // Banking Information
-  bankAccountNumber    String?
-  
+  bankAccountNumber String?
+
   // Professional Links
-  portfolioLink        String?
-  githubLink           String?
-  linkedinLink         String?
-  fiverrLink           String?
-  upworkLink           String?
-  
+  portfolioLink String?
+  githubLink    String?
+  linkedinLink  String?
+  fiverrLink    String?
+  upworkLink    String?
+
   // Employee Document Links
   loanPapersLink       String?
   nomineesPapersLink   String?
   emergencyContactLink String?
   personalInfoLink     String?
-  
+
   loans               Loan[]
   medicalClaims       MedicalClaim[]
   medicalEntitlements MedicalEntitlement[]
@@ -256,34 +258,34 @@ model User {
   salaryHistory       BaseSalary[]
   walletTransactions  WalletTransaction[]
   walletRequests      WalletRequest[]
-  
+
   // Leave Management Relations
-  leaveEntitlements   UserLeaveEntitlement[]
-  leaveApplications   LeaveApplication[]
-  
+  leaveEntitlements UserLeaveEntitlement[]
+  leaveApplications LeaveApplication[]
+
   // Timeline/Attendance Relations
-  timeRecords         DailyTimeRecord[]
+  timeRecords          DailyTimeRecord[]
   temporaryTimeRecords DailyTimeRecordTemporary[]
-  
+
   // Overtime Payout Relations
-  overtimePayouts     OvertimePayout[]
-  
+  overtimePayouts OvertimePayout[]
+
   // Overtime Request Relations
-  overtimeRequests    OvertimeRequest[]
+  overtimeRequests OvertimeRequest[]
 
   // Timeline Modification Request Relations
-  timelineModificationRequests TimelineModificationRequest[] @relation("TimelineModificationRequester")
-  timelineModificationReviewed TimelineModificationRequest[] @relation("TimelineModificationReviewer")
+  timelineModificationRequests   TimelineModificationRequest[]   @relation("TimelineModificationRequester")
+  timelineModificationReviewed   TimelineModificationRequest[]   @relation("TimelineModificationReviewer")
   timelineModificationActionLogs TimelineModificationActionLog[] @relation("TimelineModificationActionActor")
   timelineModificationTargetLogs TimelineModificationActionLog[] @relation("TimelineModificationActionTarget")
-  
+
   // Profile Update Requests
   profileUpdateRequests ProfileUpdateRequest[]
-  
-    // Manager verification relations
-    loansVerifiedByManager Loan[] @relation("LoanManagerVerification")
-    overtimeRequestsVerifiedByManager OvertimeRequest[] @relation("OvertimeRequestManagerVerification")
-  
+
+  // Manager verification relations
+  loansVerifiedByManager            Loan[]            @relation("LoanManagerVerification")
+  overtimeRequestsVerifiedByManager OvertimeRequest[] @relation("OvertimeRequestManagerVerification")
+
   // Employee Notifications
   employeeNotifications EmployeeNotification[]
 
@@ -291,20 +293,23 @@ model User {
   sentBreakingNotices      BreakingNotice[]          @relation("BreakingNoticeSender")
   targetedBreakingNotices  BreakingNotice[]          @relation("BreakingNoticeTargetUser")
   breakingNoticeRecipients BreakingNoticeRecipient[] @relation("BreakingNoticeRecipientUser")
-  
+
   // Audit Logs
-  auditLogs             LeaveAuditLog[]
-  
+  auditLogs LeaveAuditLog[]
+
   // Allowance Relations
-  employeeAllowances    EmployeeAllowance[]
-  payrollOverrides      PayrollAllowanceOverride[]
+  employeeAllowances EmployeeAllowance[]
+  payrollOverrides   PayrollAllowanceOverride[]
 
   // Employee Notes relations
-  notesReceived         EmployeeNote[]
-  notesCreated          EmployeeNote[] @relation("EmployeeNoteCreator")
-  
+  notesReceived EmployeeNote[]
+  notesCreated  EmployeeNote[] @relation("EmployeeNoteCreator")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Looked up frequently by the zkt_attendance poller (attendanceId <-> zkt_attendance.user_id).
+  @@index([attendanceId])
 }
 
 model WalletTransaction {
@@ -312,11 +317,11 @@ model WalletTransaction {
   amount      Float
   type        TransactionType
   description String
-  
-  userId      String
-  user        User            @relation(fields: [userId], references: [id])
-  
-  createdAt   DateTime        @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
 }
 
 model BaseSalary {
@@ -325,99 +330,99 @@ model BaseSalary {
   effectiveFrom DateTime           @default(now())
   effectiveTo   DateTime?
   reason        SalaryChangeReason @default(JOINING)
-  
-  userId        String
-  user          User               @relation(fields: [userId], references: [id])
-  
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Branch {
-  id        String   @id @default(cuid())
-  name      String
-  location  String
-  isActive  Boolean  @default(true)
+  id                       String  @id @default(cuid())
+  name                     String
+  location                 String
+  isActive                 Boolean @default(true)
   isLoanApplicationEnabled Boolean @default(true)
-  isLatePenaltyEnabled Boolean @default(true)
+  isLatePenaltyEnabled     Boolean @default(true)
 
   // Timeline/Attendance Settings
-  checkInTime    String   @default("09:00")    // Format: "HH:MM" (24-hour)
-  checkOutTime   String   @default("18:00")    // Format: "HH:MM" (24-hour)  
-  breakDuration  String   @default("01:00")    // Format: "HH:MM" (duration)
-  weeklyOffDays  String[] @default(["SUNDAY"]) // Array of day names: MONDAY, TUESDAY, etc.
-  
-  users      User[]
-  bonuses    BonusType[]
+  checkInTime   String   @default("09:00") // Format: "HH:MM" (24-hour)
+  checkOutTime  String   @default("18:00") // Format: "HH:MM" (24-hour)  
+  breakDuration String   @default("01:00") // Format: "HH:MM" (duration)
+  weeklyOffDays String[] @default(["SUNDAY"]) // Array of day names: MONDAY, TUESDAY, etc.
+
+  users                   User[]
+  bonuses                 BonusType[]
   targetedBreakingNotices BreakingNotice[] @relation("BreakingNoticeTargetBranch")
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model SystemSettings {
-  id                String @id @default("global")
-  medicalClaimLimit Float  @default(500)
+  id                String   @id @default("global")
+  medicalClaimLimit Float    @default(500)
   updatedAt         DateTime @updatedAt
 }
 
 model AllowanceType {
-  id               String            @id @default(cuid())
-  name             String
-  amount           Float
-  valueType        ValueType         // FIXED or PERCENTAGE
-  scope            AllowanceScope    // FIXED, FULL_BRANCH, CUSTOM
-  targetBranchIds  String[]          // For FULL_BRANCH scope only
-  isActive         Boolean           @default(true)
-  
+  id              String         @id @default(cuid())
+  name            String
+  amount          Float
+  valueType       ValueType // FIXED or PERCENTAGE
+  scope           AllowanceScope // FIXED, FULL_BRANCH, CUSTOM
+  targetBranchIds String[] // For FULL_BRANCH scope only
+  isActive        Boolean        @default(true)
+
   // Relations
   employeeAllowances EmployeeAllowance[]
   payrollOverrides   PayrollAllowanceOverride[]
-  
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model EmployeeAllowance {
-  id            String        @id @default(cuid())
-  userId        String
-  allowanceId   String
-  isActive      Boolean       @default(true)
-  
+  id          String  @id @default(cuid())
+  userId      String
+  allowanceId String
+  isActive    Boolean @default(true)
+
   // Relations
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  allowance     AllowanceType @relation(fields: [allowanceId], references: [id], onDelete: Cascade)
-  
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  allowance AllowanceType @relation(fields: [allowanceId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
   @@unique([userId, allowanceId])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
 }
 
 model PayrollAllowanceOverride {
-  id            String        @id @default(cuid())
-  payrollMonth  String        // e.g. "2024-01"
-  userId        String
-  allowanceId   String
-  isIncluded    Boolean       // true = include, false = exclude
-  customAmount  Float?        // override amount if different from allowance default
-  
+  id           String  @id @default(cuid())
+  payrollMonth String // e.g. "2024-01"
+  userId       String
+  allowanceId  String
+  isIncluded   Boolean // true = include, false = exclude
+  customAmount Float? // override amount if different from allowance default
+
   // Relations
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  allowance     AllowanceType @relation(fields: [allowanceId], references: [id], onDelete: Cascade)
-  
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  allowance AllowanceType @relation(fields: [allowanceId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
   @@unique([payrollMonth, userId, allowanceId])
-  createdAt     DateTime @default(now())
 }
 
 model BonusType {
-  id        String    @id @default(cuid())
-  name      String
-  value     Float
-  type      ValueType
-  isActive  Boolean   @default(true)
-  
-  branches  Branch[]
-  
+  id       String    @id @default(cuid())
+  name     String
+  value    Float
+  type     ValueType
+  isActive Boolean   @default(true)
+
+  branches Branch[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -427,30 +432,30 @@ model MedicalEntitlement {
   year             Int
   totalLimit       Float
   remainingBalance Float
-  
+
   userId String
   user   User   @relation(fields: [userId], references: [id])
-  
-  claims MedicalClaim[]
-  
+
+  claims    MedicalClaim[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
   @@unique([userId, year])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 model MedicalClaim {
-  id          String      @id @default(cuid())
-  amount      Float
-  description String
+  id            String      @id @default(cuid())
+  amount        Float
+  description   String
   attachmentUrl String?
-  status      ClaimStatus @default(PENDING)
-  
+  status        ClaimStatus @default(PENDING)
+
   userId String
   user   User   @relation(fields: [userId], references: [id])
-  
+
   medicalEntitlementId String?
   medicalEntitlement   MedicalEntitlement? @relation(fields: [medicalEntitlementId], references: [id])
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -465,10 +470,10 @@ model SalaryPayment {
   loanDeduction        Float
   walletAdjustment     Float  @default(0)
   netAmount            Float
-  
+
   userId String
   user   User   @relation(fields: [userId], references: [id])
-  
+
   createdAt DateTime @default(now())
 }
 
@@ -484,23 +489,23 @@ model Loan {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  emiState  EmiState?
-  payments  Payment[]
-  reason             String     @default("Personal")
-  emiStartMonth      Int?
-  emiStartYear       Int?
-  approvedBy         String?
-  adminComments      String?    // Admin comments during approval
-  declineReason      String?    // Reason for declining the loan
-  declinedBy         String?    // Admin who declined the loan
+  emiState      EmiState?
+  payments      Payment[]
+  reason        String    @default("Personal")
+  emiStartMonth Int?
+  emiStartYear  Int?
+  approvedBy    String?
+  adminComments String? // Admin comments during approval
+  declineReason String? // Reason for declining the loan
+  declinedBy    String? // Admin who declined the loan
 
-  managerVerifiedAt   DateTime?
-  managerVerifiedById String?
-  managerVerifiedBy   User?      @relation("LoanManagerVerification", fields: [managerVerifiedById], references: [id])
+  managerVerifiedAt      DateTime?
+  managerVerifiedById    String?
+  managerVerifiedBy      User?     @relation("LoanManagerVerification", fields: [managerVerifiedById], references: [id])
   managerRejectionReason String?
-  managerComments     String?
-  adminDeclinedReason String?
-  adminDeclinedAt     DateTime?
+  managerComments        String?
+  adminDeclinedReason    String?
+  adminDeclinedAt        DateTime?
 
   auditLogs AuditLog[]
 
@@ -536,17 +541,17 @@ enum WalletRequestStatus {
 }
 
 model WalletRequest {
-  id          String              @id @default(cuid())
-  amount      Float
-  description String
-  status      WalletRequestStatus @default(PENDING)
+  id            String              @id @default(cuid())
+  amount        Float
+  description   String
+  status        WalletRequestStatus @default(PENDING)
   attachmentUrl String?
 
-  userId      String
-  user        User                @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model AuditLog {
@@ -554,12 +559,12 @@ model AuditLog {
   oldEmi       Float?
   newEmi       Float?
   changeReason String
-  
+
   // Optional linkage for loan-specific logs
-  loanId       String?
-  loan         Loan?   @relation(fields: [loanId], references: [id])
-  
-  userId       String?
+  loanId String?
+  loan   Loan?   @relation(fields: [loanId], references: [id])
+
+  userId String?
 
   createdAt DateTime @default(now())
 }
@@ -573,80 +578,94 @@ model SystemAudit {
 }
 
 model SystemControlSettings {
-  id                         String   @id @default("global")
-  appTimezone                String   @default("Asia/Dhaka")
-  timelineCronEnabled        Boolean  @default(true)
-  timelineCronHour           Int      @default(1)
-  timelineCronMinute         Int      @default(24)
-  zktecoCronEnabled          Boolean  @default(true)
-  zktecoCronMode             String   @default("DAILY") // "DAILY" | "INTERVAL"
-  zktecoIntervalMinutes      Int      @default(15)
-  zktecoCronHour             Int      @default(11)
-  zktecoCronMinute           Int      @default(0)
-  leaveAutomationCronEnabled Boolean  @default(true)
-  leaveAutomationCronHour    Int      @default(23)
-  leaveAutomationCronMinute  Int      @default(43)
-  zktecoBaseUrl              String   @default("")
-  zktecoUsername             String   @default("")
-  zktecoPassword             String   @default("")
-  updatedById                String?
-  updatedByEmail             String?
-  updatedByRole              String?
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  id                         String  @id @default("global")
+  appTimezone                String  @default("Asia/Dhaka")
+  timelineCronEnabled        Boolean @default(true)
+  timelineCronHour           Int     @default(1)
+  timelineCronMinute         Int     @default(24)
+  zktecoCronEnabled          Boolean @default(true)
+  zktecoCronMode             String  @default("DAILY") // "DAILY" | "INTERVAL"
+  zktecoIntervalMinutes      Int     @default(15)
+  zktecoCronHour             Int     @default(11)
+  zktecoCronMinute           Int     @default(0)
+  leaveAutomationCronEnabled Boolean @default(true)
+  leaveAutomationCronHour    Int     @default(23)
+  leaveAutomationCronMinute  Int     @default(43)
+  zktecoBaseUrl              String  @default("")
+  zktecoUsername             String  @default("")
+  zktecoPassword             String  @default("")
+
+  // Phase: attendance calculation source. "ZKTECO_API" (default, existing
+  // behavior — live HTTP polling via zkteco-sync.actions.ts) vs
+  // "ZKT_ATTENDANCE_TABLE" (new — continuous ingestion from the
+  // externally-populated public.zkt_attendance table). Existing deployments
+  // keep working unchanged until an admin explicitly switches this.
+  attendanceCalculationMethod      String  @default("ZKTECO_API")
+  zktAttendancePollEnabled         Boolean @default(false)
+  zktAttendancePollIntervalSeconds Int     @default(30)
+  // Cursor into zkt_attendance.id (bigint) — the poller only ever reads rows
+  // with id > this value, then advances it. Not managed by Prisma as a
+  // relation since zkt_attendance is an externally-owned, unmodeled table.
+  zktAttendanceLastProcessedId     BigInt  @default(0)
+
+  updatedById    String?
+  updatedByEmail String?
+  updatedByRole  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model SystemControlChangeLog {
-  id            String   @id @default(cuid())
-  actorId       String
-  actorName     String
-  actorEmail    String?
-  actorRole     String
-  actorIsManager Boolean @default(false)
-  changedFields String[]
+  id             String   @id @default(cuid())
+  actorId        String
+  actorName      String
+  actorEmail     String?
+  actorRole      String
+  actorIsManager Boolean  @default(false)
+  changedFields  String[]
   previousValues Json?
   newValues      Json?
-  createdAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
 }
 
 // Leave Management Models
 model LeaveType {
-  id                String   @id @default(cuid())
-  name              String   @unique
-  allocatedDays     Int      // How many days per year
-  requiresApproval  Boolean  @default(true)
-  isActive          Boolean  @default(true)
-  leaveResetPolicy  LeaveResetPolicy @default(ROSTER_EVERY_YEAR)
-  
+  id               String           @id @default(cuid())
+  name             String           @unique
+  allocatedDays    Int // How many days per year
+  requiresApproval Boolean          @default(true)
+  isActive         Boolean          @default(true)
+  leaveResetPolicy LeaveResetPolicy @default(ROSTER_EVERY_YEAR)
+
   // Branches that can use this leave type (JSON array of branch IDs)
-  applicableBranches String  @default("[]") // JSON array ["branch1", "branch2"]
-  
+  applicableBranches String @default("[]") // JSON array ["branch1", "branch2"]
+
   // Relations
-  userEntitlements   UserLeaveEntitlement[]
-  leaveApplications  LeaveApplication[]
-  leaveAuditLogs     LeaveAuditLog[]
-  
+  userEntitlements  UserLeaveEntitlement[]
+  leaveApplications LeaveApplication[]
+  leaveAuditLogs    LeaveAuditLog[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model UserLeaveEntitlement {
-  id           String @id @default(cuid())
-  year         Int    // Calendar year
-  allocatedDays Int    // Days allocated for this year
-  usedDays     Int    @default(0) // Days used so far
-  
+  id            String @id @default(cuid())
+  year          Int // Calendar year
+  allocatedDays Int // Days allocated for this year
+  usedDays      Int    @default(0) // Days used so far
+
   // Relations
-  userId       String
-  user         User       @relation(fields: [userId], references: [id])
-  leaveTypeId  String
-  leaveType    LeaveType  @relation(fields: [leaveTypeId], references: [id])
-  
-  // Ensure one entitlement per user per leave type per year
-  @@unique([userId, leaveTypeId, year])
-  
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  leaveTypeId String
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Ensure one entitlement per user per leave type per year
+  @@unique([userId, leaveTypeId, year])
 }
 
 enum LeaveApplicationStatus {
@@ -656,97 +675,106 @@ enum LeaveApplicationStatus {
 }
 
 model LeaveApplication {
-  id          String                @id @default(cuid())
-  leaveDate   DateTime              // The date of leave
-  reason      String?               // Optional reason
-  status      LeaveApplicationStatus @default(PENDING)
-  
+  id        String                 @id @default(cuid())
+  leaveDate DateTime // The date of leave
+  reason    String? // Optional reason
+  status    LeaveApplicationStatus @default(PENDING)
+
   // Relations
   userId      String
-  user        User                  @relation(fields: [userId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
   leaveTypeId String
-  leaveType   LeaveType             @relation(fields: [leaveTypeId], references: [id])
-  
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+
   // Approval tracking
-  approvedBy  String?               // Admin who approved/rejected
-  approvedAt  DateTime?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
+  approvedBy String? // Admin who approved/rejected
+  approvedAt DateTime?
 
-model DailyTimeRecord {
-  id                String    @id @default(cuid())
-  date              DateTime  // The date for this record (date only, no time)
-  status            DailyRecordStatus @default(PRESENT)
-  
-  // Required times (from branch settings or manual override)
-  requiredCheckIn   DateTime? // Full DateTime for required check-in
-  requiredCheckOut  DateTime? // Full DateTime for required check-out
-  requiredBreakTime String?   // Duration in HH:MM format (e.g., "01:00")
-  
-  // Actual times (to be filled by attendance system or manual entry)
-  actualCheckIn     DateTime? // Actual check-in time
-  actualCheckOut    DateTime? // Actual check-out time
-  actualBreakTime   String?   // Actual break duration in HH:MM format
-  
-  // Calculated fields (computed from above times)
-  requiredActiveTime String?  // (requiredCheckOut - requiredCheckIn - requiredBreakTime) in HH:MM
-  actualActiveTime   String?  // (actualCheckOut - actualCheckIn - actualBreakTime) in HH:MM
-  officialOvertimeundertime  String?  // (actualActiveTime - requiredActiveTime) in +/-HH:MM format - Auto calculated
-  requestedOvertime  String?  // Overtime approved by admin from employee request in HH:MM format
-  requestedOTstart   DateTime? // Employee requested overtime start time
-  requestedOTend     DateTime? // Employee requested overtime end time
-  overtimeUndertime  String?  // Total overtime (officialOvertimeundertime + requestedOvertime) in +/-HH:MM format
-
-  // Late check-in penalty tracking
-  lateCheckInMinutes Int?     @default(0)
-  lateCheckInPenalty Float?   @default(0)
-  
-  // Auto leave deduction details
-  autoDeductedLeaveType String? // Leave type name that was auto-deducted
-  isProcessed           Boolean @default(false) // Whether auto-processing has been done for this date
-  
-  // Relations
-  userId            String
-  user              User      @relation(fields: [userId], references: [id])
-  
-  // Ensure one record per user per date
-  @@unique([userId, date])
-  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
+model DailyTimeRecord {
+  id     String            @id @default(cuid())
+  date   DateTime // The date for this record (date only, no time)
+  status DailyRecordStatus @default(PRESENT)
+
+  // Required times (from branch settings or manual override)
+  requiredCheckIn   DateTime? // Full DateTime for required check-in
+  requiredCheckOut  DateTime? // Full DateTime for required check-out
+  requiredBreakTime String? // Duration in HH:MM format (e.g., "01:00")
+
+  // Actual times (to be filled by attendance system or manual entry)
+  actualCheckIn   DateTime? // Actual check-in time
+  actualCheckOut  DateTime? // Actual check-out time
+  actualBreakTime String? // Actual break duration in HH:MM format
+
+  // Calculated fields (computed from above times)
+  requiredActiveTime        String? // (requiredCheckOut - requiredCheckIn - requiredBreakTime) in HH:MM
+  actualActiveTime          String? // (actualCheckOut - actualCheckIn - actualBreakTime) in HH:MM
+  officialOvertimeundertime String? // (actualActiveTime - requiredActiveTime) in +/-HH:MM format - Auto calculated
+  requestedOvertime         String? // Overtime approved by admin from employee request in HH:MM format
+  requestedOTstart          DateTime? // Employee requested overtime start time
+  requestedOTend            DateTime? // Employee requested overtime end time
+  overtimeUndertime         String? // Total overtime (officialOvertimeundertime + requestedOvertime) in +/-HH:MM format
+
+  // Late check-in penalty tracking
+  lateCheckInMinutes Int?   @default(0)
+  lateCheckInPenalty Float? @default(0)
+
+  // Auto leave deduction details
+  autoDeductedLeaveType String? // Leave type name that was auto-deducted
+  isProcessed           Boolean @default(false) // Whether auto-processing has been done for this date
+
+  // True while this day has an unresolved break punch (an open Break Out
+  // awaiting its Break In, or an orphan Break In with no matching Break Out)
+  // from the ZKT_ATTENDANCE_TABLE calculation method. Blocks isProcessed
+  // from being set to true by leave-automation until it clears — either by
+  // the underlying zkt_attendance data becoming consistent on a later
+  // recompute, or by an admin's manual override.
+  hasOpenBreak Boolean @default(false)
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Ensure one record per user per date
+  @@unique([userId, date])
+}
+
 model DailyTimeRecordTemporary {
-  id                String    @id @default(cuid())
-  date              DateTime
-  status            DailyRecordStatus @default(PRESENT)
+  id     String            @id @default(cuid())
+  date   DateTime
+  status DailyRecordStatus @default(PRESENT)
 
   requiredCheckIn   DateTime?
   requiredCheckOut  DateTime?
   requiredBreakTime String?
 
-  actualCheckIn     DateTime?
-  actualCheckOut    DateTime?
-  actualBreakTime   String?
+  actualCheckIn   DateTime?
+  actualCheckOut  DateTime?
+  actualBreakTime String?
 
-  requiredActiveTime String?
-  actualActiveTime   String?
-  officialOvertimeundertime  String?
-  requestedOvertime  String?
-  requestedOTstart   DateTime?
-  requestedOTend     DateTime?
-  overtimeUndertime  String?
+  requiredActiveTime        String?
+  actualActiveTime          String?
+  officialOvertimeundertime String?
+  requestedOvertime         String?
+  requestedOTstart          DateTime?
+  requestedOTend            DateTime?
+  overtimeUndertime         String?
 
-  lateCheckInMinutes Int?     @default(0)
-  lateCheckInPenalty Float?   @default(0)
+  lateCheckInMinutes Int?   @default(0)
+  lateCheckInPenalty Float? @default(0)
 
   autoDeductedLeaveType String?
   isProcessed           Boolean @default(false)
+  hasOpenBreak          Boolean @default(false)
 
-  userId            String
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -787,38 +815,38 @@ enum ProfileUpdateStatus {
 }
 
 model AdminNotification {
-  id          String             @id @default(cuid())
-  type        NotificationType
-  title       String
-  message     String
-  status      NotificationStatus @default(UNREAD)
-  metadata    Json?              // For storing additional data
-  
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id       String             @id @default(cuid())
+  type     NotificationType
+  title    String
+  message  String
+  status   NotificationStatus @default(UNREAD)
+  metadata Json? // For storing additional data
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model BreakingNotice {
-  id             String                   @id @default(cuid())
-  title          String
-  targetType     BreakingNoticeTargetType
+  id         String                   @id @default(cuid())
+  title      String
+  targetType BreakingNoticeTargetType
 
-  senderId       String
-  sender         User                     @relation("BreakingNoticeSender", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId String
+  sender   User   @relation("BreakingNoticeSender", fields: [senderId], references: [id], onDelete: Cascade)
 
-  targetUserId   String?
-  targetUser     User?                    @relation("BreakingNoticeTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  targetUserId String?
+  targetUser   User?   @relation("BreakingNoticeTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
 
   targetBranchId String?
-  targetBranch   Branch?                  @relation("BreakingNoticeTargetBranch", fields: [targetBranchId], references: [id], onDelete: SetNull)
+  targetBranch   Branch? @relation("BreakingNoticeTargetBranch", fields: [targetBranchId], references: [id], onDelete: SetNull)
 
-  version        Int                      @default(1)
-  isEdited       Boolean                  @default(false)
+  version  Int     @default(1)
+  isEdited Boolean @default(false)
 
-  recipients     BreakingNoticeRecipient[]
+  recipients BreakingNoticeRecipient[]
 
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([targetType])
   @@index([senderId])
@@ -827,203 +855,202 @@ model BreakingNotice {
 }
 
 model BreakingNoticeRecipient {
-  id            String         @id @default(cuid())
+  id String @id @default(cuid())
 
-  noticeId      String
-  notice        BreakingNotice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  noticeId String
+  notice   BreakingNotice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
 
-  userId        String
-  user          User           @relation("BreakingNoticeRecipientUser", fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("BreakingNoticeRecipientUser", fields: [userId], references: [id], onDelete: Cascade)
 
-  status        Boolean        @default(false)
+  status        Boolean   @default(false)
   seenAt        DateTime?
   visibleUntil  DateTime?
-  noticeVersion Int            @default(1)
+  noticeVersion Int       @default(1)
 
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([noticeId, userId])
   @@index([userId, status, visibleUntil])
 }
 
 model OvertimePayout {
-  id                        String   @id @default(cuid())
-  year                      Int
-  baseSalary                Float
-  totalRequiredActiveTime   String
-  totalRequiredBreakTime    String
-  totalOvertimeUndertime    String
-  totalRequiredMinutes      Int
-  totalOvertimeMinutes      Int
-  calculatedAmount          Int
-  isPaid                    Boolean  @default(false)
-  paidAt                    DateTime?
-  paidBy                    String?
+  id                      String    @id @default(cuid())
+  year                    Int
+  baseSalary              Float
+  totalRequiredActiveTime String
+  totalRequiredBreakTime  String
+  totalOvertimeUndertime  String
+  totalRequiredMinutes    Int
+  totalOvertimeMinutes    Int
+  calculatedAmount        Int
+  isPaid                  Boolean   @default(false)
+  paidAt                  DateTime?
+  paidBy                  String?
 
-  userId                    String
-  user                      User     @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, year])
 }
 
 model ProfileUpdateRequest {
-  id          String              @id @default(cuid())
-  userId      String
-  user        User                @relation(fields: [userId], references: [id])
-  
-  status      ProfileUpdateStatus @default(PENDING)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  status ProfileUpdateStatus @default(PENDING)
+
   // Store the requested changes as JSON
   // This allows us to store only the fields that are being updated
   requestedChanges Json
-  
+
   // Optional: Store previous values for audit trail
-  previousValues   Json?
-  
+  previousValues Json?
+
   // Admin review info
-  reviewedBy       String?         // Clerk ID of admin who reviewed
-  reviewedAt       DateTime?
-  reviewNotes      String?         // Optional notes from admin
-  
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  reviewedBy  String? // Clerk ID of admin who reviewed
+  reviewedAt  DateTime?
+  reviewNotes String? // Optional notes from admin
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Employee Notification Model
 model EmployeeNotification {
-  id              String    @id @default(cuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  
-  type            String    // Type of notification (e.g., "AUTO_LEAVE_DEDUCTION", "LEAVE_APPROVED", etc.)
-  title           String    // Short title for the notification
-  message         String    // Detailed message
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  type            String // Type of notification (e.g., "AUTO_LEAVE_DEDUCTION", "LEAVE_APPROVED", etc.)
+  title           String // Short title for the notification
+  message         String // Detailed message
   relatedDate     DateTime? // Date related to the notification (e.g., date leave was deducted)
-  relatedEntityId String?   // ID of related entity (leave application, etc.)
-  
-  isRead          Boolean   @default(false)
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  relatedEntityId String? // ID of related entity (leave application, etc.)
+
+  isRead Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Audit Log Model for tracking all automatic leave operations
 model LeaveAuditLog {
-  id                    String     @id @default(cuid())
-  userId                String
-  user                  User       @relation(fields: [userId], references: [id])
-  
-  action                String     // Action performed (e.g., "AUTO_LEAVE_DEDUCTION", "WEEKLY_OFF_SET", etc.)
-  description           String     // Detailed description of what happened
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  action      String // Action performed (e.g., "AUTO_LEAVE_DEDUCTION", "WEEKLY_OFF_SET", etc.)
+  description String // Detailed description of what happened
+
   // Leave-related details
-  affectedDate          DateTime   // The date this action was taken for
-  leaveTypeId           String?    // ID of leave type affected (if applicable)
-  leaveType             LeaveType? @relation(fields: [leaveTypeId], references: [id])
-  previousBalance       Int?       // Previous leave balance before action
-  newBalance            Int?       // New leave balance after action
-  deductedDays          Int?       // Number of days deducted (if applicable)
-  
+  affectedDate    DateTime // The date this action was taken for
+  leaveTypeId     String? // ID of leave type affected (if applicable)
+  leaveType       LeaveType? @relation(fields: [leaveTypeId], references: [id])
+  previousBalance Int? // Previous leave balance before action
+  newBalance      Int? // New leave balance after action
+  deductedDays    Int? // Number of days deducted (if applicable)
+
   // Processing details
-  processedAt           DateTime   @default(now()) // When this action was processed
-  processingSource      String     @default("SYSTEM") // Source of processing (SYSTEM, MANUAL, etc.)
-  
+  processedAt      DateTime @default(now()) // When this action was processed
+  processingSource String   @default("SYSTEM") // Source of processing (SYSTEM, MANUAL, etc.)
+
   // Additional metadata
-  metadata              Json?      // Additional data related to the action
-  
-  createdAt            DateTime   @default(now())
+  metadata Json? // Additional data related to the action
+
+  createdAt DateTime @default(now())
 }
 
 // Overtime Request Model for employee-initiated overtime requests
 model OvertimeRequest {
-  id                  String                  @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Employee who is requesting
-  userId              String
-  user                User                    @relation(fields: [userId], references: [id])
-  
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
   // Request details
-  overtimeDate        DateTime                // The date for which overtime is being requested
-  totalOvertime       String                  // Requested overtime duration in HH:MM format
-  requestedOTstart    DateTime?               // Requested overtime start time
-  requestedOTend      DateTime?               // Requested overtime end time
-  reason              String                  // Reason for overtime
-  taskNo              String?                 // Optional task/project reference
-  
+  overtimeDate     DateTime // The date for which overtime is being requested
+  totalOvertime    String // Requested overtime duration in HH:MM format
+  requestedOTstart DateTime? // Requested overtime start time
+  requestedOTend   DateTime? // Requested overtime end time
+  reason           String // Reason for overtime
+  taskNo           String? // Optional task/project reference
+
   // Status tracking
-  status              OvertimeRequestStatus   @default(PENDING)
-  
+  status OvertimeRequestStatus @default(PENDING)
+
   // Review details
-  reviewedBy          String?                 // Clerk ID of admin who reviewed
-  reviewedAt          DateTime?
-  declineReason       String?                 // Reason for declining (if declined)
-    // Manager verification fields
-    managerVerifiedAt   DateTime?
-    managerVerifiedById String?
-    managerVerifiedBy   User?      @relation("OvertimeRequestManagerVerification", fields: [managerVerifiedById], references: [id])
-    managerRejectionReason String?
-    managerComments     String?
+  reviewedBy             String? // Clerk ID of admin who reviewed
+  reviewedAt             DateTime?
+  declineReason          String? // Reason for declining (if declined)
+  // Manager verification fields
+  managerVerifiedAt      DateTime?
+  managerVerifiedById    String?
+  managerVerifiedBy      User?     @relation("OvertimeRequestManagerVerification", fields: [managerVerifiedById], references: [id])
+  managerRejectionReason String?
+  managerComments        String?
 
-    // Admin decline fields (after manager verified)
-    adminDeclinedReason String?
-    adminDeclinedAt     DateTime?
+  // Admin decline fields (after manager verified)
+  adminDeclinedReason String?
+  adminDeclinedAt     DateTime?
 
-  
   // Timestamps
-  requestedAt         DateTime                @default(now())
-  statusUpdatedAt     DateTime                @updatedAt
-  
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
+  requestedAt     DateTime @default(now())
+  statusUpdatedAt DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model TimelineModificationRequest {
-  id                    String                           @id @default(cuid())
-  userId                String
-  user                  User                             @relation("TimelineModificationRequester", fields: [userId], references: [id])
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("TimelineModificationRequester", fields: [userId], references: [id])
 
-  requestedDate         DateTime
-  requestedCheckIn      DateTime?
-  requestedCheckOut     DateTime?
-  requestedBreakTime    String?
-  reason                String?
+  requestedDate      DateTime
+  requestedCheckIn   DateTime?
+  requestedCheckOut  DateTime?
+  requestedBreakTime String?
+  reason             String?
 
-  status                TimelineModificationRequestStatus @default(PENDING)
-  reviewedById          String?
-  reviewedBy            User?                            @relation("TimelineModificationReviewer", fields: [reviewedById], references: [id])
-  reviewerNote          String?
-  reviewedAt            DateTime?
-  appliedAt             DateTime?
+  status       TimelineModificationRequestStatus @default(PENDING)
+  reviewedById String?
+  reviewedBy   User?                             @relation("TimelineModificationReviewer", fields: [reviewedById], references: [id])
+  reviewerNote String?
+  reviewedAt   DateTime?
+  appliedAt    DateTime?
 
-  actionLogs            TimelineModificationActionLog[]
+  actionLogs TimelineModificationActionLog[]
 
-  createdAt             DateTime                         @default(now())
-  updatedAt             DateTime                         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, requestedDate])
   @@index([status])
 }
 
 model TimelineModificationActionLog {
-  id                    String                    @id @default(cuid())
-  actionType            String
-  actionDetails         String
-  metadata              Json?
+  id            String @id @default(cuid())
+  actionType    String
+  actionDetails String
+  metadata      Json?
 
-  actorId               String
-  actor                 User                      @relation("TimelineModificationActionActor", fields: [actorId], references: [id])
-  targetUserId          String
-  targetUser            User                      @relation("TimelineModificationActionTarget", fields: [targetUserId], references: [id])
+  actorId      String
+  actor        User   @relation("TimelineModificationActionActor", fields: [actorId], references: [id])
+  targetUserId String
+  targetUser   User   @relation("TimelineModificationActionTarget", fields: [targetUserId], references: [id])
 
-  requestId             String?
-  request               TimelineModificationRequest? @relation(fields: [requestId], references: [id])
-  dailyTimeRecordId     String?
+  requestId         String?
+  request           TimelineModificationRequest? @relation(fields: [requestId], references: [id])
+  dailyTimeRecordId String?
 
-  createdAt             DateTime                  @default(now())
+  createdAt DateTime @default(now())
 
   @@index([actorId, createdAt])
   @@index([targetUserId, createdAt])
@@ -1032,20 +1059,19 @@ model TimelineModificationActionLog {
 
 // Employee Notes: free-text notes attached to an employee, visible to Admin and Manager only
 model EmployeeNote {
-  id          String   @id @default(cuid())
-  employeeId  String
-  employee    User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id         String @id @default(cuid())
+  employeeId String
+  employee   User   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  note        String
+  note String
 
-  createdBy   String
+  createdBy     String
   createdByUser User   @relation("EmployeeNoteCreator", fields: [createdBy], references: [id], onDelete: Restrict)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([employeeId])
   @@index([createdBy])
 }
-

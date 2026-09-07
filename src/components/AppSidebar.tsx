@@ -29,6 +29,7 @@ import {
     Crown,
     Plus,
     Settings,
+    Fingerprint,
 } from "lucide-react";
 
 import {
@@ -71,6 +72,7 @@ const adminItems = [
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
     { title: "Overtime Requests", url: "/admin/overtime-requests", icon: ClipboardList },
     { title: "Timeline", url: "/admin/timeline", icon: Clock },
+    { title: "Attendance Log", url: "/admin/zkt-attendance", icon: Fingerprint },
     { title: "Wallet", url: "/admin/wallet", icon: Wallet },
     { title: "System Control", url: "/admin/system-control", icon: Settings },
 ];
