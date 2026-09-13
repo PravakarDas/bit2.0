@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { format, addDays, isSameDay } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { CalendarDays, Building2, Phone, Mail } from "lucide-react";
+import { Check, Search, Users, X } from "lucide-react";
 import { getWeeklyAvailabilityData } from "@/actions/availability.actions";
 
 const WEEK_LENGTH = 7;
@@ -58,54 +58,22 @@ function getEmployeeName(employee: Employee) {
     return employee.email;
 }
 
-function EmployeeStatusPill({ employee, status }: { employee: Employee; status: EmployeeDayStatus }) {
-    const hasContactInfo = employee.phoneNumber || employee.personalEmail;
-
-    const pill = (
-        <span
-            className={
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium " +
-                (status.available
-                    ? "border-green-200 bg-green-50 text-green-700"
-                    : "border-red-200 bg-red-50 text-red-700")
-            }
-        >
-            <span className={"h-1.5 w-1.5 rounded-full " + (status.available ? "bg-green-500" : "bg-red-500")} />
-            {getEmployeeName(employee)}
-            {!status.available && <span className="text-[10px] text-red-500">({status.reason})</span>}
-        </span>
-    );
-
-    if (!hasContactInfo) {
-        return pill;
-    }
-
+function StatusCell({ status }: { status: EmployeeDayStatus }) {
     return (
         <TooltipProvider>
             <Tooltip>
-                <TooltipTrigger asChild>{pill}</TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs">
-                    <div className="space-y-1 text-xs">
-                        <div className="flex items-center gap-1">
-                            <Mail className="h-3 w-3" />
-                            <span className="text-muted-foreground">Work:</span>
-                            <span>{employee.email}</span>
-                        </div>
-                        {employee.personalEmail && (
-                            <div className="flex items-center gap-1">
-                                <Mail className="h-3 w-3" />
-                                <span className="text-muted-foreground">Personal:</span>
-                                <span>{employee.personalEmail}</span>
-                            </div>
-                        )}
-                        {employee.phoneNumber && (
-                            <div className="flex items-center gap-1">
-                                <Phone className="h-3 w-3" />
-                                <span className="text-muted-foreground">Phone:</span>
-                                <span>{employee.phoneNumber}</span>
-                            </div>
-                        )}
-                    </div>
+                <TooltipTrigger asChild>
+                    <span
+                        className={
+                            "mx-auto flex h-6 w-6 items-center justify-center rounded-full " +
+                            (status.available ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")
+                        }
+                    >
+                        {status.available ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                    </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                    {status.available ? "Available" : status.reason}
                 </TooltipContent>
             </Tooltip>
         </TooltipProvider>
@@ -122,6 +90,7 @@ export default function AvailabilityCalendar() {
     const [leaves, setLeaves] = useState<LeaveEntry[]>([]);
     const [holidays, setHolidays] = useState<HolidayEntry[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState("");
 
     useEffect(() => {
         const load = async () => {
@@ -144,19 +113,32 @@ export default function AvailabilityCalendar() {
         [weekStart]
     );
 
+    const filteredEmployees = useMemo(() => {
+        if (!searchTerm.trim()) {
+            return employees;
+        }
+        const searchLower = searchTerm.toLowerCase();
+        return employees.filter((employee) => {
+            const name = getEmployeeName(employee).toLowerCase();
+            const email = employee.email.toLowerCase();
+            const personalEmail = employee.personalEmail?.toLowerCase() || "";
+            return name.includes(searchLower) || email.includes(searchLower) || personalEmail.includes(searchLower);
+        });
+    }, [employees, searchTerm]);
+
     const branches = useMemo(() => {
         const map = new Map<string, { id: string; name: string }>();
-        employees.forEach((employee) => {
+        filteredEmployees.forEach((employee) => {
             if (employee.branch?.id && employee.branch?.name) {
                 map.set(employee.branch.id, { id: employee.branch.id, name: employee.branch.name });
             }
         });
         return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-    }, [employees]);
+    }, [filteredEmployees]);
 
     const unbranchedEmployees = useMemo(
-        () => employees.filter((employee) => !employee.branch?.id),
-        [employees]
+        () => filteredEmployees.filter((employee) => !employee.branch?.id),
+        [filteredEmployees]
     );
 
     const leaveByDate = useMemo(() => {
@@ -205,6 +187,23 @@ export default function AvailabilityCalendar() {
         return { available: true };
     }
 
+    function renderEmployeeRow(employee: Employee) {
+        return (
+            <tr key={employee.id} className="border-b last:border-0 hover:bg-gray-50">
+                <td className="sticky left-0 whitespace-nowrap bg-white py-2 pr-4 font-medium">
+                    {getEmployeeName(employee)}
+                </td>
+                {days.map((date) => (
+                    <td key={toDayKey(date)} className="py-2 text-center">
+                        <StatusCell status={getStatus(employee, date)} />
+                    </td>
+                ))}
+            </tr>
+        );
+    }
+
+    const totalResults = filteredEmployees.length;
+
     return (
         <div className="space-y-6">
             <div>
@@ -214,74 +213,86 @@ export default function AvailabilityCalendar() {
                 </p>
             </div>
 
-            {loading && <div className="text-sm text-muted-foreground">Loading availability...</div>}
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                        <Users className="h-4 w-4" />
+                        Employees ({totalResults})
+                    </CardTitle>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            placeholder="Search by name or email..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-9"
+                        />
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {loading ? (
+                        <p className="py-6 text-center text-sm text-muted-foreground">Loading availability...</p>
+                    ) : totalResults === 0 ? (
+                        <p className="py-6 text-center text-sm text-muted-foreground">
+                            {searchTerm ? "No employees match your search." : "No employees found."}
+                        </p>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[640px] text-sm">
+                                <thead>
+                                    <tr className="border-b text-xs font-medium text-muted-foreground">
+                                        <th className="sticky left-0 bg-white py-2 pr-4 text-left">Employee</th>
+                                        {days.map((date) => {
+                                            const isToday = isSameDay(date, new Date());
+                                            return (
+                                                <th
+                                                    key={toDayKey(date)}
+                                                    className={"py-2 text-center " + (isToday ? "text-primary" : "")}
+                                                >
+                                                    <div>{format(date, "EEE")}</div>
+                                                    <div className="text-[11px] font-normal">{format(date, "MMM d")}</div>
+                                                </th>
+                                            );
+                                        })}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {branches.map((branch) => {
+                                        const branchEmployees = filteredEmployees.filter(
+                                            (employee) => employee.branch?.id === branch.id
+                                        );
+                                        if (branchEmployees.length === 0) {
+                                            return null;
+                                        }
 
-            <div className="space-y-4">
-                {days.map((date) => {
-                    const dayKey = toDayKey(date);
-                    const isToday = isSameDay(date, new Date());
+                                        return (
+                                            <Fragment key={branch.id}>
+                                                <tr className="bg-muted/40">
+                                                    <td colSpan={days.length + 1} className="py-1.5 pr-4 text-xs font-semibold text-muted-foreground">
+                                                        {branch.name}
+                                                    </td>
+                                                </tr>
+                                                {branchEmployees.map(renderEmployeeRow)}
+                                            </Fragment>
+                                        );
+                                    })}
 
-                    return (
-                        <Card key={dayKey} className={isToday ? "border-primary" : undefined}>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="flex items-center gap-2 text-base">
-                                    <CalendarDays className="h-4 w-4" />
-                                    {format(date, "EEEE, MMMM d")}
-                                    {isToday && <Badge>Today</Badge>}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {employees.length === 0 && !loading && (
-                                    <p className="text-sm text-muted-foreground">No employees found.</p>
-                                )}
-
-                                {branches.map((branch) => {
-                                    const branchEmployees = employees.filter((employee) => employee.branch?.id === branch.id);
-                                    if (branchEmployees.length === 0) {
-                                        return null;
-                                    }
-
-                                    return (
-                                        <div key={branch.id}>
-                                            <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                                                <Building2 className="h-3.5 w-3.5" />
-                                                {branch.name}
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {branchEmployees.map((employee) => (
-                                                    <EmployeeStatusPill
-                                                        key={employee.id}
-                                                        employee={employee}
-                                                        status={getStatus(employee, date)}
-                                                    />
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-
-                                {unbranchedEmployees.length > 0 && (
-                                    <div>
-                                        <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                                            <Building2 className="h-3.5 w-3.5" />
-                                            No Branch
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {unbranchedEmployees.map((employee) => (
-                                                <EmployeeStatusPill
-                                                    key={employee.id}
-                                                    employee={employee}
-                                                    status={getStatus(employee, date)}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    );
-                })}
-            </div>
+                                    {unbranchedEmployees.length > 0 && (
+                                        <Fragment>
+                                            <tr className="bg-muted/40">
+                                                <td colSpan={days.length + 1} className="py-1.5 pr-4 text-xs font-semibold text-muted-foreground">
+                                                    No Branch
+                                                </td>
+                                            </tr>
+                                            {unbranchedEmployees.map(renderEmployeeRow)}
+                                        </Fragment>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
 }
