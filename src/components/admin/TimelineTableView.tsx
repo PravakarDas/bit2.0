@@ -503,12 +503,6 @@ export default function TimelineTableView({
       const isBeingChangedToOnLeave = editForm.status === 'ON_LEAVE';
       const leaveTypeChanged = editingRecord.autoDeductedLeaveType !== editForm.autoDeductedLeaveType;
 
-      if (editForm.status === 'PRESENT' && (!editForm.actualCheckIn || !editForm.actualCheckOut)) {
-        alert('Check-in and Check-out times are required when setting status to Present');
-        setSaving(false);
-        return;
-      }
-
       if (isCurrentlyOnLeave && isBeingChangedToOnLeave && leaveTypeChanged && editingRecord.autoDeductedLeaveType && editForm.autoDeductedLeaveType) {
         const adjustResult = await adjustLeaveType(editingRecord.id, editForm.autoDeductedLeaveType);
 
@@ -920,7 +914,7 @@ export default function TimelineTableView({
                                   </p>
                                   <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-green-700">
                                     <li>1 day will be restored to <strong>{editingRecord.autoDeductedLeaveType}</strong></li>
-                                    <li>Check-in and Check-out times will be required</li>
+                                    <li>Check-in and/or Check-out times can be set now or added later</li>
                                     <li>All changes will be logged in audit trail</li>
                                   </ul>
                                 </div>
