@@ -316,16 +316,29 @@ export async function approveTimelineModificationRequest(requestId: string, revi
         });
       }
 
-      const timelineUpdateResult = await updateTimelineRecordInTransaction(tx, timeRecord.id, {
+      // Only include the actual-time fields the employee actually requested to change.
+      // Leaving an untouched field out of this object (rather than passing it as null)
+      // tells updateTimelineRecordInTransaction to keep the record's existing value —
+      // passing an explicit null there would wipe it instead.
+      const timelineUpdatePayload: Parameters<typeof updateTimelineRecordInTransaction>[2] = {
         requiredCheckIn: combineDateAndTime(requestedShiftDate, branchCheckInTime),
         requiredCheckOut: combineDateAndTime(requestedShiftDate, branchCheckOutTime),
         requiredBreakTime: branchBreakDuration,
-        actualCheckIn: request.requestedCheckIn,
-        actualCheckOut: request.requestedCheckOut,
-        actualBreakTime: request.requestedBreakTime || branchBreakDuration,
         status: "PRESENT",
         isProcessed: true,
-      });
+      };
+
+      if (request.requestedCheckIn) {
+        timelineUpdatePayload.actualCheckIn = request.requestedCheckIn;
+      }
+      if (request.requestedCheckOut) {
+        timelineUpdatePayload.actualCheckOut = request.requestedCheckOut;
+      }
+      if (request.requestedBreakTime && request.requestedBreakTime.trim()) {
+        timelineUpdatePayload.actualBreakTime = request.requestedBreakTime;
+      }
+
+      const timelineUpdateResult = await updateTimelineRecordInTransaction(tx, timeRecord.id, timelineUpdatePayload);
 
       if (!timelineUpdateResult.success) {
         throw new Error(timelineUpdateResult.error || "Failed to apply timeline changes");
