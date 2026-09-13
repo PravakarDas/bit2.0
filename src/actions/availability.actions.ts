@@ -2,11 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 
-export async function getAvailabilityData(year: number, month: number) {
-    const monthIndex = Math.max(0, Math.min(11, month - 1));
-    const startDate = new Date(year, monthIndex, 1);
-    const endDate = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
-
+async function fetchAvailabilityForRange(startDate: Date, endDate: Date) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -96,4 +92,23 @@ export async function getAvailabilityData(year: number, month: number) {
             applicableBranchIds: holiday.applicableBranchIds
         }))
     };
+}
+
+export async function getAvailabilityData(year: number, month: number) {
+    const monthIndex = Math.max(0, Math.min(11, month - 1));
+    const startDate = new Date(year, monthIndex, 1);
+    const endDate = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+
+    return fetchAvailabilityForRange(startDate, endDate);
+}
+
+export async function getWeeklyAvailabilityData(startDateIso: string, days: number) {
+    const startDate = new Date(startDateIso);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + Math.max(1, days) - 1);
+    endDate.setHours(23, 59, 59, 999);
+
+    return fetchAvailabilityForRange(startDate, endDate);
 }
