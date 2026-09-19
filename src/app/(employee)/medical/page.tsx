@@ -1,5 +1,6 @@
 "use client";
 
+import { MedicalAmount } from "@/components/shared/MedicalAmount";
 import { useEffect, useState } from "react";
 import {
     getMedicalEntitlement,
@@ -207,7 +208,7 @@ export default function EmployeeMedicalPage() {
                                             {claim.description}
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums">
-                                            ৳{claim.amount.toLocaleString("en-BD")}
+                                            <MedicalAmount claim={claim} />
                                         </TableCell>
                                         <TableCell className="text-center">
                                             <Badge

@@ -395,15 +395,23 @@ export async function getAdminDashboardData(branchId?: string, fromDate?: string
             _count: { id: true }
         }),
 
-        // Medical Claims in date range
-        prisma.medicalClaim.aggregate({
-            where: {
-                ...dateFilter,
-                user: employeeFilter
-            },
-            _sum: { amount: true },
-            _count: { id: true }
-        }),
+        // Medical Claims in date range — counts what was actually paid via payroll where recorded,
+        // otherwise the claimed amount.
+        Promise.all([
+            prisma.medicalClaim.aggregate({
+                where: { ...dateFilter, user: employeeFilter, paidAmount: { not: null } },
+                _sum: { paidAmount: true },
+                _count: { id: true }
+            }),
+            prisma.medicalClaim.aggregate({
+                where: { ...dateFilter, user: employeeFilter, paidAmount: null },
+                _sum: { amount: true },
+                _count: { id: true }
+            }),
+        ]).then(([withPaid, withoutPaid]) => ({
+            _sum: { amount: (withPaid._sum.paidAmount || 0) + (withoutPaid._sum.amount || 0) },
+            _count: withPaid._count.id + withoutPaid._count.id,
+        })),
 
         // Department Distribution
         prisma.user.groupBy({
@@ -448,7 +456,7 @@ export async function getAdminDashboardData(branchId?: string, fromDate?: string
         // Medical Claims vs Entitlements
         prisma.$queryRaw`
             SELECT 
-                COALESCE(SUM(mc.amount), 0) as totalClaims,
+                COALESCE(SUM(COALESCE(mc."paidAmount", mc.amount)), 0) as totalClaims,
                 COALESCE(SUM(me."totalLimit"), 0) as totalEntitlements,
                 COALESCE(SUM(me."remainingBalance"), 0) as remainingBalance
             FROM "User" u

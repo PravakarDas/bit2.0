@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { MedicalAmount } from "@/components/shared/MedicalAmount";
 
 type MedicalClaim = Awaited<ReturnType<typeof getMyMedicalClaims>>[number];
 
@@ -95,7 +96,7 @@ export default function MedicalHistoryPage() {
                                             {claim.description}
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums font-semibold">
-                                            ৳{claim.amount.toLocaleString("en-BD")}
+                                            <MedicalAmount claim={claim} />
                                         </TableCell>
                                         <TableCell className="text-center">
                                             <Badge

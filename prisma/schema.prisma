@@ -457,6 +457,11 @@ model MedicalClaim {
   attachmentUrl String?
   status        ClaimStatus @default(PENDING)
 
+  // Set when the claim is paid through payroll: what was actually paid (may differ from `amount`)
+  // and the payroll month. Admin-added payroll amounts with no claim are stored as their own PAID row.
+  paidAmount   Float?
+  payrollMonth String?
+
   userId String
   user   User   @relation(fields: [userId], references: [id])
 

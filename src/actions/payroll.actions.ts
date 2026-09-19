@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { calculateEMI } from "@/lib/services/loan.service";
 import { LoanStatus, ClaimStatus, UserStatus, SalaryPaymentStatus, Prisma } from "@prisma/client";
 import { getDbUser } from "./user.actions";
+import { MANUAL_MEDICAL_DESCRIPTION_PREFIX } from "@/lib/medical-history";
 import { shouldGeneratePayroll } from "@/lib/employee-status";
 import { createAdminNotification } from "./notification.actions";
 import { notificationEngineContainer } from "@/lib/services/notification-engine";
@@ -78,7 +79,20 @@ interface PayrollAggregation {
     walletBalance: number;
     eligibleBonuses: EligibleBonus[];
     totalAllowances: number;
+    /** Approved + pending claims: what the employee has claimed and is not yet paid. */
     totalMedical: number;
+    medicalApproved: number;
+    medicalPending: number;
+    /**
+     * Yearly medical entitlement. Approving a claim already subtracted it from
+     * `remainingBalance` (pending claims have not used it yet), so the most that can be
+     * paid out now is the approved claims plus whatever is still unused: `maxPayable`.
+     */
+    medicalLimit: {
+        totalLimit: number;
+        remainingBalance: number;
+        maxPayable: number;
+    };
     activeLoans: {
         id: string;
         currentEmi: number;
@@ -109,7 +123,7 @@ export interface PayrollEmployeeInput {
     /** One-off bonus for this month only (on top of the bonus types). */
     customBonus: number;
     customBonusNote: string;
-    /** Medical amount to pay this month. null = the employee's approved claims total. */
+    /** Medical amount to pay this month. null = the employee's claims total (approved + pending). */
     medicalAmount: number | null;
     /** Total of approved claims when the draft was saved (server-filled; used to detect changes before sending). */
     medicalClaimed?: number;
@@ -225,10 +239,16 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
                 }
             },
             medicalClaims: {
-                where: { status: ClaimStatus.APPROVED },
+                where: { status: { in: [ClaimStatus.APPROVED, ClaimStatus.PENDING] } },
+                orderBy: { createdAt: "asc" },
+            },
+            medicalEntitlements: {
+                where: { year },
+                select: { totalLimit: true, remainingBalance: true },
             },
         },
     });
+    const defaultMedicalLimit = (await prisma.systemSettings.findUnique({ where: { id: "global" } }))?.medicalClaimLimit ?? 500;
 
     // Filter archived employees based on payroll continuation logic
     const eligibleUsers = users.filter((user) => {
@@ -271,12 +291,22 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
     });
 
     return eligibleUsers.map((user) => {
-        // Fetch ALL Approved but Unpaid Claims for this user
-        const approvedClaims = user.medicalClaims; // Already filtered by status: "APPROVED" in include
-        const totalMedical = approvedClaims.reduce(
-            (sum, claim) => sum + claim.amount,
-            0
-        );
+        // All unpaid claims: approved ones, plus pending ones (paying a pending claim approves it)
+        const medicalApproved = user.medicalClaims
+            .filter((claim) => claim.status === ClaimStatus.APPROVED)
+            .reduce((sum, claim) => sum + claim.amount, 0);
+        const medicalPending = user.medicalClaims
+            .filter((claim) => claim.status === ClaimStatus.PENDING)
+            .reduce((sum, claim) => sum + claim.amount, 0);
+        const totalMedical = medicalApproved + medicalPending;
+
+        // Medical limit: entitlement for this payroll year (or the default limit if none was created yet)
+        const entitlement = user.medicalEntitlements[0];
+        const medicalLimit = {
+            totalLimit: entitlement?.totalLimit ?? defaultMedicalLimit,
+            remainingBalance: entitlement?.remainingBalance ?? defaultMedicalLimit,
+            maxPayable: roundMoney(medicalApproved + (entitlement?.remainingBalance ?? defaultMedicalLimit)),
+        };
 
         // Eligible Bonuses for this user
         const eligibleBonuses = allActiveBonuses.filter(
@@ -394,6 +424,9 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
             })),
             totalAllowances,
             totalMedical,
+            medicalApproved,
+            medicalPending,
+            medicalLimit,
             activeLoans,
             manualLoans,
             draft: draftsByUser.get(user.id) ?? null,
@@ -592,6 +625,9 @@ async function dispatchPayrollPayslips(
 //   resendPayslips            re-emails an already finalized payslip.
 // ---------------------------------------------------------------------------
 
+// Payroll transactions run many sequential queries against a remote database; Prisma's default
+// 5s interactive-transaction limit is far too tight and cancels them mid-way ("Transaction not found").
+const PAYROLL_TRANSACTION_OPTIONS = { maxWait: 15_000, timeout: 120_000 };
 const PAYROLL_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const MONEY_TOLERANCE = 0.01;
 
@@ -650,6 +686,11 @@ function computeEmployeePayroll(emp: PayrollAggregation, input: PayrollEmployeeI
     const medicalAmount = input.medicalAmount === null ? emp.totalMedical : roundMoney(input.medicalAmount);
     if (!Number.isFinite(medicalAmount) || medicalAmount < 0) {
         throw new Error("Medical amount must be zero or a positive amount");
+    }
+    if (medicalAmount > emp.medicalLimit.maxPayable + MONEY_TOLERANCE) {
+        throw new Error(
+            `Medical amount ৳${medicalAmount} exceeds the employee's medical limit (max ৳${emp.medicalLimit.maxPayable} this payout; yearly limit ৳${emp.medicalLimit.totalLimit})`
+        );
     }
 
     const totalBonuses = bonusTypesTotal + customBonus;
@@ -779,7 +820,7 @@ export async function saveDraftPayroll(payrollMonth: string, inputsByUser: Recor
                 details: `Payroll draft for ${payrollMonth} saved by ${admin.id}. Employees: ${prepared.length}`,
             },
         });
-    });
+    }, PAYROLL_TRANSACTION_OPTIONS);
 
     revalidatePath("/admin/payroll");
 
@@ -834,12 +875,17 @@ async function applyPayrollEffects(
     if (!liveUser || Math.abs(liveUser.walletBalance - emp.walletBalance) > MONEY_TOLERANCE) {
         throw new Error("Wallet balance changed while sending. Edit and regenerate.");
     }
-    const liveMedical = await tx.medicalClaim.aggregate({
-        where: { userId: emp.userId, status: "APPROVED" },
-        _sum: { amount: true },
+    const liveClaims = await tx.medicalClaim.findMany({
+        where: { userId: emp.userId, status: { in: ["APPROVED", "PENDING"] } },
+        orderBy: { createdAt: "asc" },
     });
-    if (Math.abs((liveMedical._sum.amount ?? 0) - emp.totalMedical) > MONEY_TOLERANCE) {
-        throw new Error("Approved medical claims changed while sending. Edit and regenerate.");
+    const liveApproved = roundMoney(liveClaims.filter((c) => c.status === "APPROVED").reduce((sum, c) => sum + c.amount, 0));
+    const livePending = roundMoney(liveClaims.filter((c) => c.status === "PENDING").reduce((sum, c) => sum + c.amount, 0));
+    if (
+        Math.abs(liveApproved - emp.medicalApproved) > MONEY_TOLERANCE ||
+        Math.abs(livePending - emp.medicalPending) > MONEY_TOLERANCE
+    ) {
+        throw new Error("Medical claims changed while sending. Edit and regenerate.");
     }
 
     // Clear wallet balance and create adjustment transaction
@@ -886,18 +932,83 @@ async function applyPayrollEffects(
         });
     }
 
-    // Medical Reset: Mark ALL currently approved claims as 'PAID'
-    await tx.medicalClaim.updateMany({
-        where: {
-            userId: emp.userId,
-            status: "APPROVED"
-        },
-        data: { status: "PAID" },
-    });
-    if (Math.abs(computed.medicalAmount - emp.totalMedical) > MONEY_TOLERANCE) {
+    // Medical: split what admin pays across the employee's claims (approved first, then pending,
+    // oldest first) and record the amount actually paid on each. Anything beyond the claims becomes
+    // its own PAID history entry, so every payout is traceable in medical history and reports.
+    const paidMedical = computed.medicalAmount;
+    const payrollYear = parseInt(payrollMonth.split("-")[0]);
+    const orderedClaims = [
+        ...liveClaims.filter((c) => c.status === "APPROVED"),
+        ...liveClaims.filter((c) => c.status === "PENDING"),
+    ];
+
+    let unallocated = paidMedical;
+    for (const claim of orderedClaims) {
+        const paidForClaim = roundMoney(Math.min(claim.amount, unallocated));
+        unallocated = roundMoney(unallocated - paidForClaim);
+
+        // A pending claim that receives nothing simply stays pending.
+        if (claim.status === "PENDING" && paidForClaim <= 0) continue;
+
+        await tx.medicalClaim.update({
+            where: { id: claim.id },
+            data: { status: "PAID", paidAmount: paidForClaim, payrollMonth },
+        });
+        if (claim.status === "PENDING") {
+            await tx.auditLog.create({
+                data: {
+                    changeReason: `Medical Claim Approved & Paid via payroll: claimed ${claim.amount}, paid ${paidForClaim} for user ${claim.userId} in Payroll ${payrollMonth}`,
+                    oldEmi: null,
+                    newEmi: null,
+                }
+            });
+        }
+    }
+
+    // Yearly limit: approved claims already used it; everything paid beyond them uses more now.
+    const limitToUse = roundMoney(Math.max(0, paidMedical - liveApproved));
+    let entitlementId: string | null = null;
+    if (limitToUse > MONEY_TOLERANCE || unallocated > MONEY_TOLERANCE) {
+        let entitlement = await tx.medicalEntitlement.findUnique({
+            where: { userId_year: { userId: emp.userId, year: payrollYear } },
+        });
+        if (!entitlement) {
+            const settings = await tx.systemSettings.findUnique({ where: { id: "global" } });
+            const limit = settings?.medicalClaimLimit ?? 500;
+            entitlement = await tx.medicalEntitlement.create({
+                data: { userId: emp.userId, year: payrollYear, totalLimit: limit, remainingBalance: limit },
+            });
+        }
+        entitlementId = entitlement.id;
+        if (limitToUse > MONEY_TOLERANCE) {
+            if (entitlement.remainingBalance + MONEY_TOLERANCE < limitToUse) {
+                throw new Error("Medical limit changed while sending. Edit and regenerate.");
+            }
+            await tx.medicalEntitlement.update({
+                where: { id: entitlement.id },
+                data: { remainingBalance: { decrement: Math.min(limitToUse, entitlement.remainingBalance) } },
+            });
+        }
+    }
+
+    if (unallocated > MONEY_TOLERANCE) {
+        await tx.medicalClaim.create({
+            data: {
+                userId: emp.userId,
+                amount: unallocated,
+                paidAmount: unallocated,
+                payrollMonth,
+                status: "PAID",
+                description: `${MANUAL_MEDICAL_DESCRIPTION_PREFIX} ${payrollMonth}`,
+                medicalEntitlementId: entitlementId,
+            },
+        });
+    }
+
+    if (Math.abs(paidMedical - emp.totalMedical) > MONEY_TOLERANCE) {
         await tx.auditLog.create({
             data: {
-                changeReason: `Medical reimbursement overridden: approved claims ৳${emp.totalMedical}, paid ৳${computed.medicalAmount} for user ${emp.userId} in Payroll ${payrollMonth}`,
+                changeReason: `Medical reimbursement overridden: claims ৳${emp.totalMedical}, paid ৳${paidMedical} for user ${emp.userId} in Payroll ${payrollMonth}`,
                 oldEmi: null,
                 newEmi: null,
             }
@@ -1223,7 +1334,7 @@ export async function finalizeAndSendPayslips(payrollMonth: string, userIds: str
                         details: `Payroll ${payrollMonth} finalized for user ${emp.userId} by ${admin.id}. Net: ${draft.netAmount}`,
                     },
                 });
-            });
+            }, PAYROLL_TRANSACTION_OPTIONS);
 
             toDispatch.push({
                 payment: toDispatchPayment(draft, {

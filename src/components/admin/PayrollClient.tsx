@@ -243,6 +243,7 @@ export function PayrollClient({
         const form = formOf(emp);
         if (num(form.customBonus) > 0 && !form.customBonusNote.trim()) return "Custom bonus needs a label";
         if (form.medical.trim() !== "" && Number(form.medical) < 0) return "Medical can't be negative";
+        if (medicalAmount(emp) > emp.medicalLimit.maxPayable + 0.01) return "Medical exceeds the employee's limit";
         for (const loan of emp.activeLoans) {
             if (form.loanChoice[loan.id] === "custom" && Number(form.loanAmount[loan.id]) < 0) return "Loan deduction can't be negative";
             if (autoLoanAmount(emp, loan) > loan.remainingPrincipal) return "Loan deduction exceeds remaining balance";
@@ -679,8 +680,12 @@ export function PayrollClient({
                                                 <Input
                                                     type="number"
                                                     min={0}
+                                                    max={emp.medicalLimit.maxPayable}
                                                     step="any"
-                                                    className="h-10 w-28 text-center tabular-nums"
+                                                    className={cn(
+                                                        "h-10 w-28 text-center tabular-nums",
+                                                        medicalAmount(emp) > emp.medicalLimit.maxPayable + 0.01 && "border-destructive"
+                                                    )}
                                                     placeholder={String(emp.totalMedical)}
                                                     value={form.medical}
                                                     disabled={locked}
@@ -689,9 +694,15 @@ export function PayrollClient({
                                                 />
                                                 <span className="text-[11px] text-muted-foreground">
                                                     Claimed: {money(emp.totalMedical)}
+                                                    {emp.medicalPending > 0 && (
+                                                        <span title="Pending claims are approved automatically when paid"> (pending {money(emp.medicalPending)})</span>
+                                                    )}
                                                     {form.medical.trim() !== "" && medicalAmount(emp) !== emp.totalMedical && (
                                                         <span className="text-orange-600 font-semibold"> · edited</span>
                                                     )}
+                                                </span>
+                                                <span className="text-[10px] text-muted-foreground" title={`Yearly limit ৳${money(emp.medicalLimit.totalLimit)}`}>
+                                                    Max: ৳{money(emp.medicalLimit.maxPayable)}
                                                 </span>
                                             </div>
                                         </TableCell>
