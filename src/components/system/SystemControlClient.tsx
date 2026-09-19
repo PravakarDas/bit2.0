@@ -31,6 +31,7 @@ type SettingsState = {
   zktecoBaseUrl: string;
   zktecoUsername: string;
   zktecoPassword: string;
+  loanMode: "AUTO" | "MANUAL";
 };
 
 type ChangeLog = {
@@ -110,6 +111,7 @@ function formatHistoryField(field: string) {
     zktecoBaseUrl: "ZKTeco Base URL",
     zktecoUsername: "ZKTeco Username",
     zktecoPassword: "ZKTeco Password",
+    loanMode: "Loan Processing Mode",
   };
 
   return labels[field] || field;
@@ -393,6 +395,41 @@ export default function SystemControlClient({
                 Manager changes are allowed and will automatically notify admin.
               </p>
             )}
+          </div>
+
+          <div className="space-y-3">
+            <Label>Loan Processing Mode</Label>
+            <p className="text-xs text-muted-foreground">
+              Applies to loans approved from now on. Loans already active keep the behaviour they were approved with.
+              {!canEditSensitive && " Only Admin/HR can change this."}
+            </p>
+            <RadioGroup
+              value={form.loanMode === "MANUAL" ? "MANUAL" : "AUTO"}
+              onValueChange={(value: string) =>
+                setForm((prev) => ({ ...prev, loanMode: value === "MANUAL" ? "MANUAL" : "AUTO" }))
+              }
+              disabled={!canEditSensitive}
+              className="gap-3"
+            >
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <RadioGroupItem value="AUTO" id="loan-mode-auto" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <Label htmlFor="loan-mode-auto" className="font-medium">Automatic (EMI)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Grace period + EMI schedule; the EMI is deducted automatically in payroll.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <RadioGroupItem value="MANUAL" id="loan-mode-manual" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <Label htmlFor="loan-mode-manual" className="font-medium">Manual</Label>
+                  <p className="text-xs text-muted-foreground">
+                    No schedule and no automatic deduction. Admin chooses the amount to deduct per loan, per month, while running payroll.
+                  </p>
+                </div>
+              </div>
+            </RadioGroup>
           </div>
 
           <div className="flex items-center gap-3">

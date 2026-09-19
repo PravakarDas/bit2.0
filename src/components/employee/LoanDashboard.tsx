@@ -12,9 +12,16 @@ interface LoanDashboardProps {
     loans: Loan[];
     maxEligibleAmount: number;
     branchLoanApplicationEnabled: boolean;
+    loanMode?: "AUTO" | "MANUAL";
 }
 
-export function LoanDashboard({ loans, maxEligibleAmount, branchLoanApplicationEnabled }: LoanDashboardProps) {
+export function LoanDashboard({ loans, maxEligibleAmount, branchLoanApplicationEnabled, loanMode = "AUTO" }: LoanDashboardProps) {
+    const isManual = loanMode === "MANUAL";
+    // Manual-mode loans have no EmiState; show what has been deducted so far instead of a "next EMI".
+    const manualRepaid = loans
+        .filter(l => !l.emiState && (l.status === "ACTIVE" || l.status === "CLOSED"))
+        .reduce((sum, l) => sum + (l.issuedAmount - l.remainingPrincipal), 0);
+
     const totalDebt = loans
         .filter(l => l.status === "ACTIVE")
         .reduce((sum, l) => sum + l.remainingPrincipal, 0);
@@ -47,12 +54,14 @@ export function LoanDashboard({ loans, maxEligibleAmount, branchLoanApplicationE
                     </Card>
                     <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-blue-600">Next EMI Due</CardTitle>
+                            <CardTitle className="text-sm font-medium text-blue-600">{isManual ? "Repaid So Far" : "Next EMI Due"}</CardTitle>
                             <Landmark className="h-4 w-4 text-blue-500" />
                         </CardHeader>
                         <CardContent className="space-y-2">
-                            <BlurAmount amount={nextEmi} amountClassName="text-lg font-bold text-blue-700" blurred={true} />
-                            <p className="text-xs text-muted-foreground">Deducted from next payroll</p>
+                            <BlurAmount amount={isManual ? manualRepaid : nextEmi} amountClassName="text-lg font-bold text-blue-700" blurred={true} />
+                            <p className="text-xs text-muted-foreground">
+                                {isManual ? "Deducted from salary by admin" : "Deducted from next payroll"}
+                            </p>
                         </CardContent>
                     </Card>
                     <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
@@ -82,6 +91,7 @@ export function LoanDashboard({ loans, maxEligibleAmount, branchLoanApplicationE
                     <LoanApplicationForm
                         maxEligibleAmount={maxEligibleAmount}
                         branchLoanApplicationEnabled={branchLoanApplicationEnabled}
+                        loanMode={loanMode}
                     />
                 </div>
             </TabsContent>

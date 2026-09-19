@@ -11,6 +11,10 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { LoanStatus } from "@prisma/client";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { LoanPaymentLedger } from "@/components/shared/LoanPaymentLedger";
+import type { LoanLedgerPayment } from "@/components/shared/LoanPaymentLedger";
 
 export interface Loan {
     id: string;
@@ -35,6 +39,7 @@ export interface Loan {
     emiState?: {
         currentEmi: number;
     } | null;
+    payments?: LoanLedgerPayment[];
 }
 
 export function LoanList({ loans }: { loans: Loan[] }) {
@@ -72,6 +77,9 @@ export function LoanList({ loans }: { loans: Loan[] }) {
                                 ৳{loan.remainingPrincipal.toLocaleString("en-BD")}
                             </TableCell>
                             <TableCell className="text-center text-xs">
+                                {loan.totalMonths === 0 && !loan.emiState ? (
+                                    <span className="text-muted-foreground">Manual repayment</span>
+                                ) : (<>
                                 {Math.max(0, loan.totalMonths - loan.gracePeriodMonths)} EMI months
                                 <span className="block text-[10px] text-muted-foreground">
                                     (+{loan.gracePeriodMonths} grace)
@@ -96,9 +104,12 @@ export function LoanList({ loans }: { loans: Loan[] }) {
                                         "MMM yyyy"
                                     )}
                                 </span>
+                                </>)}
                             </TableCell>
                             <TableCell className="text-right">
-                                {loan.status === "ACTIVE" ? (
+                                {loan.status === "ACTIVE" && !loan.emiState ? (
+                                    <span className="text-muted-foreground text-xs">Manual</span>
+                                ) : loan.status === "ACTIVE" ? (
                                     <span className="text-green-600 font-semibold">
                                         ৳{(loan.emiState?.currentEmi || 0).toLocaleString("en-BD")}
                                     </span>
@@ -109,6 +120,21 @@ export function LoanList({ loans }: { loans: Loan[] }) {
                             <TableCell className="text-center">
                                 <div className="space-y-2">
                                     <LoanStatusBadge status={loan.status} />
+                                    {!loan.emiState && (loan.status === "ACTIVE" || loan.status === "CLOSED") && (
+                                        <Dialog>
+                                            <DialogTrigger asChild>
+                                                <Button variant="link" size="sm" className="h-auto p-0 text-[10px]">
+                                                    View deductions
+                                                </Button>
+                                            </DialogTrigger>
+                                            <DialogContent className="max-w-2xl">
+                                                <DialogHeader>
+                                                    <DialogTitle>Loan deductions</DialogTitle>
+                                                </DialogHeader>
+                                                <LoanPaymentLedger issuedAmount={loan.issuedAmount} payments={loan.payments ?? []} />
+                                            </DialogContent>
+                                        </Dialog>
+                                    )}
                                     {loan.managerVerifiedBy && (
                                         <div className="text-[10px] text-muted-foreground">
                                             Checked by {loan.managerVerifiedBy.firstName} {loan.managerVerifiedBy.lastName}

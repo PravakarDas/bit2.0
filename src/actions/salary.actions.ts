@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { SalaryChangeReason } from "@prisma/client";
+import { SalaryChangeReason, SalaryPaymentStatus } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 
 export async function getSalaryHistory(userId: string) {
@@ -13,7 +13,7 @@ export async function getSalaryHistory(userId: string) {
 
 export async function getSalaryPaymentHistory(userId: string) {
     return await prisma.salaryPayment.findMany({
-        where: { userId },
+        where: { userId, status: SalaryPaymentStatus.FINALIZED },
         orderBy: { createdAt: "desc" },
     });
 }
@@ -23,7 +23,7 @@ export async function getMySalaryPaymentHistory() {
     if (!user) throw new Error("Unauthorized");
     
     return await prisma.salaryPayment.findMany({
-        where: { userId: user.id },
+        where: { userId: user.id, status: SalaryPaymentStatus.FINALIZED },
         orderBy: { createdAt: "desc" },
     });
 }

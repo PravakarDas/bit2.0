@@ -20,6 +20,9 @@ export interface PayslipData {
   loanDeduction: number;
   walletAdjustment: number;
   netAmount: number;
+  /** One-off bonus already included in `totalBonuses`; shown as its own labelled line. */
+  customBonus?: number;
+  customBonusNote?: string | null;
 }
 
 const COMPANY_NAME = "Bit HR";
@@ -117,6 +120,10 @@ export function generatePayslipPdf(data: PayslipData): Promise<Buffer> {
     drawLineItem(doc, "Base Salary", data.baseSalary);
     doc.moveDown(0.3);
     drawLineItem(doc, "Bonuses", data.totalBonuses);
+    if (data.customBonus && data.customBonus > 0) {
+      doc.moveDown(0.3);
+      drawLineItem(doc, `   incl. ${data.customBonusNote?.trim() || "Custom bonus"}`, data.customBonus);
+    }
     doc.moveDown(0.3);
     drawLineItem(doc, "Allowances", data.totalAllowances);
     doc.moveDown(0.3);

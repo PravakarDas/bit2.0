@@ -23,7 +23,7 @@ export async function getEmployeeDashboardData() {
 
         // 3. Salary History (Last 6 months)
         prisma.salaryPayment.findMany({
-            where: { userId: user.id },
+            where: { userId: user.id, status: "FINALIZED" },
             orderBy: { month: "desc" },
             take: 6,
             select: { month: true, netAmount: true },
@@ -388,6 +388,7 @@ export async function getAdminDashboardData(branchId?: string, fromDate?: string
         prisma.salaryPayment.aggregate({
             where: {
                 month: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+                status: "FINALIZED",
                 user: employeeFilter
             },
             _sum: { netAmount: true },
@@ -431,6 +432,7 @@ export async function getAdminDashboardData(branchId?: string, fromDate?: string
                 return prisma.salaryPayment.aggregate({
                     where: {
                         month,
+                        status: "FINALIZED",
                         user: employeeFilter
                     },
                     _sum: { netAmount: true },

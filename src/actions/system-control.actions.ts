@@ -23,6 +23,7 @@ type UpdatePayload = {
   zktecoBaseUrl?: string;
   zktecoUsername?: string;
   zktecoPassword?: string;
+  loanMode?: "AUTO" | "MANUAL";
 };
 
 const SENSITIVE_HISTORY_FIELDS = new Set(["zktecoUsername", "zktecoPassword"]);
@@ -64,6 +65,7 @@ function sanitizePayload(user: NonNullable<Awaited<ReturnType<typeof getDbUser>>
   if (canEditSensitiveZkteco(user)) {
     if (typeof payload.zktecoUsername === "string") set("zktecoUsername", payload.zktecoUsername.trim());
     if (typeof payload.zktecoPassword === "string") set("zktecoPassword", payload.zktecoPassword);
+    if (payload.loanMode === "AUTO" || payload.loanMode === "MANUAL") set("loanMode", payload.loanMode);
   }
 
   return { sanitized, changedFields };

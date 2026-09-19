@@ -4,6 +4,7 @@ import { LoanDashboard } from "@/components/employee/LoanDashboard";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
+import { getLoanMode } from "@/lib/system-control";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function LoansPage() {
     if (!user) redirect("/sign-in");
 
     const loans = await getMyLoans();
+    const loanMode = await getLoanMode();
 
     // DYNAMIC Max Eligible Amount Logic:
     // 1. Base Cap: Lower of (50% Base Salary) OR (300,000 Global Limit)
@@ -75,6 +77,7 @@ export default async function LoansPage() {
                 loans={loans}
                 maxEligibleAmount={maxEligibleAmount}
                 branchLoanApplicationEnabled={branchLoanApplicationEnabled}
+                loanMode={loanMode}
             />
         </div>
     );

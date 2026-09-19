@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { LoanStatus, OvertimeRequestStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
+import { getLoanMode } from "@/lib/system-control";
 
 /**
  * Manager: Get pending loans for verification
@@ -425,6 +426,7 @@ export async function getAllLoansWithManagerInfo() {
   return {
     loans,
     canDeleteLoans: user.role === "SUPERADMIN",
+    loanMode: await getLoanMode(),
   };
 }
 

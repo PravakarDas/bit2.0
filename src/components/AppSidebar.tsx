@@ -95,7 +95,7 @@ const requestSubItems = [
 
 const loanSubItems = [
     { title: "View All Loans", url: "/admin/loans", icon: Banknote },
-    { title: "Create Manual Loan", url: "/admin/loans/manual-create", icon: Plus },
+    { title: "Register Existing Loan", url: "/admin/loans/manual-create", icon: Plus },
 ];
 
 const employeeItems = [

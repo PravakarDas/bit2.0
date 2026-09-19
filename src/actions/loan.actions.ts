@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { calculateEMI, checkLoanEligibility, processLoanPayment } from "@/lib/services/loan.service";
 import { notificationEngineContainer } from "@/lib/services/notification-engine";
 import { getDbUser } from "./user.actions";
+import { getLoanMode } from "@/lib/system-control";
 
 function isMissingBranchLoanToggleColumnError(error: unknown): boolean {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
@@ -24,6 +25,15 @@ function isMissingBranchLoanToggleColumnError(error: unknown): boolean {
               : "";
 
     return column.includes("Branch.isLoanApplicationEnabled");
+}
+
+/**
+ * Current loan processing mode (AUTO = EMI schedule, MANUAL = admin-chosen payroll deductions).
+ */
+export async function getCurrentLoanMode() {
+    const user = await getDbUser();
+    if (!user) throw new Error("Unauthorized");
+    return await getLoanMode();
 }
 
 /**
@@ -222,19 +232,29 @@ export async function approveLoan(
         }
     }
 
+    // MANUAL mode: no grace period / EMI schedule / EmiState. The admin picks
+    // deduction amounts per payroll run instead. Mode at approval time decides
+    // how this loan behaves for its whole life (manual loan = no EmiState).
+    const isManualMode = (await getLoanMode()) === "MANUAL";
+
+    if (isManualMode && data.issuedAmount <= 0) {
+        throw new Error("Loan amount must be greater than zero");
+    }
+
     const result = await prisma.$transaction(async (tx) => {
         // `totalMonths` from the approval form represents EMI months.
         // Convert to full loan timeline by adding grace period months.
-        const emiMonths = data.totalMonths;
-        const totalDurationMonths = emiMonths + data.gracePeriodMonths;
+        const emiMonths = isManualMode ? 0 : data.totalMonths;
+        const graceMonths = isManualMode ? 0 : data.gracePeriodMonths;
+        const totalDurationMonths = emiMonths + graceMonths;
 
-        if (emiMonths <= 0) {
+        if (!isManualMode && emiMonths <= 0) {
             throw new Error("EMI duration must be at least 1 month");
         }
 
         // Calculate Schedule
         const now = new Date();
-        const startMonthDate = new Date(now.getFullYear(), now.getMonth() + data.gracePeriodMonths, 1);
+        const startMonthDate = new Date(now.getFullYear(), now.getMonth() + graceMonths, 1);
 
         // 2. Update the Loan record
         const updatedLoan = await tx.loan.update({
@@ -242,26 +262,30 @@ export async function approveLoan(
             data: {
                 issuedAmount: data.issuedAmount,
                 remainingPrincipal: data.issuedAmount,
-                gracePeriodMonths: data.gracePeriodMonths,
+                gracePeriodMonths: graceMonths,
                 totalMonths: totalDurationMonths,
                 status: LoanStatus.ACTIVE,
-                emiStartMonth: startMonthDate.getMonth() + 1,
-                emiStartYear: startMonthDate.getFullYear(),
+                emiStartMonth: isManualMode ? null : startMonthDate.getMonth() + 1,
+                emiStartYear: isManualMode ? null : startMonthDate.getFullYear(),
                 approvedBy: user.id,
                 adminComments: data.adminComments
             }
         });
 
         // 3. Create the initial EmiState record
-        const initialEmi = data.gracePeriodMonths > 0 ? 0 : calculateEMI(data.issuedAmount, emiMonths);
+        const initialEmi = isManualMode
+            ? 0
+            : graceMonths > 0 ? 0 : calculateEMI(data.issuedAmount, emiMonths);
 
-        await tx.emiState.create({
-            data: {
-                loanId: updatedLoan.id,
-                currentEmi: initialEmi,
-                carryForward: 0
-            }
-        });
+        if (!isManualMode) {
+            await tx.emiState.create({
+                data: {
+                    loanId: updatedLoan.id,
+                    currentEmi: initialEmi,
+                    carryForward: 0
+                }
+            });
+        }
 
         // 4. Log the initial EMI in AuditLog
         await tx.auditLog.create({
@@ -269,7 +293,11 @@ export async function approveLoan(
                 loanId: updatedLoan.id,
                 oldEmi: 0,
                 newEmi: initialEmi,
-                changeReason: `Loan ${data.bypassManagerVerification ? "directly approved by bypassing manager verification" : "approved by"} ${user.id}. EMI starts ${startMonthDate.toLocaleDateString()}.`
+                changeReason: `Loan ${data.bypassManagerVerification ? "directly approved by bypassing manager verification" : "approved by"} ${user.id}. ${
+                    isManualMode
+                        ? "Manual mode: no EMI schedule, repayment is deducted from payroll in amounts chosen by admin."
+                        : `EMI starts ${startMonthDate.toLocaleDateString()}.`
+                }`
             }
         });
 
@@ -550,10 +578,18 @@ export async function getLoanActivityHistory(loanId: string) {
         })
     ]);
     
+    const approver = loan?.approvedBy
+        ? await prisma.user.findUnique({
+            where: { id: loan.approvedBy },
+            select: { firstName: true, lastName: true, email: true }
+        })
+        : null;
+
     return {
         loan,
         payments,
-        auditLogs
+        auditLogs,
+        approver
     };
 }
 
@@ -597,11 +633,14 @@ export async function applyForLoan(data: {
         throw new Error("Maximum loan amount is ৳300,000");
     }
 
-    if (data.duration < 1) {
+    // Duration / grace period only exist for AUTO (EMI) loans.
+    const isManualMode = (await getLoanMode()) === "MANUAL";
+
+    if (!isManualMode && data.duration < 1) {
         throw new Error("Loan duration must be at least 1 month");
     }
 
-    if (data.gracePeriod < 0) {
+    if (!isManualMode && data.gracePeriod < 0) {
         throw new Error("Grace period cannot be negative");
     }
 
@@ -622,8 +661,8 @@ export async function applyForLoan(data: {
                 userId: user.id,
                 issuedAmount: roundedAmount,
                 remainingPrincipal: roundedAmount,
-                totalMonths: data.duration,
-                gracePeriodMonths: data.gracePeriod,
+                totalMonths: isManualMode ? 0 : data.duration,
+                gracePeriodMonths: isManualMode ? 0 : data.gracePeriod,
                 reason: data.reason || "Personal",
                 status: LoanStatus.PENDING
             }
@@ -649,6 +688,7 @@ export async function getMyLoans() {
         where: { userId: user.id },
         include: {
             emiState: true,
+            payments: { orderBy: { createdAt: "desc" } },
             managerVerifiedBy: {
                 select: {
                     id: true,

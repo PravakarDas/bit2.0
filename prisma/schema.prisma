@@ -44,6 +44,11 @@ enum LoanStatus {
   MANAGER_REJECTED
 }
 
+enum LoanMode {
+  AUTO
+  MANUAL
+}
+
 enum PaymentType {
   EMI
   MANUAL
@@ -462,6 +467,11 @@ model MedicalClaim {
   updatedAt DateTime @updatedAt
 }
 
+enum SalaryPaymentStatus {
+  DRAFT // saved by admin, no money effects applied yet (wallet/medical/loans untouched)
+  FINALIZED // payslip sent; wallet cleared, medical marked paid, loan balances updated
+}
+
 model SalaryPayment {
   id                   String @id @default(cuid())
   month                String // e.g. "2024-01"
@@ -473,10 +483,19 @@ model SalaryPayment {
   walletAdjustment     Float  @default(0)
   netAmount            Float
 
+  // Draft/finalize workflow. Rows that existed before this workflow are FINALIZED.
+  status          SalaryPaymentStatus @default(FINALIZED)
+  customBonus     Float               @default(0) // one-off bonus for this month, already included in totalBonuses
+  customBonusNote String?
+  draftInputs     Json? // admin selections behind a DRAFT: bonus ids, EMI switch, manual loan deductions
+  payslipSentAt   DateTime?
+
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
+
+  @@index([month, status])
 }
 
 model Loan {
@@ -596,6 +615,7 @@ model SystemControlSettings {
   zktecoBaseUrl              String   @default("")
   zktecoUsername             String   @default("")
   zktecoPassword             String   @default("")
+  loanMode                   LoanMode @default(AUTO) // Applies to loans approved from now on; existing loans keep their own behaviour
   updatedById                String?
   updatedByEmail             String?
   updatedByRole              String?

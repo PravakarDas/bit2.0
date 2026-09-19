@@ -122,8 +122,12 @@ export default function ManagerLoansVerificationClient() {
                 </div>
                 <div>
                   <p><strong>Amount:</strong> ৳{loan.issuedAmount.toLocaleString("en-BD")}</p>
-                  <p><strong>Duration:</strong> {loan.totalMonths} months</p>
-                  <p><strong>Grace Period:</strong> {loan.gracePeriodMonths} months</p>
+                  {loan.totalMonths > 0 && (
+                    <>
+                      <p><strong>Duration:</strong> {loan.totalMonths} months</p>
+                      <p><strong>Grace Period:</strong> {loan.gracePeriodMonths} months</p>
+                    </>
+                  )}
                 </div>
               </div>
 

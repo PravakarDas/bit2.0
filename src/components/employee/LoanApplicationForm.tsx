@@ -19,9 +19,11 @@ import { Loader2, Calculator } from "lucide-react";
 interface LoanApplicationFormProps {
     maxEligibleAmount: number; // 50% of salary or 300k
     branchLoanApplicationEnabled: boolean;
+    loanMode?: "AUTO" | "MANUAL";
 }
 
-export function LoanApplicationForm({ maxEligibleAmount, branchLoanApplicationEnabled }: LoanApplicationFormProps) {
+export function LoanApplicationForm({ maxEligibleAmount, branchLoanApplicationEnabled, loanMode = "AUTO" }: LoanApplicationFormProps) {
+    const isManual = loanMode === "MANUAL";
     const minimumLoanAmount = 5000;
     const effectiveMaxAmount = Math.max(0, Math.min(300000, Math.floor(maxEligibleAmount / 500) * 500));
     const canApplyByLimit = effectiveMaxAmount >= minimumLoanAmount;
@@ -115,6 +117,7 @@ export function LoanApplicationForm({ maxEligibleAmount, branchLoanApplicationEn
                         </p>
                     </div>
 
+                    {!isManual && (
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label>Duration (Months)</Label>
@@ -143,6 +146,7 @@ export function LoanApplicationForm({ maxEligibleAmount, branchLoanApplicationEn
                             </Select>
                         </div>
                     </div>
+                    )}
 
                     <div className="space-y-2">
                         <Label>Reason</Label>
@@ -153,6 +157,14 @@ export function LoanApplicationForm({ maxEligibleAmount, branchLoanApplicationEn
                         />
                     </div>
 
+                    {isManual ? (
+                    <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 text-xs text-blue-900">
+                        <p className="font-semibold">Flexible repayment</p>
+                        <p className="opacity-70">
+                            There is no fixed EMI. HR/admin deducts the loan from your salary in the amounts and months they decide.
+                        </p>
+                    </div>
+                    ) : (
                     <div className="bg-blue-50/50 p-4 rounded-lg flex items-center justify-between border border-blue-100">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-blue-100 rounded-full text-blue-600">
@@ -167,6 +179,7 @@ export function LoanApplicationForm({ maxEligibleAmount, branchLoanApplicationEn
                             ৳{estimatedEmi.toLocaleString("en-BD")}
                         </span>
                     </div>
+                    )}
 
                     {!branchLoanApplicationEnabled && (
                         <p className="text-xs text-red-600">

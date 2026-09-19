@@ -56,6 +56,8 @@ export interface PayslipDispatchInput {
   /** 1-12 */
   monthNumber: number;
   payslipData: PayslipData;
+  /** Set on a manual resend so the notification's dedupe key differs from the original send (otherwise the engine would treat it as a duplicate). */
+  dedupeKeySuffix?: string;
 }
 
 /** The one Drive-side capability this module needs — built once per payroll run by `createPayslipDriveTarget`, reused across every employee so month/branch folders are looked up (and cached) only once each, not once per employee. */
@@ -208,7 +210,7 @@ export async function dispatchPayslipForEmployee(input: PayslipDispatchInput, de
   try {
     await deps.notificationService.raiseEvent({
       eventType: "PAYROLL_PROCESSED",
-      dedupeKey: `PAYROLL_PROCESSED:${input.salaryPaymentId}`,
+      dedupeKey: `PAYROLL_PROCESSED:${input.salaryPaymentId}${input.dedupeKeySuffix ? `:${input.dedupeKeySuffix}` : ""}`,
       sourceDomain: "payroll",
       payload: {
         employeeName: input.employeeName,
