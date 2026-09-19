@@ -72,6 +72,7 @@ interface PayrollAggregation {
     firstName?: string | null;
     lastName?: string | null;
     branchName?: string | null;
+    designationName?: string | null;
     bankAccountNumber?: string | null;
     baseSalary: number;
     walletBalance: number;
@@ -198,6 +199,9 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
         },
         include: {
             branch: {
+                select: { name: true },
+            },
+            designation: {
                 select: { name: true },
             },
             loans: {
@@ -377,6 +381,7 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
             firstName: user.firstName,
             lastName: user.lastName,
             branchName: user.branch?.name ?? null,
+            designationName: user.designation?.name ?? null,
             bankAccountNumber: user.bankAccountNumber,
             baseSalary: user.baseSalary,
             walletBalance: user.walletBalance,
