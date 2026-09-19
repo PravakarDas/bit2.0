@@ -52,6 +52,8 @@ export interface PayslipDispatchInput {
   employeeName: string;
   /** `null` when the employee has no assigned branch — resolved to the "Unassigned" Drive folder. */
   branchName: string | null;
+  /** Used to pick the branch's letterhead template. */
+  branchId?: string | null;
   year: number;
   /** 1-12 */
   monthNumber: number;
@@ -67,7 +69,7 @@ export interface PayslipDriveTarget {
 }
 
 export interface PayslipDispatchDeps {
-  generatePdf: (data: PayslipData) => Promise<Buffer>;
+  generatePdf: (data: PayslipData, input: PayslipDispatchInput) => Promise<Buffer>;
   writeLocalFile: (filename: string, content: Buffer) => Promise<string>;
   /** `null` when Google Drive is not configured at all — the Drive step is then skipped and recorded as a `drive_upload` failure, but email delivery still proceeds. */
   drive: PayslipDriveTarget | null;
@@ -150,7 +152,7 @@ export async function dispatchPayslipForEmployee(input: PayslipDispatchInput, de
   let pdfBuffer: Buffer;
   let localPath: string;
   try {
-    pdfBuffer = await deps.generatePdf(input.payslipData);
+    pdfBuffer = await deps.generatePdf(input.payslipData, input);
     localPath = await deps.writeLocalFile(filename, pdfBuffer);
   } catch (error) {
     recordFailure("pdf_generation", toSafeMessage(error));

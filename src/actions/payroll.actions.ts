@@ -6,6 +6,7 @@ import { calculateEMI } from "@/lib/services/loan.service";
 import { LoanStatus, ClaimStatus, UserStatus, SalaryPaymentStatus, Prisma } from "@prisma/client";
 import { getDbUser } from "./user.actions";
 import { MANUAL_MEDICAL_DESCRIPTION_PREFIX } from "@/lib/medical-history";
+import { loadLetterheadResolver } from "@/lib/services/pdf-template.service";
 import { shouldGeneratePayroll } from "@/lib/employee-status";
 import { createAdminNotification } from "./notification.actions";
 import { notificationEngineContainer } from "@/lib/services/notification-engine";
@@ -73,6 +74,7 @@ interface PayrollAggregation {
     firstName?: string | null;
     lastName?: string | null;
     branchName?: string | null;
+    branchId?: string | null;
     designationName?: string | null;
     bankAccountNumber?: string | null;
     baseSalary: number;
@@ -411,6 +413,7 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
             firstName: user.firstName,
             lastName: user.lastName,
             branchName: user.branch?.name ?? null,
+            branchId: user.branchId ?? null,
             designationName: user.designation?.name ?? null,
             bankAccountNumber: user.bankAccountNumber,
             baseSalary: user.baseSalary,
@@ -501,6 +504,7 @@ interface CreatedSalaryPaymentForDispatch {
     firstName?: string | null;
     lastName?: string | null;
     branchName: string | null;
+    branchId?: string | null;
     baseSalary: number;
     totalBonuses: number;
     totalAllowances: number;
@@ -557,6 +561,7 @@ async function dispatchPayrollPayslips(
             email: sp.email,
             employeeName,
             branchName: sp.branchName,
+            branchId: sp.branchId,
             year,
             monthNumber,
             payslipData: {
@@ -577,8 +582,27 @@ async function dispatchPayrollPayslips(
         };
     });
 
+    // Branch letterhead templates (branch's own, else the shared default), loaded once per run.
+    // A failure here just means the plain payslip design is used.
+    let resolveLetterhead: (branchId: string | null | undefined) => Uint8Array | null = () => null;
+    try {
+        resolveLetterhead = await loadLetterheadResolver(createdSalaryPayments.map((sp) => sp.branchId));
+    } catch (error) {
+        console.error("Failed to load PDF letterhead templates for payroll payslip dispatch:", error);
+    }
+
     const summary = await dispatchPayslipsForPayrollRun(inputs, {
-        generatePdf: generatePayslipPdf,
+        generatePdf: async (data, input) => {
+            const letterhead = resolveLetterhead(input.branchId);
+            if (!letterhead) return generatePayslipPdf(data);
+            try {
+                return await generatePayslipPdf(data, { letterhead });
+            } catch (error) {
+                // A broken template must never stop a payslip going out.
+                console.error(`Letterhead template failed for branch ${input.branchId}; using the plain payslip:`, error);
+                return generatePayslipPdf(data);
+            }
+        },
         writeLocalFile: writePayslipTempFile,
         drive: driveTarget,
         documentRepository: notificationEngineContainer.repositories.documentRepository,
@@ -1215,7 +1239,7 @@ function toDispatchPayment(
         customBonus: number;
         customBonusNote: string | null;
     },
-    user: { email: string; firstName?: string | null; lastName?: string | null; branchName: string | null }
+    user: { email: string; firstName?: string | null; lastName?: string | null; branchName: string | null; branchId?: string | null }
 ): CreatedSalaryPaymentForDispatch {
     return {
         userId: payment.userId,
@@ -1224,6 +1248,7 @@ function toDispatchPayment(
         firstName: user.firstName,
         lastName: user.lastName,
         branchName: user.branchName,
+        branchId: user.branchId ?? null,
         baseSalary: payment.baseSalary,
         totalBonuses: payment.totalBonuses,
         totalAllowances: payment.totalAllowances,
@@ -1342,6 +1367,7 @@ export async function finalizeAndSendPayslips(payrollMonth: string, userIds: str
                     firstName: emp.firstName,
                     lastName: emp.lastName,
                     branchName: emp.branchName ?? null,
+                    branchId: emp.branchId ?? null,
                 }),
                 result,
             });
@@ -1378,7 +1404,7 @@ export async function resendPayslips(payrollMonth: string, userIds: string[]): P
     const rows = await prisma.salaryPayment.findMany({
         where: { month: payrollMonth, status: SalaryPaymentStatus.FINALIZED, userId: { in: uniqueUserIds } },
         include: {
-            user: { select: { email: true, firstName: true, lastName: true, branch: { select: { name: true } } } },
+            user: { select: { email: true, firstName: true, lastName: true, branchId: true, branch: { select: { name: true } } } },
         },
         orderBy: { createdAt: "desc" },
     });
@@ -1402,6 +1428,7 @@ export async function resendPayslips(payrollMonth: string, userIds: string[]): P
                 firstName: row.user.firstName,
                 lastName: row.user.lastName,
                 branchName: row.user.branch?.name ?? null,
+                branchId: row.user.branchId ?? null,
             }),
             result,
         });

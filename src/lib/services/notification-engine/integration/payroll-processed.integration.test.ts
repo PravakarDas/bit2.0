@@ -471,7 +471,7 @@ describe("Integration (Phase 18c): payroll payslip dispatch -> Document -> PAYRO
 
   function buildDeps(pipeline: ReturnType<typeof buildPipeline>, drive: PayslipDriveTarget | null): PayslipDispatchDeps {
     return {
-      generatePdf: generatePayslipPdf, // the real, already-verified PDF generator — no second implementation
+      generatePdf: (data) => generatePayslipPdf(data), // the real, already-verified PDF generator — no second implementation
       writeLocalFile: async (filename, content) => {
         const filePath = join(dir, filename);
         await writeFile(filePath, content);

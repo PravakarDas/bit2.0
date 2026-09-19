@@ -1,5 +1,6 @@
 "use client";
 
+import { PdfTemplatesSection, type PdfTemplateSummary } from "@/components/admin/PdfTemplatesSection";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -110,6 +111,8 @@ interface UnifiedOrganizationClientProps {
     systemSettings: {
         medicalClaimLimit: number;
     };
+    /** Only passed for Admin/HR; managers do not see the PDF Templates section. */
+    pdfTemplates?: PdfTemplateSummary | null;
 }
 
 export function UnifiedOrganizationClient({
@@ -120,6 +123,7 @@ export function UnifiedOrganizationClient({
     allowances,
     leaveTypes,
     systemSettings,
+    pdfTemplates = null,
 }: UnifiedOrganizationClientProps) {
     return (
         <div className="space-y-12 pb-12">
@@ -130,6 +134,13 @@ export function UnifiedOrganizationClient({
                     Manage your organization structure, locations, and compensation policies.
                 </p>
             </div>
+
+            {/* PDF letterhead templates (Admin/HR only) */}
+            {pdfTemplates && (
+                <section id="pdf-templates" className="scroll-mt-20">
+                    <PdfTemplatesSection templates={pdfTemplates} branches={branches} />
+                </section>
+            )}
 
             {/* Section 1: Branches */}
             <section id="branches" className="scroll-mt-20">

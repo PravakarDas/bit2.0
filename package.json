@@ -9,7 +9,7 @@
     "build": "node --max-old-space-size=4096 node_modules/next/dist/bin/next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsc -p tsconfig.test.json && node --test ./.test-build/lib/smtp-shared.test.js ./.test-build/lib/crypto.test.js ./.test-build/lib/leave-authorization.test.js ./.test-build/lib/notification-action-authorization.test.js ./.test-build/lib/google-drive-config.test.js ./.test-build/lib/google-drive-oauth.test.js ./.test-build/lib/payslip-filename.test.js ./.test-build/lib/services/payslip-pdf.service.test.js ./.test-build/lib/services/google-drive-client.test.js ./.test-build/lib/services/payroll-payslip-dispatch.service.test.js ./.test-build/lib/services/notification-engine/notification.service.test.js ./.test-build/lib/services/notification-engine/queue/*.test.js ./.test-build/lib/services/notification-engine/worker/*.test.js ./.test-build/lib/services/notification-engine/template/*.test.js ./.test-build/lib/services/notification-engine/delivery/*.test.js ./.test-build/lib/services/notification-engine/delivery/types/*.test.js ./.test-build/lib/services/notification-engine/delivery/value-objects/*.test.js ./.test-build/lib/services/notification-engine/delivery/providers/smtp/*.test.js ./.test-build/lib/services/notification-engine/integration/*.test.js ./.test-build/lib/services/notification-engine/inbox/*.test.js ./.test-build/lib/services/notification-engine/preferences/*.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test ./.test-build/lib/smtp-shared.test.js ./.test-build/lib/crypto.test.js ./.test-build/lib/leave-authorization.test.js ./.test-build/lib/notification-action-authorization.test.js ./.test-build/lib/google-drive-config.test.js ./.test-build/lib/google-drive-oauth.test.js ./.test-build/lib/pdf-letterhead.test.js ./.test-build/lib/payslip-filename.test.js ./.test-build/lib/services/payslip-pdf.service.test.js ./.test-build/lib/services/google-drive-client.test.js ./.test-build/lib/services/payroll-payslip-dispatch.service.test.js ./.test-build/lib/services/notification-engine/notification.service.test.js ./.test-build/lib/services/notification-engine/queue/*.test.js ./.test-build/lib/services/notification-engine/worker/*.test.js ./.test-build/lib/services/notification-engine/template/*.test.js ./.test-build/lib/services/notification-engine/delivery/*.test.js ./.test-build/lib/services/notification-engine/delivery/types/*.test.js ./.test-build/lib/services/notification-engine/delivery/value-objects/*.test.js ./.test-build/lib/services/notification-engine/delivery/providers/smtp/*.test.js ./.test-build/lib/services/notification-engine/integration/*.test.js ./.test-build/lib/services/notification-engine/inbox/*.test.js ./.test-build/lib/services/notification-engine/preferences/*.test.js",
     "test:clean": "if exist .test-build rmdir /s /q .test-build && npm run test"
   },
   "prisma": {
@@ -46,6 +46,7 @@
     "node-cron": "^4.2.1",
     "node-fetch": "^3.3.2",
     "nodemailer": "^9.0.3",
+    "pdf-lib": "^1.17.1",
     "pdfkit": "^0.20.1",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",

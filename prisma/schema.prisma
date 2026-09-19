@@ -362,9 +362,29 @@ model Branch {
   users                   User[]
   bonuses                 BonusType[]
   targetedBreakingNotices BreakingNotice[] @relation("BreakingNoticeTargetBranch")
+  pdfTemplate             PdfTemplate?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Blank letterhead PDF used as the background of generated PDFs (e.g. payslips).
+// branchId = null is the shared "Default" template used by branches without their own.
+// Stored in the database (not on disk) so it survives redeploys; capped at 5 MB on upload.
+model PdfTemplate {
+  id       String  @id @default(cuid())
+  branchId String? @unique
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  fileName  String
+  sizeBytes Int
+  pageWidth  Float // first page size in PDF points
+  pageHeight Float
+  data      Bytes
+
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model SystemSettings {

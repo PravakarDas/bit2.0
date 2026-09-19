@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import PDFDocument from "pdfkit";
 import { formatCurrency, CURRENCY_SYMBOL } from "../currency";
+import { applyLetterhead, inspectPdfTemplate, LETTERHEAD_MARGINS } from "../pdf-letterhead";
 
 /**
  * Mirrors the real fields on the `SalaryPayment` Prisma model plus the
@@ -63,7 +64,7 @@ function drawAmountRightAligned(doc: PDFKit.PDFDocument, y: number, amount: numb
   doc.font(digitsFont);
   const restWidth = doc.widthOfString(rest);
 
-  const rightEdge = doc.page.width - 50;
+  const rightEdge = doc.page.width - doc.page.margins.right;
   const startX = rightEdge - symbolWidth - restWidth;
 
   doc.font(symbolFont).text(symbol, startX, y, { lineBreak: false });
@@ -78,9 +79,12 @@ function drawAmountRightAligned(doc: PDFKit.PDFDocument, y: number, amount: numb
 
 function drawLineItem(doc: PDFKit.PDFDocument, label: string, amount: number) {
   const y = doc.y;
-  doc.font("Helvetica").fontSize(10).text(label, 50, y, { continued: false });
+  doc.font("Helvetica").fontSize(10).text(label, doc.page.margins.left, y, { continued: false });
   doc.font("Helvetica").fontSize(10);
   drawAmountRightAligned(doc, y, amount, false);
+  // The amount is drawn with explicit coordinates and leaves the cursor on the same line, which made
+  // consecutive rows print on top of each other. Always move down one line after a row.
+  doc.y = y + doc.currentLineHeight(true);
 }
 
 /**
@@ -89,9 +93,29 @@ function drawLineItem(doc: PDFKit.PDFDocument, label: string, amount: number) {
  * mutation of any kind — the caller is responsible for persisting/sending
  * the result.
  */
-export function generatePayslipPdf(data: PayslipData): Promise<Buffer> {
+export async function generatePayslipPdf(
+  data: PayslipData,
+  options: { letterhead?: Uint8Array | null } = {}
+): Promise<Buffer> {
+  const letterhead = options.letterhead ?? null;
+  if (!letterhead) {
+    return renderPayslipContent(data, { size: "A4", margin: 50, compress: false });
+  }
+
+  // Branch letterhead: draw the payslip inside the safe body area at the template's own page
+  // size, then lay it on top of the template so the logo/footer stay clear.
+  const template = await inspectPdfTemplate(letterhead);
+  const content = await renderPayslipContent(data, {
+    size: [template.width, template.height],
+    margins: { ...LETTERHEAD_MARGINS },
+    compress: false,
+  });
+  return applyLetterhead(content, letterhead);
+}
+
+function renderPayslipContent(data: PayslipData, documentOptions: PDFKit.PDFDocumentOptions): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 50, compress: false });
+    const doc = new PDFDocument(documentOptions);
     const chunks: Buffer[] = [];
 
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -138,14 +162,14 @@ export function generatePayslipPdf(data: PayslipData): Promise<Buffer> {
     doc.moveDown(1);
 
     doc
-      .moveTo(50, doc.y)
-      .lineTo(doc.page.width - 50, doc.y)
+      .moveTo(doc.page.margins.left, doc.y)
+      .lineTo(doc.page.width - doc.page.margins.right, doc.y)
       .strokeColor("#cccccc")
       .stroke();
     doc.moveDown(0.5);
 
     const netY = doc.y;
-    doc.font("Helvetica-Bold").fontSize(13).text("Net Salary", 50, netY);
+    doc.font("Helvetica-Bold").fontSize(13).text("Net Salary", doc.page.margins.left, netY);
     doc.font("Helvetica-Bold").fontSize(13);
     drawAmountRightAligned(doc, netY, data.netAmount, true);
 
