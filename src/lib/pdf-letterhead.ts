@@ -56,14 +56,20 @@ export async function inspectPdfTemplate(bytes: Uint8Array): Promise<PdfTemplate
 export async function applyLetterhead(content: Uint8Array, template: Uint8Array): Promise<Buffer> {
   const out = await PDFDocument.create();
   const templateDoc = await PDFDocument.load(template);
-  const [background] = await out.embedPdf(templateDoc, [0]);
+  const { width, height } = templateDoc.getPage(0).getSize();
+
+  // A completely blank page has no content stream and cannot be embedded (pdf-lib only fails at
+  // save time, so check up front). It is simply an empty background: content goes on a blank
+  // page of the same size.
+  const hasContents = !!templateDoc.getPage(0).node.Contents();
+  const background = hasContents ? (await out.embedPdf(templateDoc, [0]))[0] : null;
 
   const contentDoc = await PDFDocument.load(content);
   const contentPages = await out.embedPdf(contentDoc, contentDoc.getPageIndices());
 
   for (const contentPage of contentPages) {
-    const page = out.addPage([background.width, background.height]);
-    page.drawPage(background);
+    const page = out.addPage([width, height]);
+    if (background) page.drawPage(background);
     page.drawPage(contentPage);
   }
 

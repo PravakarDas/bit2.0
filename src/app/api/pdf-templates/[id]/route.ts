@@ -40,6 +40,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             netAmount: 57500,
             customBonus: 2000,
             customBonusNote: "Sample bonus",
+            employeeId: "BTCD1042",
+            bonusLines: [
+              { label: "Performance Bonus", amount: 2000 },
+              { label: "Attendance Bonus", amount: 1000 },
+            ],
+            loanLines: [{ label: "EMI - Loan #a1b2c3 (balance Tk 18,000)", amount: 2000 }],
+            walletTransactions: [
+              { date: new Date(), description: "Approved Request: Sample reimbursement", amount: 500 },
+              { date: new Date(), description: "Sample penalty", amount: -500 },
+            ],
           },
           { letterhead: template.data }
         )

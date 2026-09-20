@@ -7,6 +7,7 @@ import { LoanStatus, ClaimStatus, UserStatus, SalaryPaymentStatus, Prisma } from
 import { getDbUser } from "./user.actions";
 import { MANUAL_MEDICAL_DESCRIPTION_PREFIX } from "@/lib/medical-history";
 import { loadLetterheadResolver } from "@/lib/services/pdf-template.service";
+import { formatEmployeeCode } from "@/lib/employee-code";
 import { shouldGeneratePayroll } from "@/lib/employee-status";
 import { createAdminNotification } from "./notification.actions";
 import { notificationEngineContainer } from "@/lib/services/notification-engine";
@@ -75,6 +76,7 @@ interface PayrollAggregation {
     lastName?: string | null;
     branchName?: string | null;
     branchId?: string | null;
+    attendanceId?: string | null;
     designationName?: string | null;
     bankAccountNumber?: string | null;
     baseSalary: number;
@@ -414,6 +416,7 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
             lastName: user.lastName,
             branchName: user.branch?.name ?? null,
             branchId: user.branchId ?? null,
+            attendanceId: user.attendanceId ?? null,
             designationName: user.designation?.name ?? null,
             bankAccountNumber: user.bankAccountNumber,
             baseSalary: user.baseSalary,
@@ -514,6 +517,8 @@ interface CreatedSalaryPaymentForDispatch {
     netAmount: number;
     customBonus?: number;
     customBonusNote?: string | null;
+    employeeId?: string | null;
+    snapshot?: PayslipSnapshot | null;
 }
 
 /**
@@ -577,6 +582,14 @@ async function dispatchPayrollPayslips(
                 netAmount: sp.netAmount,
                 customBonus: sp.customBonus,
                 customBonusNote: sp.customBonusNote,
+                employeeId: sp.employeeId,
+                ...(sp.snapshot
+                    ? {
+                          bonusLines: sp.snapshot.bonusLines,
+                          loanLines: sp.snapshot.loanLines,
+                          walletTransactions: sp.snapshot.walletTransactions,
+                      }
+                    : {}),
             },
             dedupeKeySuffix,
         };
@@ -883,6 +896,71 @@ function findDraftMismatch(
     return null;
 }
 
+/** Itemised figures printed on the payslip; frozen at send time so a later resend reproduces the same PDF. */
+interface PayslipSnapshot {
+    bonusLines: { label: string; amount: number }[];
+    loanLines: { label: string; amount: number }[];
+    /** Wallet entries settled in this payroll (dates as ISO strings). */
+    walletTransactions: { date: string; description: string; amount: number }[];
+}
+
+function parsePayslipSnapshot(raw: unknown): PayslipSnapshot | null {
+    const value = (raw && typeof raw === "object" ? (raw as { payslip?: unknown }).payslip : null) as Partial<PayslipSnapshot> | null;
+    if (!value || typeof value !== "object") return null;
+    const lines = (list: unknown) =>
+        Array.isArray(list)
+            ? list
+                  .filter((l): l is { label: string; amount: number } => !!l && typeof l.label === "string" && Number.isFinite(Number(l.amount)))
+                  .map((l) => ({ label: l.label, amount: Number(l.amount) }))
+            : [];
+    return {
+        bonusLines: lines(value.bonusLines),
+        loanLines: lines(value.loanLines),
+        walletTransactions: Array.isArray(value.walletTransactions)
+            ? value.walletTransactions
+                  .filter((t) => !!t && typeof t.description === "string" && Number.isFinite(Number(t.amount)))
+                  .map((t) => ({ date: String(t.date), description: t.description, amount: Number(t.amount) }))
+            : [],
+    };
+}
+
+/**
+ * Wallet entries that make up the balance this payroll clears: everything after the previous
+ * payroll's "Adjusted in <month> salary" clearing entry (or all entries if there was none).
+ * Must run before this payroll writes its own clearing entry.
+ */
+async function loadSettledWalletTransactions(tx: Prisma.TransactionClient, userId: string) {
+    const lastClear = await tx.walletTransaction.findFirst({
+        where: { userId, type: "ADJUSTMENT", description: { startsWith: "Adjusted in " } },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+    });
+    const rows = await tx.walletTransaction.findMany({
+        where: { userId, ...(lastClear ? { createdAt: { gt: lastClear.createdAt } } : {}) },
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true, description: true, amount: true },
+    });
+    return rows.map((row) => ({ date: row.createdAt.toISOString(), description: row.description, amount: row.amount }));
+}
+
+function buildLoanLines(emp: PayrollAggregation, computed: ReturnType<typeof computeEmployeePayroll>) {
+    const tag = (loanId: string) => `Loan #${loanId.slice(-6)}`;
+    const balance = (remaining: number) => ` (balance Tk ${roundMoney(remaining).toLocaleString("en-BD")})`;
+    const lines: { label: string; amount: number }[] = [];
+
+    for (const entry of computed.autoEntries) {
+        if (entry.amount <= 0) continue;
+        const loan = emp.activeLoans.find((l) => l.id === entry.loanId);
+        const kind = entry.amount === entry.scheduled ? "EMI" : "Payroll deduction";
+        lines.push({ label: `${kind} - ${tag(entry.loanId)}${loan ? balance(loan.remainingPrincipal - entry.amount) : ""}`, amount: entry.amount });
+    }
+    for (const entry of computed.manualEntries) {
+        const loan = emp.manualLoans.find((l) => l.id === entry.loanId);
+        lines.push({ label: `Loan repayment - ${tag(entry.loanId)}${loan ? balance(loan.remainingPrincipal - entry.amount) : ""}`, amount: entry.amount });
+    }
+    return lines;
+}
+
 /**
  * All money side effects of paying one employee. Runs inside the finalize transaction.
  * (Logic carried over unchanged from the former all-at-once payroll run.)
@@ -911,6 +989,9 @@ async function applyPayrollEffects(
     ) {
         throw new Error("Medical claims changed while sending. Edit and regenerate.");
     }
+
+    // What the payslip's wallet page lists — read before this payroll's own clearing entry is written.
+    const settledWalletTransactions = await loadSettledWalletTransactions(tx, emp.userId);
 
     // Clear wallet balance and create adjustment transaction
     if (emp.walletBalance !== 0) {
@@ -1215,6 +1296,13 @@ async function applyPayrollEffects(
             },
         });
     }
+
+    const snapshot: PayslipSnapshot = {
+        bonusLines: computed.appliedBonuses.map((b) => ({ label: b.name, amount: roundMoney(b.amount) })),
+        loanLines: buildLoanLines(emp, computed),
+        walletTransactions: settledWalletTransactions,
+    };
+    return snapshot;
 }
 
 export interface PayslipSendResult {
@@ -1239,7 +1327,8 @@ function toDispatchPayment(
         customBonus: number;
         customBonusNote: string | null;
     },
-    user: { email: string; firstName?: string | null; lastName?: string | null; branchName: string | null; branchId?: string | null }
+    user: { email: string; firstName?: string | null; lastName?: string | null; branchName: string | null; branchId?: string | null; attendanceId?: string | null },
+    snapshot: PayslipSnapshot | null = null
 ): CreatedSalaryPaymentForDispatch {
     return {
         userId: payment.userId,
@@ -1258,6 +1347,8 @@ function toDispatchPayment(
         netAmount: payment.netAmount,
         customBonus: payment.customBonus,
         customBonusNote: payment.customBonusNote,
+        employeeId: formatEmployeeCode(user.attendanceId),
+        snapshot,
     };
 }
 
@@ -1341,7 +1432,7 @@ export async function finalizeAndSendPayslips(payrollMonth: string, userIds: str
                 continue;
             }
 
-            await prisma.$transaction(async (tx) => {
+            const snapshot = await prisma.$transaction(async (tx) => {
                 const claimed = await tx.salaryPayment.updateMany({
                     where: { id: draft.id, status: SalaryPaymentStatus.DRAFT },
                     data: { status: SalaryPaymentStatus.FINALIZED },
@@ -1350,7 +1441,13 @@ export async function finalizeAndSendPayslips(payrollMonth: string, userIds: str
                     throw new Error("This payroll entry was already finalized.");
                 }
 
-                await applyPayrollEffects(tx, emp, input, computed, payrollMonth);
+                const payslipSnapshot = await applyPayrollEffects(tx, emp, input, computed, payrollMonth);
+
+                // Freeze the payslip's itemised figures on the row, so a resend later matches this one.
+                await tx.salaryPayment.update({
+                    where: { id: draft.id },
+                    data: { draftInputs: { ...input, payslip: payslipSnapshot } as unknown as Prisma.InputJsonValue },
+                });
 
                 await tx.systemAudit.create({
                     data: {
@@ -1359,6 +1456,8 @@ export async function finalizeAndSendPayslips(payrollMonth: string, userIds: str
                         details: `Payroll ${payrollMonth} finalized for user ${emp.userId} by ${admin.id}. Net: ${draft.netAmount}`,
                     },
                 });
+
+                return payslipSnapshot;
             }, PAYROLL_TRANSACTION_OPTIONS);
 
             toDispatch.push({
@@ -1368,7 +1467,8 @@ export async function finalizeAndSendPayslips(payrollMonth: string, userIds: str
                     lastName: emp.lastName,
                     branchName: emp.branchName ?? null,
                     branchId: emp.branchId ?? null,
-                }),
+                    attendanceId: emp.attendanceId ?? null,
+                }, snapshot),
                 result,
             });
             result.status = "SENT";
@@ -1404,7 +1504,7 @@ export async function resendPayslips(payrollMonth: string, userIds: string[]): P
     const rows = await prisma.salaryPayment.findMany({
         where: { month: payrollMonth, status: SalaryPaymentStatus.FINALIZED, userId: { in: uniqueUserIds } },
         include: {
-            user: { select: { email: true, firstName: true, lastName: true, branchId: true, branch: { select: { name: true } } } },
+            user: { select: { email: true, firstName: true, lastName: true, branchId: true, attendanceId: true, branch: { select: { name: true } } } },
         },
         orderBy: { createdAt: "desc" },
     });
@@ -1429,7 +1529,8 @@ export async function resendPayslips(payrollMonth: string, userIds: string[]): P
                 lastName: row.user.lastName,
                 branchName: row.user.branch?.name ?? null,
                 branchId: row.user.branchId ?? null,
-            }),
+                attendanceId: row.user.attendanceId ?? null,
+            }, parsePayslipSnapshot(row.draftInputs)),
             result,
         });
     }

@@ -112,6 +112,16 @@ describe("applyLetterhead", () => {
     assert.ok(text.includes("Net Salary"), "payslip totals are present");
   });
 
+  it("works with a completely blank template page (no content stream)", async () => {
+    const blank = await PDFDocument.create();
+    blank.addPage(LETTER);
+    const content = await generatePayslipPdf(payslip(), { letterhead: await blank.save() });
+    const merged = await PDFDocument.load(content);
+    assert.deepEqual([merged.getPage(0).getWidth(), merged.getPage(0).getHeight()], LETTER);
+    const text = (await extractTextItems(content)).map((item) => item.str).join(" ");
+    assert.ok(text.includes("Jane Doe"));
+  });
+
   it("only uses the first page of a multi-page template", async () => {
     const content = await generatePayslipPdf(payslip(), { letterhead: await makeTemplate(LETTER, 3) });
     const text = (await extractTextItems(content)).map((item) => item.str).join(" ");
