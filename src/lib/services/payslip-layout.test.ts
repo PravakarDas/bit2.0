@@ -85,6 +85,31 @@ describe("payslip layout", () => {
     }
   });
 
+  it("itemises each allowance under the Allowances total", async () => {
+    const [page1] = await extractPages(
+      await generatePayslipPdf(
+        payslip({
+          totalAllowances: 8000,
+          allowanceLines: [
+            { label: "Transport Allowance", amount: 5000 },
+            { label: "Internet Allowance", amount: 3000 },
+          ],
+          netAmount: 111000,
+        })
+      )
+    );
+    assert.ok(/Allowances\s+৳\s*8,000/.test(page1), "total shown");
+    assert.ok(/Transport Allowance\s+৳\s*5,000/.test(page1), "first allowance itemised");
+    assert.ok(/Internet Allowance\s+৳\s*3,000/.test(page1), "second allowance itemised");
+    assert.ok(page1.indexOf("Allowances") < page1.indexOf("Transport Allowance"));
+    assert.ok(page1.indexOf("Internet Allowance") < page1.indexOf("Medical Reimbursement"), "listed under Allowances, before Medical");
+  });
+
+  it("still shows just the Allowances total when there is no breakdown (older payslips)", async () => {
+    const [page1] = await extractPages(await generatePayslipPdf(payslip({ totalAllowances: 3000, allowanceLines: undefined })));
+    assert.ok(/Allowances\s+৳\s*3,000/.test(page1));
+  });
+
   it("shows a negative wallet adjustment and a loan deduction with a minus sign", async () => {
     const [page1] = await extractPages(await generatePayslipPdf(payslip()));
     assert.ok(/-\s*৳\s*500/.test(page1), "wallet deduction is signed");

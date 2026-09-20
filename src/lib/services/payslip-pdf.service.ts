@@ -40,6 +40,8 @@ export interface PayslipData {
   /** One-off bonus already included in `totalBonuses`; shown as its own labelled line. */
   customBonus?: number;
   customBonusNote?: string | null;
+  /** Allowances paid this month (itemised under "Allowances"). */
+  allowanceLines?: PayslipLine[];
   /** Bonus types paid this month (itemised under "Bonuses"). */
   bonusLines?: PayslipLine[];
   /** Loan deductions this month, one line per loan (itemised under "Loan Deduction"). */
@@ -234,6 +236,9 @@ function drawPayslipPage(doc: PDFKit.PDFDocument, data: PayslipData) {
   }
 
   drawLineItem(doc, "Allowances", data.totalAllowances);
+  for (const line of data.allowanceLines ?? []) {
+    drawLineItem(doc, line.label, line.amount, { indent: 14, muted: true });
+  }
   drawLineItem(doc, "Medical Reimbursement", data.medicalReimbursement);
   doc.moveDown(0.4);
 

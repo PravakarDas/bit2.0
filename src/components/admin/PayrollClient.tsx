@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
@@ -372,6 +373,50 @@ export function PayrollClient({
     };
 
     // ---- cells ----
+    // Which allowances this employee receives and how much each gives; the total is what is paid.
+    const renderAllowances = (emp: PayrollRow) => {
+        const lines = emp.allowanceLines;
+        if (lines.length === 0) {
+            return <span className="text-xs italic text-muted-foreground">No allowances · +0</span>;
+        }
+        const visible = lines.slice(0, 3);
+        const hidden = lines.length - visible.length;
+        return (
+            <div className="w-48 rounded-xl border bg-slate-50/60 p-2 space-y-1.5">
+                <div className="space-y-1">
+                    {visible.map((line) => (
+                        <div key={line.id} className="flex items-center justify-between gap-2 text-xs">
+                            <span className="truncate text-muted-foreground" title={line.name}>{line.name}</span>
+                            <span className="font-semibold tabular-nums text-blue-600">+{money(line.amount)}</span>
+                        </div>
+                    ))}
+                    {hidden > 0 && (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button type="button" className="text-[11px] font-medium text-blue-600 hover:underline">
+                                    +{hidden} more
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 space-y-1.5">
+                                <div className="text-xs font-semibold">Allowances for {displayName(emp)}</div>
+                                {lines.map((line) => (
+                                    <div key={line.id} className="flex items-center justify-between gap-2 text-xs">
+                                        <span className="text-muted-foreground">{line.name}</span>
+                                        <span className="font-semibold tabular-nums text-blue-600">+{money(line.amount)}</span>
+                                    </div>
+                                ))}
+                            </PopoverContent>
+                        </Popover>
+                    )}
+                </div>
+                <div className="flex items-center justify-between rounded-lg bg-slate-100 px-2 py-1.5">
+                    <span className="text-[11px] font-medium">Total</span>
+                    <span className="text-sm font-bold text-blue-700 tabular-nums">+{money(emp.totalAllowances)}</span>
+                </div>
+            </div>
+        );
+    };
+
     const renderBonuses = (emp: PayrollRow) => {
         const form = formOf(emp);
         const custom = num(form.customBonus);
@@ -608,7 +653,7 @@ export function PayrollClient({
                             <TableHead className="font-semibold">Employee</TableHead>
                             <TableHead className="font-semibold">Branch</TableHead>
                             <TableHead className="font-semibold text-right">Base</TableHead>
-                            <TableHead className="font-semibold text-right">Allowances</TableHead>
+                            <TableHead className="font-semibold">Allowances</TableHead>
                             <TableHead className="font-semibold text-center">Medical</TableHead>
                             <TableHead className="font-semibold">Bonuses</TableHead>
                             <TableHead className="font-semibold">Loan deduction</TableHead>
@@ -672,8 +717,8 @@ export function PayrollClient({
                                         <TableCell className="pt-6 text-right tabular-nums font-semibold text-base">
                                             ৳{money(emp.baseSalary)}
                                         </TableCell>
-                                        <TableCell className="pt-6 text-right tabular-nums font-semibold text-blue-600">
-                                            +{money(emp.totalAllowances)}
+                                        <TableCell className="py-4">
+                                            {renderAllowances(emp)}
                                         </TableCell>
                                         <TableCell className="py-4">
                                             <div className="flex flex-col items-center gap-1">

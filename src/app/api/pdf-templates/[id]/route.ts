@@ -41,6 +41,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             customBonus: 2000,
             customBonusNote: "Sample bonus",
             employeeId: "BTCD1042",
+            allowanceLines: [
+              { label: "Transport Allowance", amount: 2000 },
+              { label: "Meal Allowance", amount: 1000 },
+            ],
             bonusLines: [
               { label: "Performance Bonus", amount: 2000 },
               { label: "Attendance Bonus", amount: 1000 },

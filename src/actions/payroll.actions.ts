@@ -84,6 +84,8 @@ interface PayrollAggregation {
     walletBalance: number;
     eligibleBonuses: EligibleBonus[];
     totalAllowances: number;
+    /** The allowances that make up `totalAllowances`, one line each. */
+    allowanceLines: { id: string; name: string; amount: number }[];
     /** Approved + pending claims: what the employee has claimed and is not yet paid. */
     totalMedical: number;
     medicalApproved: number;
@@ -320,45 +322,31 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
                 b.branches.some((br) => br.id === user.branchId)
         );
 
-        // Allowances - New 3-tier system
-        let totalAllowances = 0;
-        
+        // Allowances - 3-tier system. Kept as one line per allowance so admin and the payslip can see
+        // exactly which allowance gives how much; `totalAllowances` is their sum.
+        const allowanceLines: { id: string; name: string; amount: number }[] = [];
+        const addAllowance = (allowance: (typeof allActiveAllowances)[number]) => {
+            allowanceLines.push({
+                id: allowance.id,
+                name: allowance.name,
+                amount: allowance.valueType === "FIXED" ? allowance.amount : (user.baseSalary * allowance.amount) / 100,
+            });
+        };
+
         // 1. FIXED scope allowances (apply to all employees)
-        const fixedAllowances = allActiveAllowances.filter(a => a.scope === "FIXED");
-        fixedAllowances.forEach((allowance) => {
-            if (allowance.valueType === "FIXED") {
-                totalAllowances += allowance.amount;
-            } else {
-                totalAllowances += (user.baseSalary * allowance.amount) / 100;
-            }
-        });
-        
+        allActiveAllowances.filter(a => a.scope === "FIXED").forEach(addAllowance);
+
         // 2. FULL_BRANCH scope allowances (apply to employees in target branches)
-        const branchAllowances = allActiveAllowances.filter(a => 
-            a.scope === "FULL_BRANCH" && 
-            user.branchId && 
-            a.targetBranchIds.includes(user.branchId)
-        );
-        branchAllowances.forEach((allowance) => {
-            if (allowance.valueType === "FIXED") {
-                totalAllowances += allowance.amount;
-            } else {
-                totalAllowances += (user.baseSalary * allowance.amount) / 100;
-            }
-        });
-        
+        allActiveAllowances
+            .filter(a => a.scope === "FULL_BRANCH" && user.branchId && a.targetBranchIds.includes(user.branchId))
+            .forEach(addAllowance);
+
         // 3. CUSTOM scope allowances (individual employee assignments)
-        const customAllowances = allActiveAllowances.filter(a => 
-            a.scope === "CUSTOM" && 
-            a.employeeAllowances.some(ea => ea.userId === user.id && ea.isActive)
-        );
-        customAllowances.forEach((allowance) => {
-            if (allowance.valueType === "FIXED") {
-                totalAllowances += allowance.amount;
-            } else {
-                totalAllowances += (user.baseSalary * allowance.amount) / 100;
-            }
-        });
+        allActiveAllowances
+            .filter(a => a.scope === "CUSTOM" && a.employeeAllowances.some(ea => ea.userId === user.id && ea.isActive))
+            .forEach(addAllowance);
+
+        const totalAllowances = allowanceLines.reduce((sum, line) => sum + line.amount, 0);
 
         // Loans without an EmiState are manual-mode loans: never auto-deducted.
         const manualLoans = user.loans
@@ -430,6 +418,7 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
                 amount: b.type === "FIXED" ? b.value : (user.baseSalary * b.value) / 100
             })),
             totalAllowances,
+            allowanceLines,
             totalMedical,
             medicalApproved,
             medicalPending,
@@ -586,6 +575,7 @@ async function dispatchPayrollPayslips(
                 employeeId: sp.employeeId,
                 ...(sp.snapshot
                     ? {
+                          allowanceLines: sp.snapshot.allowanceLines,
                           bonusLines: sp.snapshot.bonusLines,
                           loanLines: sp.snapshot.loanLines,
                           walletTransactions: sp.snapshot.walletTransactions,
@@ -899,6 +889,7 @@ function findDraftMismatch(
 
 /** Itemised figures printed on the payslip; frozen at send time so a later resend reproduces the same PDF. */
 interface PayslipSnapshot {
+    allowanceLines?: { label: string; amount: number }[];
     bonusLines: { label: string; amount: number }[];
     loanLines: { label: string; amount: number }[];
     /** Wallet entries settled in this payroll (dates as ISO strings). */
@@ -915,6 +906,7 @@ function parsePayslipSnapshot(raw: unknown): PayslipSnapshot | null {
                   .map((l) => ({ label: l.label, amount: Number(l.amount) }))
             : [];
     return {
+        allowanceLines: lines(value.allowanceLines),
         bonusLines: lines(value.bonusLines),
         loanLines: lines(value.loanLines),
         walletTransactions: Array.isArray(value.walletTransactions)
@@ -1303,6 +1295,7 @@ async function applyPayrollEffects(
     }
 
     const snapshot: PayslipSnapshot = {
+        allowanceLines: emp.allowanceLines.map((a) => ({ label: a.name, amount: roundMoney(a.amount) })),
         bonusLines: computed.appliedBonuses.map((b) => ({ label: b.name, amount: roundMoney(b.amount) })),
         loanLines: buildLoanLines(emp, computed),
         walletTransactions: settledWalletTransactions,
