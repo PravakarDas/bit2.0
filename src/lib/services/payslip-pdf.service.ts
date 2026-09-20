@@ -323,10 +323,18 @@ function drawWalletPage(doc: PDFKit.PDFDocument, data: PayslipData, entries: Pay
   drawLineItem(doc, "Total (Wallet Adjustment)", data.walletAdjustment, { bold: true });
 }
 
-/** Writes "1 of 3" on every page, inside the content area so it never touches a letterhead footer. */
-function drawPageNumbers(doc: PDFKit.PDFDocument, pageBottomMargin: number) {
+/**
+ * Writes "n of total" on every page, inside the content area so it never touches a letterhead
+ * footer. The payslip and the wallet section are numbered separately (each starts at 1), even
+ * though they are one PDF.
+ */
+function drawPageNumbers(doc: PDFKit.PDFDocument, pageBottomMargin: number, payslipPageCount: number) {
   const { start, count } = doc.bufferedPageRange();
   for (let i = 0; i < count; i++) {
+    const inPayslip = i < payslipPageCount;
+    const numberInSection = inPayslip ? i + 1 : i - payslipPageCount + 1;
+    const sectionTotal = inPayslip ? payslipPageCount : count - payslipPageCount;
+
     doc.switchToPage(start + i);
     // Writing below the bottom margin would make pdfkit add a page; lift the margin while drawing.
     const savedBottom = doc.page.margins.bottom;
@@ -335,7 +343,7 @@ function drawPageNumbers(doc: PDFKit.PDFDocument, pageBottomMargin: number) {
       .font("Helvetica")
       .fontSize(9)
       .fillColor(MUTED)
-      .text(`${i + 1} of ${count}`, doc.page.margins.left, doc.page.height - pageBottomMargin - 14, {
+      .text(`${numberInSection} of ${sectionTotal}`, doc.page.margins.left, doc.page.height - pageBottomMargin - 14, {
         width: contentWidth(doc),
         align: "right",
         lineBreak: false,
@@ -352,7 +360,8 @@ function drawPageNumbers(doc: PDFKit.PDFDocument, pageBottomMargin: number) {
  * the result.
  *
  * Page 1 (and further pages if the line items need them) is the payslip; when wallet
- * entries are supplied a wallet page follows. Every page is numbered "n of total".
+ * entries are supplied a wallet section follows on its own pages. The payslip and the wallet
+ * section are each numbered "n of total" separately.
  * With a `letterhead`, the content is drawn inside the safe body area at the template's own
  * page size and laid on top of the template's first page.
  */
@@ -395,10 +404,11 @@ function renderPayslipContent(
       registerFonts(doc);
 
       drawPayslipPage(doc, data);
+      const payslipPageCount = doc.bufferedPageRange().count;
       if (data.walletTransactions) {
         drawWalletPage(doc, data, data.walletTransactions);
       }
-      drawPageNumbers(doc, pageOptions.margins.bottom);
+      drawPageNumbers(doc, pageOptions.margins.bottom, payslipPageCount);
 
       doc.end();
     } catch (error) {

@@ -145,10 +145,12 @@ describe("wallet page", () => {
 });
 
 describe("page numbers", () => {
-  it("number every page 'n of total'", async () => {
+  it("number the payslip and the wallet section separately, each starting at 1", async () => {
     const pages = await extractPages(await generatePayslipPdf(payslip()));
-    assert.ok(pages[0].includes("1 of 2"));
-    assert.ok(pages[1].includes("2 of 2"));
+    assert.equal(pages.length, 2);
+    assert.ok(pages[0].includes("1 of 1"), "payslip is 1 of 1");
+    assert.ok(pages[1].includes("1 of 1"), "wallet page restarts at 1 of 1");
+    assert.ok(!pages[0].includes("of 2") && !pages[1].includes("of 2"), "not one continuous numbering");
   });
 
   it("read '1 of 1' on a single page payslip", async () => {
@@ -164,9 +166,12 @@ describe("page numbers", () => {
     }));
     const pages = await extractPages(await generatePayslipPdf(payslip({ walletTransactions: many, walletAdjustment: 0 })));
     assert.ok(pages.length >= 3);
-    pages.forEach((text, i) => assert.ok(text.includes(`${i + 1} of ${pages.length}`), `page ${i + 1} is numbered`));
+    // the payslip is one page; the wallet section has its own numbering: 1 of M ... M of M
+    const walletPages = pages.slice(1);
+    assert.ok(pages[0].includes("1 of 1"));
+    walletPages.forEach((text, i) => assert.ok(text.includes(`${i + 1} of ${walletPages.length}`), `wallet page ${i + 1} is numbered`));
     assert.ok(pages[pages.length - 1].includes("Total (Wallet Adjustment)"));
-    for (const later of pages.slice(2)) assert.ok(later.includes("Description"), "table header repeats");
+    for (const later of walletPages.slice(1)) assert.ok(later.includes("Description"), "table header repeats");
     // every entry appears exactly once across the pages
     const all = pages.join(" ");
     for (let i = 1; i <= 60; i++) assert.equal(all.split(`Entry number ${i} `).length - 1 + (all.endsWith(`Entry number ${i}`) ? 1 : 0) >= 1, true);
@@ -178,7 +183,17 @@ describe("page numbers", () => {
     template.addPage([612, 792]);
     const pages = await extractPages(await generatePayslipPdf(payslip(), { letterhead: await template.save() }));
     assert.equal(pages.length, 2);
+    assert.ok(pages[0].includes("1 of 1"));
+    assert.ok(pages[1].includes("1 of 1"));
+  });
+
+  it("number a payslip that itself runs onto a second page separately from the wallet section", async () => {
+    const manyBonuses = Array.from({ length: 45 }, (_, i) => ({ label: `Bonus type ${i + 1}`, amount: 100 }));
+    const pages = await extractPages(await generatePayslipPdf(payslip({ bonusLines: manyBonuses, totalBonuses: 4500 })));
+    assert.equal(pages.length, 3); // 2 payslip pages + 1 wallet page
     assert.ok(pages[0].includes("1 of 2"));
     assert.ok(pages[1].includes("2 of 2"));
+    assert.ok(pages[2].includes("1 of 1"));
+    assert.ok(pages[2].includes("Wallet Transactions"));
   });
 });

@@ -925,18 +925,22 @@ function parsePayslipSnapshot(raw: unknown): PayslipSnapshot | null {
 }
 
 /**
- * Wallet entries that make up the balance this payroll clears: everything after the previous
- * payroll's "Adjusted in <month> salary" clearing entry (or all entries if there was none).
- * Must run before this payroll writes its own clearing entry.
+ * Wallet entries that make up the balance this payroll clears: everything recorded after the
+ * employee's previous finalized payroll (or all entries if there was none).
+ *
+ * The cutoff is the previous payroll row itself, not a marker in wallet descriptions: payrolls
+ * with a zero wallet write no clearing entry, and admin-typed descriptions can look like one.
+ * A draft is created with the figures read at that moment and send is blocked if the wallet
+ * changed since, so nothing meaningful happens between a payroll's timestamp and its finalization.
  */
-async function loadSettledWalletTransactions(tx: Prisma.TransactionClient, userId: string) {
-    const lastClear = await tx.walletTransaction.findFirst({
-        where: { userId, type: "ADJUSTMENT", description: { startsWith: "Adjusted in " } },
+async function loadSettledWalletTransactions(tx: Prisma.TransactionClient, userId: string, currentSalaryPaymentId: string) {
+    const previousPayroll = await tx.salaryPayment.findFirst({
+        where: { userId, status: SalaryPaymentStatus.FINALIZED, id: { not: currentSalaryPaymentId } },
         orderBy: { createdAt: "desc" },
         select: { createdAt: true },
     });
     const rows = await tx.walletTransaction.findMany({
-        where: { userId, ...(lastClear ? { createdAt: { gt: lastClear.createdAt } } : {}) },
+        where: { userId, ...(previousPayroll ? { createdAt: { gt: previousPayroll.createdAt } } : {}) },
         orderBy: { createdAt: "asc" },
         select: { createdAt: true, description: true, amount: true },
     });
@@ -970,7 +974,8 @@ async function applyPayrollEffects(
     emp: PayrollAggregation,
     input: PayrollEmployeeInput,
     computed: ReturnType<typeof computeEmployeePayroll>,
-    payrollMonth: string
+    payrollMonth: string,
+    salaryPaymentId: string
 ) {
     // Guard against wallet / medical changes made since the numbers were read.
     const liveUser = await tx.user.findUnique({ where: { id: emp.userId }, select: { walletBalance: true } });
@@ -991,7 +996,7 @@ async function applyPayrollEffects(
     }
 
     // What the payslip's wallet page lists — read before this payroll's own clearing entry is written.
-    const settledWalletTransactions = await loadSettledWalletTransactions(tx, emp.userId);
+    const settledWalletTransactions = await loadSettledWalletTransactions(tx, emp.userId, salaryPaymentId);
 
     // Clear wallet balance and create adjustment transaction
     if (emp.walletBalance !== 0) {
@@ -1441,7 +1446,7 @@ export async function finalizeAndSendPayslips(payrollMonth: string, userIds: str
                     throw new Error("This payroll entry was already finalized.");
                 }
 
-                const payslipSnapshot = await applyPayrollEffects(tx, emp, input, computed, payrollMonth);
+                const payslipSnapshot = await applyPayrollEffects(tx, emp, input, computed, payrollMonth, draft.id);
 
                 // Freeze the payslip's itemised figures on the row, so a resend later matches this one.
                 await tx.salaryPayment.update({
