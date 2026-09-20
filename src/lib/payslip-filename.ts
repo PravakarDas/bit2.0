@@ -3,9 +3,7 @@
  * (`Payroll/{Month Year}/{Branch}/{filename}.pdf`) — no Prisma import, so
  * it's safely testable by the dependency-free `node --test` harness. See
  * `PayrollEmailImplementationPlan.md` §10–§11 for the design this
- * implements: `{userId}_{sanitized employee name}_{Month}_{Year}.pdf`,
- * using `SalaryPayment.userId` since no human-readable employee code
- * exists anywhere in the schema.
+ * implements: `{sanitized employee name}_{Month}_{Year}.pdf`.
  */
 
 const MONTH_NAMES = [
@@ -74,18 +72,15 @@ export function resolveBranchFolderName(branchName: string | null | undefined): 
 }
 
 export interface PayslipFilenameInput {
-  /** `SalaryPayment.userId` — the real, already-unique identifier used since no employee code field exists. */
-  userId: string;
   employeeName: string;
   year: number;
   /** 1-12 */
   monthNumber: number;
 }
 
-/** `{userId}_{sanitized employee name}_{Month}_{Year}.pdf` — e.g. `cmn123456_Abdul_Kader_February_2026.pdf`. */
+/** `{sanitized employee name}_{Month}_{Year}.pdf` — e.g. `Abdul_Kader_February_2026.pdf`. */
 export function generatePayslipFilename(input: PayslipFilenameInput): string {
-  const sanitizedUserId = sanitizeForDriveName(input.userId);
   const sanitizedName = sanitizeForDriveName(input.employeeName);
   const monthName = getMonthName(input.monthNumber);
-  return `${sanitizedUserId}_${sanitizedName}_${monthName}_${input.year}.pdf`;
+  return `${sanitizedName}_${monthName}_${input.year}.pdf`;
 }

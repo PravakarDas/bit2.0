@@ -180,18 +180,18 @@ describe("dispatchPayslipForEmployee — happy path", () => {
     assert.equal(result.failures.length, 0);
     assert.ok(result.documentId);
 
-    // Filename: {userId}_{sanitized name}_{Month}_{Year}.pdf
-    assert.ok(writtenFiles.has("user_1_Abdul_Kader_February_2026.pdf"));
+    // Filename: {sanitized name}_{Month}_{Year}.pdf — no employee id in it
+    assert.ok(writtenFiles.has("Abdul_Kader_February_2026.pdf"));
 
     // Drive: folder resolved for the right year/month/branch, uploaded with the same filename.
     assert.deepEqual(drive.resolveFolderCalls, [{ year: 2026, monthNumber: 2, branchName: "Dhaka Main" }]);
-    assert.equal(drive.uploadCalls[0]?.filename, "user_1_Abdul_Kader_February_2026.pdf");
+    assert.equal(drive.uploadCalls[0]?.filename, "Abdul_Kader_February_2026.pdf");
 
     // Document: stays GENERATED_LOCAL (the attachment resolver requires exactly this status —
     // see the service's own doc comment), but records the Drive outcome via driveFileId/driveFileUrl.
     const document = documentRepository.documents.get(result.documentId!);
     assert.equal(document?.status, "GENERATED_LOCAL");
-    assert.equal(document?.localTempPath, "/fake-temp/user_1_Abdul_Kader_February_2026.pdf");
+    assert.equal(document?.localTempPath, "/fake-temp/Abdul_Kader_February_2026.pdf");
     assert.ok(document?.driveFileId);
     assert.ok(document?.driveFileUrl);
     assert.ok(document?.generatedAt);

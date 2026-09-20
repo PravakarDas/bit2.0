@@ -32,6 +32,8 @@
     "src/lib/services/payroll-payslip-dispatch.service.ts",
     "src/lib/services/payroll-payslip-dispatch.service.test.ts",
     "src/lib/employee-code.ts",
+    "src/lib/payroll-wallet.ts",
+    "src/lib/payroll-wallet.test.ts",
     "src/lib/services/payslip-layout.test.ts",
     "src/lib/services/payslip-pdf.service.ts",
     "src/lib/services/payslip-pdf.service.test.ts",

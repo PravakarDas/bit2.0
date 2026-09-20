@@ -1,8 +1,8 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { QueueEngine } from "../queue/queue-engine";
 import { DuplicateJobError, InvalidQueueTransitionError } from "../queue/errors";
 import type { IQueueRepository, PaginationParams } from "../queue/queue-repository.interface";
@@ -472,8 +472,12 @@ describe("Integration (Phase 18c): payroll payslip dispatch -> Document -> PAYRO
   function buildDeps(pipeline: ReturnType<typeof buildPipeline>, drive: PayslipDriveTarget | null): PayslipDispatchDeps {
     return {
       generatePdf: (data) => generatePayslipPdf(data), // the real, already-verified PDF generator — no second implementation
-      writeLocalFile: async (filename, content) => {
-        const filePath = join(dir, filename);
+      // Mirrors the real writer: each payslip gets its own folder, so two employees with the same
+      // name cannot overwrite each other's file (the emailed attachment name is the file's name).
+      writeLocalFile: async (filename, content, uniqueKey) => {
+        const directory = join(dir, uniqueKey);
+        await mkdir(directory, { recursive: true });
+        const filePath = join(directory, filename);
         await writeFile(filePath, content);
         return filePath;
       },
@@ -547,7 +551,7 @@ describe("Integration (Phase 18c): payroll payslip dispatch -> Document -> PAYRO
     assert.equal(call.to, "jane@example.com");
     assert.equal(call.subject, "Your Payslip for February 2026");
     assert.equal(call.attachments?.length, 1);
-    assert.equal(call.attachments?.[0].filename, "user_1_Jane_Doe_February_2026.pdf");
+    assert.equal(call.attachments?.[0].filename, "Jane_Doe_February_2026.pdf"); // no employee id in the name
     assert.equal(call.attachments?.[0].contentType, "application/pdf");
     assert.deepEqual(call.attachments?.[0].content, generatedPdf); // exact bytes, unmodified through the whole pipeline
 
@@ -578,6 +582,29 @@ describe("Integration (Phase 18c): payroll payslip dispatch -> Document -> PAYRO
     assert.equal(workerResult.kind, "SUCCESS");
     const call = pipeline.fakeTransporter.sendMailCalls[0] as { attachments?: Array<{ filename: string }> };
     assert.equal(call.attachments?.length, 1); // email still has its PDF attached despite the Drive failure
+  });
+
+  it("two employees with the same name in the same month each get their own PDF attached (no shared file)", async () => {
+    const pipeline = buildPipeline();
+    const deps = buildDeps(pipeline, null);
+    const twin = (salaryPaymentId: string, userId: string, email: string, baseSalary: number) =>
+      input({
+        salaryPaymentId,
+        userId,
+        email,
+        employeeName: "Same Name",
+        payslipData: { ...input().payslipData, employeeName: "Same Name", employeeEmail: email, baseSalary },
+      });
+
+    const summary = await dispatchPayslipsForPayrollRun([twin("sp_a", "user_a", "a@example.com", 11111), twin("sp_b", "user_b", "b@example.com", 22222)], deps);
+    assert.ok(summary.results.every((r) => r.pdfGenerated && r.notificationRaised), "both PDFs generated and both emails queued");
+
+    const docA = pipeline.documentRepository.documents.get(summary.results[0].documentId!);
+    const docB = pipeline.documentRepository.documents.get(summary.results[1].documentId!);
+    assert.notEqual(docA?.localTempPath, docB?.localTempPath, "different files on disk");
+    assert.equal(basename(docA!.localTempPath!), "Same_Name_February_2026.pdf");
+    assert.equal(basename(docB!.localTempPath!), "Same_Name_February_2026.pdf");
+    assert.notDeepEqual(await readFile(docA!.localTempPath!), await readFile(docB!.localTempPath!), "each keeps its own content");
   });
 
   it("one employee's PDF generation failure does not stop the other employee's email in the same payroll run", async () => {

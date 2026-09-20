@@ -8,6 +8,7 @@ import { getDbUser } from "./user.actions";
 import { MANUAL_MEDICAL_DESCRIPTION_PREFIX } from "@/lib/medical-history";
 import { loadLetterheadResolver } from "@/lib/services/pdf-template.service";
 import { formatEmployeeCode } from "@/lib/employee-code";
+import { walletClearingDescription, withoutPreviousPayrollClearing } from "@/lib/payroll-wallet";
 import { shouldGeneratePayroll } from "@/lib/employee-status";
 import { createAdminNotification } from "./notification.actions";
 import { notificationEngineContainer } from "@/lib/services/notification-engine";
@@ -930,6 +931,7 @@ function parsePayslipSnapshot(raw: unknown): PayslipSnapshot | null {
  *
  * The cutoff is the previous payroll row itself, not a marker in wallet descriptions: payrolls
  * with a zero wallet write no clearing entry, and admin-typed descriptions can look like one.
+ * That payroll's own clearing entry is recorded just after the cutoff, so it is removed.
  * A draft is created with the figures read at that moment and send is blocked if the wallet
  * changed since, so nothing meaningful happens between a payroll's timestamp and its finalization.
  */
@@ -937,14 +939,19 @@ async function loadSettledWalletTransactions(tx: Prisma.TransactionClient, userI
     const previousPayroll = await tx.salaryPayment.findFirst({
         where: { userId, status: SalaryPaymentStatus.FINALIZED, id: { not: currentSalaryPaymentId } },
         orderBy: { createdAt: "desc" },
-        select: { createdAt: true },
+        select: { createdAt: true, month: true, walletAdjustment: true },
     });
     const rows = await tx.walletTransaction.findMany({
         where: { userId, ...(previousPayroll ? { createdAt: { gt: previousPayroll.createdAt } } : {}) },
         orderBy: { createdAt: "asc" },
         select: { createdAt: true, description: true, amount: true },
     });
-    return rows.map((row) => ({ date: row.createdAt.toISOString(), description: row.description, amount: row.amount }));
+    // The previous payroll's own clearing entry belongs to the previous month's payslip.
+    return withoutPreviousPayrollClearing(rows, previousPayroll).map((row) => ({
+        date: row.createdAt.toISOString(),
+        description: row.description,
+        amount: row.amount,
+    }));
 }
 
 function buildLoanLines(emp: PayrollAggregation, computed: ReturnType<typeof computeEmployeePayroll>) {
@@ -1005,19 +1012,12 @@ async function applyPayrollEffects(
             data: { walletBalance: 0 },
         });
 
-        const monthNames = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ];
-        const [year, monthNum] = payrollMonth.split('-');
-        const monthName = monthNames[parseInt(monthNum) - 1];
-
         await tx.walletTransaction.create({
             data: {
                 userId: emp.userId,
                 amount: -emp.walletBalance,
                 type: "ADJUSTMENT",
-                description: `Adjusted in ${monthName}-${year} salary`,
+                description: walletClearingDescription(payrollMonth),
             },
         });
     }

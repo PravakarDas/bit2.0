@@ -87,33 +87,37 @@ describe("resolveBranchFolderName", () => {
 describe("generatePayslipFilename — deterministic filename generation", () => {
   it("produces the exact documented format for the documented example", () => {
     const filename = generatePayslipFilename({
-      userId: "cmn123456",
       employeeName: "Abdul Kader",
       year: 2026,
       monthNumber: 2,
     });
-    assert.equal(filename, "cmn123456_Abdul_Kader_February_2026.pdf");
+    assert.equal(filename, "Abdul_Kader_February_2026.pdf");
   });
 
   it("is deterministic — the same employee/month payroll always produces the same filename", () => {
-    const input = { userId: "cmn999", employeeName: "Rahim Uddin", year: 2026, monthNumber: 8 };
+    const input = { employeeName: "Rahim Uddin", year: 2026, monthNumber: 8 };
     assert.equal(generatePayslipFilename(input), generatePayslipFilename(input));
   });
 
   it("sanitizes special characters in the employee name so the filename stays valid", () => {
     const filename = generatePayslipFilename({
-      userId: "cmn001",
       employeeName: 'Md. "Rana"/Khan',
       year: 2026,
       monthNumber: 3,
     });
     assert.equal(filename.includes("/"), false);
     assert.equal(filename.includes('"'), false);
-    assert.equal(filename, "cmn001_Md._Rana_Khan_March_2026.pdf");
+    assert.equal(filename, "Md._Rana_Khan_March_2026.pdf");
+  });
+
+  it("never contains the employee's system id", () => {
+    const filename = generatePayslipFilename({ employeeName: "Pravakar Das Demo", year: 2026, monthNumber: 8 });
+    assert.equal(filename, "Pravakar_Das_Demo_August_2026.pdf");
+    assert.ok(!filename.includes("cmtd"));
   });
 
   it("always ends in .pdf", () => {
-    const filename = generatePayslipFilename({ userId: "u1", employeeName: "Name", year: 2026, monthNumber: 1 });
+    const filename = generatePayslipFilename({ employeeName: "Name", year: 2026, monthNumber: 1 });
     assert.match(filename, /\.pdf$/);
   });
 });

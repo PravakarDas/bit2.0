@@ -16,7 +16,7 @@ import { join } from "node:path";
 import type { IDocumentRepository } from "./notification-engine/repositories/interfaces";
 import type { RaiseEventRequest, RaiseEventResult } from "./notification-engine/dto";
 import type { PayslipData } from "./payslip-pdf.service";
-import { generatePayslipFilename, generatePayrollMonthFolderName, resolveBranchFolderName, getMonthName } from "../payslip-filename";
+import { generatePayslipFilename, generatePayrollMonthFolderName, resolveBranchFolderName, getMonthName, sanitizeForDriveName } from "../payslip-filename";
 import { GoogleDriveService, type ResolvedGoogleDriveConfig } from "./google-drive-client";
 
 /**
@@ -70,7 +70,12 @@ export interface PayslipDriveTarget {
 
 export interface PayslipDispatchDeps {
   generatePdf: (data: PayslipData, input: PayslipDispatchInput) => Promise<Buffer>;
-  writeLocalFile: (filename: string, content: Buffer) => Promise<string>;
+  /**
+   * `uniqueKey` (the salary payment id) keeps each payslip in its own folder: the emailed attachment
+   * name is the file's name, and it has no employee id in it, so two employees with the same name
+   * must not share a path.
+   */
+  writeLocalFile: (filename: string, content: Buffer, uniqueKey: string) => Promise<string>;
   /** `null` when Google Drive is not configured at all — the Drive step is then skipped and recorded as a `drive_upload` failure, but email delivery still proceeds. */
   drive: PayslipDriveTarget | null;
   documentRepository: IDocumentRepository;
@@ -140,7 +145,6 @@ export async function dispatchPayslipForEmployee(input: PayslipDispatchInput, de
   };
 
   const filename = generatePayslipFilename({
-    userId: input.userId,
     employeeName: input.employeeName,
     year: input.year,
     monthNumber: input.monthNumber,
@@ -153,7 +157,7 @@ export async function dispatchPayslipForEmployee(input: PayslipDispatchInput, de
   let localPath: string;
   try {
     pdfBuffer = await deps.generatePdf(input.payslipData, input);
-    localPath = await deps.writeLocalFile(filename, pdfBuffer);
+    localPath = await deps.writeLocalFile(filename, pdfBuffer, input.salaryPaymentId);
   } catch (error) {
     recordFailure("pdf_generation", toSafeMessage(error));
     return emptyResult(input, failures);
@@ -278,9 +282,10 @@ const PAYSLIP_TEMP_DIR = join(tmpdir(), "bit2-payroll-payslips");
  * store: Google Drive (when configured) is the durable archive: this is
  * just where the file waits to be read once by the attachment resolver.
  */
-export async function writePayslipTempFile(filename: string, content: Buffer): Promise<string> {
-  await mkdir(PAYSLIP_TEMP_DIR, { recursive: true });
-  const filePath = join(PAYSLIP_TEMP_DIR, filename);
+export async function writePayslipTempFile(filename: string, content: Buffer, uniqueKey: string): Promise<string> {
+  const directory = join(PAYSLIP_TEMP_DIR, sanitizeForDriveName(uniqueKey));
+  await mkdir(directory, { recursive: true });
+  const filePath = join(directory, filename);
   await writeFile(filePath, content);
   return filePath;
 }
