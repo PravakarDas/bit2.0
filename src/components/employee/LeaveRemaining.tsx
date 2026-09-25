@@ -50,8 +50,8 @@ export function LeaveRemaining({ leaves }: LeaveRemainingProps) {
                 {leave.remaining} / {leave.total}
               </span>
             </div>
-            <Progress 
-              value={leave.total > 0 ? ((leave.remaining) / leave.total) * 100 : 0} 
+            <Progress
+              value={leave.total > 0 ? (leave.used / leave.total) * 100 : 0}
               className="h-1.5"
             />
             <p className="text-xs text-muted-foreground">

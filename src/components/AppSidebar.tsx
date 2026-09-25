@@ -19,6 +19,7 @@ import {
     Briefcase,
     ChevronDown,
     ChevronRight,
+    Contact,
     Gift,
     DollarSign,
     Zap,
@@ -30,6 +31,7 @@ import {
     Plus,
     Settings,
     Mail,
+    Fingerprint,
 } from "lucide-react";
 
 import {
@@ -68,11 +70,13 @@ const adminItems = [
     { title: "Notice", url: "/admin/notices", icon: Megaphone },
     { title: "Role Management", url: "/admin/role-management", icon: UserCog },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
+    { title: "Employee Contact", url: "/employee-contacts", icon: Contact },
     { title: "Holiday Management", url: "/admin/holidays", icon: CalendarDays },
     { title: "Medical", url: "/admin/medical", icon: Stethoscope },
     { title: "OT/UT Payouts", url: "/admin/overtime-payouts", icon: CircleDollarSign },
     { title: "Overtime Requests", url: "/admin/overtime-requests", icon: ClipboardList },
     { title: "Timeline", url: "/admin/timeline", icon: Clock },
+    { title: "Attendance Log", url: "/admin/zkt-attendance", icon: Fingerprint },
     { title: "Wallet", url: "/admin/wallet", icon: Wallet },
     { title: "System Control", url: "/admin/system-control", icon: Settings },
 ];
@@ -106,10 +110,10 @@ const employeeItems = [
     { title: "Notification Center", url: "/notification-center", icon: Mail },
     { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
+    { title: "Employee Contact", url: "/employee-contacts", icon: Contact },
     { title: "My Leaves", url: "/leaves", icon: ScrollText },
     { title: "Notices", url: "/notices", icon: Megaphone },
     { title: "Overtime Requests", url: "/overtime-requests", icon: ClipboardList },
-    { title: "OT/UT Payout", url: "/overtime-payouts", icon: CircleDollarSign },
     { title: "My Loans", url: "/loans", icon: Banknote },
     { title: "My Medical", url: "/medical", icon: Stethoscope },
     { title: "My Wallet", url: "/wallet", icon: Wallet },

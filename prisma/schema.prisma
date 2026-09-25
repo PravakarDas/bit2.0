@@ -318,6 +318,9 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Looked up frequently by the zkt_attendance poller (attendanceId <-> zkt_attendance.user_id).
+  @@index([attendanceId])
 }
 
 model WalletTransaction {
@@ -352,10 +355,11 @@ model Branch {
   location                 String
   isActive                 Boolean @default(true)
   isLoanApplicationEnabled Boolean @default(true)
+  isLatePenaltyEnabled     Boolean @default(true)
 
   // Timeline/Attendance Settings
   checkInTime   String   @default("09:00") // Format: "HH:MM" (24-hour)
-  checkOutTime  String   @default("18:00") // Format: "HH:MM" (24-hour)  
+  checkOutTime  String   @default("18:00") // Format: "HH:MM" (24-hour)
   breakDuration String   @default("01:00") // Format: "HH:MM" (duration)
   weeklyOffDays String[] @default(["SUNDAY"]) // Array of day names: MONDAY, TUESDAY, etc.
 
@@ -641,11 +645,25 @@ model SystemControlSettings {
   zktecoUsername             String   @default("")
   zktecoPassword             String   @default("")
   loanMode                   LoanMode @default(AUTO) // Applies to loans approved from now on; existing loans keep their own behaviour
-  updatedById                String?
-  updatedByEmail             String?
-  updatedByRole              String?
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+
+  // Phase: attendance calculation source. "ZKTECO_API" (default, existing
+  // behavior — live HTTP polling via zkteco-sync.actions.ts) vs
+  // "ZKT_ATTENDANCE_TABLE" (new — continuous ingestion from the
+  // externally-populated public.zkt_attendance table). Existing deployments
+  // keep working unchanged until an admin explicitly switches this.
+  attendanceCalculationMethod      String  @default("ZKTECO_API")
+  zktAttendancePollEnabled         Boolean @default(false)
+  zktAttendancePollIntervalSeconds Int     @default(30)
+  // Cursor into zkt_attendance.id (bigint) — the poller only ever reads rows
+  // with id > this value, then advances it. Not managed by Prisma as a
+  // relation since zkt_attendance is an externally-owned, unmodeled table.
+  zktAttendanceLastProcessedId     BigInt  @default(0)
+
+  updatedById    String?
+  updatedByEmail String?
+  updatedByRole  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model SystemControlChangeLog {
@@ -820,6 +838,14 @@ model DailyTimeRecord {
   autoDeductedLeaveType String? // Leave type name that was auto-deducted
   isProcessed           Boolean @default(false) // Whether auto-processing has been done for this date
 
+  // True while this day has an unresolved break punch (an open Break Out
+  // awaiting its Break In, or an orphan Break In with no matching Break Out)
+  // from the ZKT_ATTENDANCE_TABLE calculation method. Blocks isProcessed
+  // from being set to true by leave-automation until it clears — either by
+  // the underlying zkt_attendance data becoming consistent on a later
+  // recompute, or by an admin's manual override.
+  hasOpenBreak Boolean @default(false)
+
   // Relations
   userId String
   user   User   @relation(fields: [userId], references: [id])
@@ -857,6 +883,7 @@ model DailyTimeRecordTemporary {
 
   autoDeductedLeaveType String?
   isProcessed           Boolean @default(false)
+  hasOpenBreak          Boolean @default(false)
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

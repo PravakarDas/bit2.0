@@ -180,6 +180,78 @@ async function reconcileLatePenaltyWalletOnTimelineEdit(
   };
 }
 
+async function reverseLatePenaltyOnTimeline(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  date: Date,
+): Promise<PenaltyAdjustmentResult> {
+  const dateKey = getDateKey(date);
+  const legacyDateKey = getUtcDateKey(date);
+  const penaltyTag = `Late check-in penalty for ${dateKey}`;
+  const legacyPenaltyTag = `Late check-in penalty for ${legacyDateKey}`;
+  const reversalTag = `Manual late check-in penalty reversal for ${dateKey}`;
+
+  const priorPenaltyTransactions = await tx.walletTransaction.findMany({
+    where: {
+      userId,
+      type: "ADJUSTMENT",
+      OR: [
+        { description: { contains: penaltyTag } },
+        { description: { contains: legacyPenaltyTag } },
+      ],
+    },
+    select: { amount: true },
+  });
+
+  const alreadyReversed = await tx.walletTransaction.findMany({
+    where: {
+      userId,
+      type: "ADJUSTMENT",
+      description: { contains: reversalTag },
+    },
+    select: { amount: true },
+  });
+
+  const originalPenalty = priorPenaltyTransactions.reduce((sum, transaction) => {
+    if (transaction.amount >= 0) {
+      return sum;
+    }
+    return sum + Math.abs(transaction.amount);
+  }, 0);
+
+  const reversedAmount = alreadyReversed.reduce((sum, transaction) => {
+    if (transaction.amount <= 0) {
+      return sum;
+    }
+    return sum + transaction.amount;
+  }, 0);
+
+  const outstanding = Number((originalPenalty - reversedAmount).toFixed(2));
+  if (outstanding <= 0.01) {
+    return { applied: false, adjustedAmount: 0, direction: "CREDIT" };
+  }
+
+  await tx.user.update({
+    where: { id: userId },
+    data: { walletBalance: { increment: outstanding } },
+  });
+
+  await tx.walletTransaction.create({
+    data: {
+      userId,
+      amount: outstanding,
+      type: "ADJUSTMENT",
+      description: reversalTag,
+    },
+  });
+
+  return {
+    applied: true,
+    adjustedAmount: outstanding,
+    direction: "CREDIT",
+  };
+}
+
 async function reverseAbsentPenaltyOnTimelineEdit(
   tx: Prisma.TransactionClient,
   userId: string,
@@ -670,6 +742,65 @@ function getDateKey(date: Date): string {
 
 function getUtcDateKey(date: Date): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Batch-annotates timeline records with their late-penalty wallet reversal
+ * state, using the same tag-diff bookkeeping as reverseLatePenaltyOnTimeline,
+ * so the Timeline UI can show/hide/disable the "Reverse Late Penalty" action
+ * without an extra DB column.
+ */
+async function attachLatePenaltyReversalStatus<
+  T extends { userId: string; date: Date; lateCheckInPenalty: number | null }
+>(records: T[]): Promise<(T & { latePenaltyReversible: boolean; latePenaltyReversed: boolean })[]> {
+  const userIds = [...new Set(records.filter((r) => (r.lateCheckInPenalty ?? 0) > 0).map((r) => r.userId))];
+
+  if (userIds.length === 0) {
+    return records.map((record) => ({ ...record, latePenaltyReversible: false, latePenaltyReversed: false }));
+  }
+
+  const walletTransactions = await prisma.walletTransaction.findMany({
+    where: {
+      userId: { in: userIds },
+      type: "ADJUSTMENT",
+      description: { contains: "Late check-in penalty" },
+    },
+    select: { userId: true, amount: true, description: true },
+  });
+
+  return records.map((record) => {
+    if ((record.lateCheckInPenalty ?? 0) <= 0) {
+      return { ...record, latePenaltyReversible: false, latePenaltyReversed: false };
+    }
+
+    const dateKey = getDateKey(record.date);
+    const legacyDateKey = getUtcDateKey(record.date);
+    const penaltyTag = `Late check-in penalty for ${dateKey}`;
+    const legacyPenaltyTag = `Late check-in penalty for ${legacyDateKey}`;
+    const reversalTag = `Manual late check-in penalty reversal for ${dateKey}`;
+
+    let originalPenalty = 0;
+    let reversedAmount = 0;
+    for (const txn of walletTransactions) {
+      if (txn.userId !== record.userId) continue;
+      if (txn.description.includes(reversalTag)) {
+        if (txn.amount > 0) reversedAmount += txn.amount;
+      } else if (txn.description.includes(penaltyTag) || txn.description.includes(legacyPenaltyTag)) {
+        if (txn.amount < 0) originalPenalty += Math.abs(txn.amount);
+      }
+    }
+
+    if (originalPenalty <= 0.01) {
+      return { ...record, latePenaltyReversible: false, latePenaltyReversed: false };
+    }
+
+    const outstanding = Number((originalPenalty - reversedAmount).toFixed(2));
+    return {
+      ...record,
+      latePenaltyReversible: outstanding > 0.01,
+      latePenaltyReversed: outstanding <= 0.01,
+    };
+  });
 }
 
 function getDisplayName(employee: { firstName: string | null; lastName: string | null; email: string }): string {
@@ -1314,7 +1445,8 @@ export type TimelineSortField =
   | "checkOut"
   | "lateMinutes"
   | "activeTime"
-  | "otUt";
+  | "otUt"
+  | "officialOtUt";
 
 const DB_NATIVE_SORT_FIELDS: readonly TimelineSortField[] = [
   "employee",
@@ -1536,10 +1668,11 @@ export async function getTimelineRecords(
       });
 
       const totalPages = usePagination ? Math.max(Math.ceil(total / limit), 1) : (total > 0 ? 1 : 0);
+      const annotatedRecords = await attachLatePenaltyReversalStatus(records);
 
       return {
         success: true,
-        records,
+        records: annotatedRecords,
         pagination: {
           page: usePagination ? page : 1,
           limit: usePagination ? limit : total,
@@ -1601,6 +1734,8 @@ export async function getTimelineRecords(
             return parseDurationToMinutes(record.actualActiveTime) ?? -Infinity;
           case "otUt":
             return parseDurationToMinutes(record.overtimeUndertime) ?? -Infinity;
+          case "officialOtUt":
+            return parseDurationToMinutes(record.officialOvertimeundertime) ?? -Infinity;
           default:
             return 0;
         }
@@ -1613,10 +1748,11 @@ export async function getTimelineRecords(
       ? filtered.slice((page - 1) * limit, (page - 1) * limit + limit)
       : filtered;
     const totalPages = usePagination ? Math.max(Math.ceil(filteredTotal / limit), 1) : (filteredTotal > 0 ? 1 : 0);
+    const annotatedRecords = await attachLatePenaltyReversalStatus(pagedRecords);
 
     return {
       success: true,
-      records: pagedRecords,
+      records: annotatedRecords,
       pagination: {
         page: usePagination ? page : 1,
         limit: usePagination ? limit : filteredTotal,
@@ -1668,6 +1804,151 @@ export async function getTimelineEmployeeOptions() {
   } catch (error) {
     console.error('Error fetching timeline employee options:', error);
     return { success: false, error: 'Failed to fetch employee options' };
+  }
+}
+
+/**
+ * Self-scoped: the distinct months and years an employee has processed
+ * attendance data for, used to populate the Work Summary period dropdowns
+ * (only periods with actual data are offered).
+ */
+export async function getMyWorkSummaryPeriods() {
+  try {
+    const user = await getDbUser();
+    if (!user) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const records = await prisma.dailyTimeRecord.findMany({
+      where: { userId: user.id, isProcessed: true },
+      select: { date: true },
+    });
+
+    const monthSet = new Set<string>();
+    const yearSet = new Set<number>();
+    for (const record of records) {
+      const year = record.date.getFullYear();
+      const month = record.date.getMonth() + 1;
+      monthSet.add(`${year}-${String(month).padStart(2, '0')}`);
+      yearSet.add(year);
+    }
+
+    const months = [...monthSet].sort().reverse();
+    const years = [...yearSet].sort((a, b) => b - a);
+
+    return { success: true, months, years };
+  } catch (error) {
+    console.error('Error fetching work summary periods:', error);
+    return { success: false, error: 'Failed to fetch work summary periods' };
+  }
+}
+
+type WorkSummaryPeriod =
+  | { type: "month"; year: number; month: number }
+  | { type: "year"; year: number };
+
+const SERIES_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Self-scoped: attendance/OT-UT summary for a single month or a full year,
+ * used by the Dashboard's Work Summary widget. Mirrors the same definitions
+ * as the employee Timeline page's chip calculation (isProcessed-gated day
+ * counts + officialOvertimeundertime sum), plus a total late-minutes sum.
+ *
+ * Also returns `series`: a chart-ready breakdown of OT/UT and late minutes,
+ * grouped by date (month view) or by month (year view) — only for
+ * dates/months that actually have processed data, no zero-filled gaps.
+ */
+export async function getMyWorkSummary(period: WorkSummaryPeriod) {
+  try {
+    const user = await getDbUser();
+    if (!user) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const start = period.type === "month"
+      ? new Date(period.year, period.month - 1, 1)
+      : new Date(period.year, 0, 1);
+    const end = period.type === "month"
+      ? new Date(period.year, period.month, 0, 23, 59, 59, 999)
+      : new Date(period.year, 11, 31, 23, 59, 59, 999);
+
+    const records = await prisma.dailyTimeRecord.findMany({
+      where: {
+        userId: user.id,
+        isProcessed: true,
+        date: { gte: start, lte: end },
+      },
+      orderBy: { date: "asc" },
+      select: {
+        date: true,
+        status: true,
+        lateCheckInMinutes: true,
+        officialOvertimeundertime: true,
+      },
+    });
+
+    let presentDays = 0;
+    let absentDays = 0;
+    let onLeaveDays = 0;
+    let weeklyOffDays = 0;
+    let lateDays = 0;
+    let totalOvertimeMinutes = 0;
+    let totalLateMinutes = 0;
+
+    for (const record of records) {
+      if (record.status === "PRESENT") presentDays++;
+      else if (record.status === "ABSENT") absentDays++;
+      else if (record.status === "ON_LEAVE") onLeaveDays++;
+      else if (record.status === "WEEKLY_OFF") weeklyOffDays++;
+
+      if (record.lateCheckInMinutes && record.lateCheckInMinutes > 0) {
+        lateDays++;
+        totalLateMinutes += record.lateCheckInMinutes;
+      }
+
+      if (record.officialOvertimeundertime) {
+        totalOvertimeMinutes += timeStringToMinutes(record.officialOvertimeundertime);
+      }
+    }
+
+    const series = period.type === "month"
+      ? records.map((record) => ({
+          label: String(record.date.getDate()),
+          overtimeMinutes: record.officialOvertimeundertime ? timeStringToMinutes(record.officialOvertimeundertime) : 0,
+          lateMinutes: record.lateCheckInMinutes ?? 0,
+        }))
+      : (() => {
+          const byMonth = new Map<number, { overtimeMinutes: number; lateMinutes: number }>();
+          for (const record of records) {
+            const monthIndex = record.date.getMonth();
+            const entry = byMonth.get(monthIndex) ?? { overtimeMinutes: 0, lateMinutes: 0 };
+            entry.overtimeMinutes += record.officialOvertimeundertime ? timeStringToMinutes(record.officialOvertimeundertime) : 0;
+            entry.lateMinutes += record.lateCheckInMinutes ?? 0;
+            byMonth.set(monthIndex, entry);
+          }
+          return [...byMonth.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([monthIndex, values]) => ({ label: SERIES_MONTH_NAMES[monthIndex], ...values }));
+        })();
+
+    return {
+      success: true,
+      data: {
+        totalDays: presentDays + absentDays + onLeaveDays,
+        presentDays,
+        absentDays,
+        onLeaveDays,
+        weeklyOffDays,
+        lateDays,
+        totalOvertime: minutesToTimeString(totalOvertimeMinutes),
+        totalLateTime: minutesToTimeString(totalLateMinutes),
+      },
+      series,
+    };
+  } catch (error) {
+    console.error('Error fetching work summary:', error);
+    return { success: false, error: 'Failed to fetch work summary' };
   }
 }
 
@@ -1747,6 +2028,9 @@ export async function updateTimelineRecordInTransaction(
       id: true,
       baseSalary: true,
       workingDaysInMonth: true,
+      branch: {
+        select: { isLatePenaltyEnabled: true },
+      },
     },
   });
 
@@ -1754,6 +2038,7 @@ export async function updateTimelineRecordInTransaction(
     return { success: false, error: 'Employee not found' };
   }
 
+  const latePenaltyEnabled = employeeForPenalty.branch?.isLatePenaltyEnabled ?? true;
   const workingDaysInMonth = employeeForPenalty.workingDaysInMonth || 22;
   const dailySalary = workingDaysInMonth > 0 ? (employeeForPenalty.baseSalary / workingDaysInMonth) : 0;
   const absentPenaltyAmount = Number(dailySalary.toFixed(2));
@@ -2013,7 +2298,7 @@ export async function updateTimelineRecordInTransaction(
     direction: "DEBIT",
   };
 
-  if (shouldReconcilePenalties && recalculatedLateMinutes > 0) {
+  if (shouldReconcilePenalties && recalculatedLateMinutes > 0 && latePenaltyEnabled) {
     adjustment = await reconcileLatePenaltyWalletOnTimelineEdit(
       tx,
       currentRecord.userId,
@@ -2148,6 +2433,7 @@ export async function setTimelineRecordProcessed(recordId: string, isProcessed: 
             lateCheckInMinutes: 0,
             lateCheckInPenalty: 0,
             autoDeductedLeaveType: null,
+            hasOpenBreak: false,
             updatedAt: new Date(),
           },
         });
@@ -2161,6 +2447,56 @@ export async function setTimelineRecordProcessed(recordId: string, isProcessed: 
   } catch (error) {
     console.error('Error setting timeline processed status:', error);
     return { success: false, error: 'Failed to update processing status' };
+  }
+}
+
+/**
+ * Admin/manager manual reversal of an already-deducted late check-in penalty
+ * for a single day. Idempotent: reverses only the outstanding (not yet
+ * reversed) amount, so it can safely only ever apply once per day/employee.
+ */
+export async function reverseLatePenalty(recordId: string) {
+  try {
+    const actor = await getDbUser();
+    if (!actor) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const canUpdateTimeline = actor.role === "SUPERADMIN" || actor.role === "HR" || (actor.role === "EMPLOYEE" && actor.isManager);
+    if (!canUpdateTimeline) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const record = await prisma.dailyTimeRecord.findUnique({ where: { id: recordId } });
+    if (!record) {
+      return { success: false, error: 'Timeline record not found' };
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      return reverseLatePenaltyOnTimeline(tx, record.userId, record.date);
+    });
+
+    if (!result.applied) {
+      return { success: false, error: 'No outstanding late penalty to reverse for this day.' };
+    }
+
+    await prisma.employeeNotification.create({
+      data: {
+        userId: record.userId,
+        type: "LATE_CHECKIN_PENALTY",
+        title: "Late Check-in Penalty Reversed",
+        message: `Your late check-in penalty of ৳${result.adjustedAmount.toFixed(2)} for ${new Date(record.date).toLocaleDateString()} was manually reversed.`,
+        relatedDate: record.date,
+      },
+    });
+
+    revalidatePath('/admin/timeline');
+    revalidatePath('/manager/timeline');
+    revalidatePath('/timeline');
+    return { success: true, adjustedAmount: result.adjustedAmount };
+  } catch (error) {
+    console.error('Error reversing late penalty:', error);
+    return { success: false, error: 'Failed to reverse late penalty' };
   }
 }
 
@@ -2204,6 +2540,9 @@ export async function updateTimelineRecord(
         id: true,
         baseSalary: true,
         workingDaysInMonth: true,
+        branch: {
+          select: { isLatePenaltyEnabled: true },
+        },
       },
     });
 
@@ -2211,6 +2550,7 @@ export async function updateTimelineRecord(
       return { success: false, error: 'Employee not found' };
     }
 
+    const latePenaltyEnabled = employeeForPenalty.branch?.isLatePenaltyEnabled ?? true;
     const workingDaysInMonth = employeeForPenalty.workingDaysInMonth || 22;
     const dailySalary = workingDaysInMonth > 0 ? (employeeForPenalty.baseSalary / workingDaysInMonth) : 0;
     const absentPenaltyAmount = Number(dailySalary.toFixed(2));
@@ -2478,7 +2818,7 @@ export async function updateTimelineRecord(
         direction: "DEBIT",
       };
 
-        if (shouldReconcilePenalties && recalculatedLateMinutes > 0) {
+        if (shouldReconcilePenalties && recalculatedLateMinutes > 0 && latePenaltyEnabled) {
         adjustment = await reconcileLatePenaltyWalletOnTimelineEdit(
           tx,
           currentRecord.userId,

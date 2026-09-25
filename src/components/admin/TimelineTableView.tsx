@@ -46,9 +46,10 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
-  CalendarX
+  CalendarX,
+  AlertTriangle
 } from "lucide-react";
-import { updateTimelineRecord, adjustLeaveType, setTimelineRecordProcessed } from "@/actions/timeline.actions";
+import { updateTimelineRecord, adjustLeaveType, setTimelineRecordProcessed, reverseLatePenalty } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 import { formatTime12 } from "@/lib/utils";
@@ -412,6 +413,7 @@ export default function TimelineTableView({
   const [saving, setSaving] = useState(false);
   const [processedSavingId, setProcessedSavingId] = useState<string | null>(null);
   const [syncingUsers, setSyncingUsers] = useState<Set<string>>(new Set());
+  const [reversingPenaltyId, setReversingPenaltyId] = useState<string | null>(null);
 
   const handleToggleProcessed = async (record: TimeRecord, target: boolean) => {
     if (
@@ -436,6 +438,31 @@ export default function TimelineTableView({
       alert("Failed to update processing status");
     } finally {
       setProcessedSavingId(null);
+    }
+  };
+
+  const handleReverseLatePenalty = async (record: TimeRecord) => {
+    if (
+      !window.confirm(
+        `Reverse the late check-in penalty for ${format(new Date(record.date), 'MMMM d, yyyy')}?\n\nThis credits the previously deducted amount back to the employee's wallet. This can only be done once per day.`,
+      )
+    ) {
+      return;
+    }
+
+    setReversingPenaltyId(record.id);
+    try {
+      const result = await reverseLatePenalty(record.id);
+      if (result.success) {
+        onRecordUpdate();
+      } else {
+        alert(result.error || "Failed to reverse late penalty");
+      }
+    } catch (error) {
+      console.error("Error reversing late penalty:", error);
+      alert("Failed to reverse late penalty");
+    } finally {
+      setReversingPenaltyId(null);
     }
   };
 
@@ -475,12 +502,6 @@ export default function TimelineTableView({
       const isCurrentlyOnLeave = editingRecord.status === 'ON_LEAVE';
       const isBeingChangedToOnLeave = editForm.status === 'ON_LEAVE';
       const leaveTypeChanged = editingRecord.autoDeductedLeaveType !== editForm.autoDeductedLeaveType;
-
-      if (editForm.status === 'PRESENT' && (!editForm.actualCheckIn || !editForm.actualCheckOut)) {
-        alert('Check-in and Check-out times are required when setting status to Present');
-        setSaving(false);
-        return;
-      }
 
       if (isCurrentlyOnLeave && isBeingChangedToOnLeave && leaveTypeChanged && editingRecord.autoDeductedLeaveType && editForm.autoDeductedLeaveType) {
         const adjustResult = await adjustLeaveType(editingRecord.id, editForm.autoDeductedLeaveType);
@@ -553,6 +574,22 @@ export default function TimelineTableView({
       <Badge variant={display.variant} className={display.className}>
         {display.label}
       </Badge>
+    );
+  };
+
+  const getOpenBreakIndicator = (record: TimeRecord) => {
+    if (!record.hasOpenBreak || record.isProcessed) return null;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">
+            <AlertTriangle className="h-4 w-4 text-yellow-600" aria-label="Unresolved break punch" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          Unresolved break punch — check zkt_attendance data or resolve manually. This day will not auto-process until it clears.
+        </TooltipContent>
+      </Tooltip>
     );
   };
 
@@ -760,7 +797,10 @@ export default function TimelineTableView({
                     </div>
                   </TableCell>
                   <TableCell>
-                    {getAttendanceStatus(record)}
+                    <div className="flex items-center gap-1.5">
+                      {getAttendanceStatus(record)}
+                      {getOpenBreakIndicator(record)}
+                    </div>
                   </TableCell>
                   <TableCell className="text-sm">
                     {formatTime12(record.actualCheckIn)}
@@ -874,7 +914,7 @@ export default function TimelineTableView({
                                   </p>
                                   <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-green-700">
                                     <li>1 day will be restored to <strong>{editingRecord.autoDeductedLeaveType}</strong></li>
-                                    <li>Check-in and Check-out times will be required</li>
+                                    <li>Check-in and/or Check-out times can be set now or added later</li>
                                     <li>All changes will be logged in audit trail</li>
                                   </ul>
                                 </div>
@@ -1038,6 +1078,14 @@ export default function TimelineTableView({
                           >
                             {record.isProcessed ? "Mark as Unprocessed & Re-fetch" : "Mark as Processed"}
                           </DropdownMenuItem>
+                          {(record.latePenaltyReversible || record.latePenaltyReversed) && (
+                            <DropdownMenuItem
+                              disabled={!record.latePenaltyReversible || reversingPenaltyId === record.id}
+                              onSelect={() => handleReverseLatePenalty(record)}
+                            >
+                              {record.latePenaltyReversed ? "Late Penalty Reversed" : "Reverse Late Penalty"}
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>

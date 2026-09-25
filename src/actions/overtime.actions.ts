@@ -224,32 +224,6 @@ export async function getMyOvertimePayoutSummary(year: number) {
   return buildOvertimePayoutSummary(user.id, year);
 }
 
-// Self-scoped: an employee's own yearly payout history.
-export async function getMyOvertimePayoutHistory() {
-  const user = await getDbUser();
-  if (!user) {
-    throw new Error("Unauthorized");
-  }
-  return prisma.overtimePayout.findMany({
-    where: { userId: user.id },
-    select: {
-      id: true,
-      year: true,
-      totalRequiredActiveTime: true,
-      totalRequiredBreakTime: true,
-      totalOvertimeUndertime: true,
-      totalRequiredMinutes: true,
-      totalOvertimeMinutes: true,
-      calculatedAmount: true,
-      isPaid: true,
-      paidAt: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-    orderBy: { year: 'desc' },
-  });
-}
-
 export async function getEligibleEmployeesForOvertime(branchId?: string) {
   const admin = await getDbUser();
   if (!admin || admin.role !== 'SUPERADMIN') {

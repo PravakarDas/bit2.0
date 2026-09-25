@@ -8,7 +8,7 @@ export async function getEmployeeDashboardData() {
     const user = await getDbUser();
     if (!user) throw new Error("Unauthorized");
 
-    const [loans, medicalEntitlement, salaryHistory, recentTransactions, branchSettings] = await Promise.all([
+    const [loans, medicalEntitlement, salaryHistory, recentTransactions] = await Promise.all([
         // 1. Remaining Loan Principal
         prisma.loan.aggregate({
             where: { userId: user.id, status: "ACTIVE" },
@@ -35,222 +35,23 @@ export async function getEmployeeDashboardData() {
             orderBy: { createdAt: "desc" },
             take: 5,
         }),
-
-        // 5. Branch timeline settings for required hours/day
-        user.branchId
-            ? prisma.branch.findUnique({
-                where: { id: user.branchId },
-                select: {
-                    checkInTime: true,
-                    checkOutTime: true,
-                    breakDuration: true,
-                    weeklyOffDays: true,
-                },
-            })
-            : Promise.resolve(null),
     ]);
 
-    const currentDate = new Date();
-    const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-    const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const firstDayOfLastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
-    const lastDayOfLastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
-    const firstDayOfYear = new Date(currentDate.getFullYear(), 0, 1);
-    const firstDayOfWeek = new Date(today);
-    firstDayOfWeek.setDate(today.getDate() - today.getDay()); // Sunday-start week
-
-    const timelineStart = firstDayOfLastMonth < firstDayOfYear ? firstDayOfLastMonth : firstDayOfYear;
-
-    const parseHHMMToHours = (time: string | null | undefined) => {
-        if (!time) return 0;
-        const clean = time.replace("+", "").replace("-", "");
-        const [hh, mm] = clean.split(":").map(Number);
-        if (Number.isNaN(hh) || Number.isNaN(mm)) return 0;
-        return (hh * 60 + mm) / 60;
-    };
-
-    const parseHHMMToMinutes = (time: string | null | undefined) => {
-        if (!time) return 0;
-        const [hh, mm] = time.split(":").map(Number);
-        if (Number.isNaN(hh) || Number.isNaN(mm)) return 0;
-        return hh * 60 + mm;
-    };
-
-    const checkInMinutes = parseHHMMToMinutes(branchSettings?.checkInTime);
-    const checkOutMinutes = parseHHMMToMinutes(branchSettings?.checkOutTime);
-    const breakMinutes = parseHHMMToMinutes(branchSettings?.breakDuration);
-    let shiftMinutes = checkOutMinutes - checkInMinutes;
-    if (shiftMinutes < 0) {
-        shiftMinutes += 24 * 60;
-    }
-    const dailyRequiredHours = Math.max((shiftMinutes - breakMinutes) / 60, 0) || 8;
-
-    const weeklyOffDays = new Set(branchSettings?.weeklyOffDays || ["SUNDAY"]);
-    const weekdayNames = [
-        "SUNDAY",
-        "MONDAY",
-        "TUESDAY",
-        "WEDNESDAY",
-        "THURSDAY",
-        "FRIDAY",
-        "SATURDAY",
-    ];
-
-    const toDateKey = (date: Date) =>
-        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-
-    const isWeeklyOffDate = (date: Date) => weeklyOffDays.has(weekdayNames[date.getDay()]);
-
-    const isNonWorkingStatus = (status?: string) => status === "WEEKLY_OFF" || status === "ON_LEAVE";
-
-    const [
-        timelineRecords,
-        leaveRecords,
-        overtimeRecords,
-    ] = await Promise.all([
-            // Timeline records needed for current year + last month calculations
-            prisma.dailyTimeRecord.findMany({
-                where: {
-                    userId: user.id,
-                    date: {
-                        gte: timelineStart,
-                        lte: currentDate,
-                    }
-                },
-                orderBy: { date: "asc" },
+    const leaveRecords = await prisma.userLeaveEntitlement.findMany({
+        where: {
+            userId: user.id,
+            year: new Date().getFullYear(),
+        },
+        select: {
+            allocatedDays: true,
+            usedDays: true,
+            leaveType: {
                 select: {
-                    date: true,
-                    actualActiveTime: true,
-                    status: true,
-                }
-            }),
-
-            // Leave records for breakdown
-            prisma.userLeaveEntitlement.findMany({
-                where: {
-                    userId: user.id,
-                    year: currentDate.getFullYear(),
-                },
-                select: {
-                    allocatedDays: true,
-                    usedDays: true,
-                    leaveType: {
-                        select: {
-                            name: true,
-                        }
-                    }
-                }
-            }),
-
-            // Overtime records
-            prisma.overtimeRequest.findMany({
-                where: {
-                    userId: user.id,
-                    status: "APPROVED",
-                },
-                select: {
-                    totalOvertime: true,
-                    requestedAt: true,
-                },
-                orderBy: {
-                    requestedAt: "desc"
-                },
-                take: 12,
-            }),
-        ]);
-
-    const recordByDate = new Map(
-        timelineRecords.map(record => [toDateKey(record.date), record])
-    );
-
-    const summarizeRange = (start: Date, end: Date) => {
-        let workingDays = 0;
-        let presentDays = 0;
-        let activeHours = 0;
-
-        const cursor = new Date(start);
-        while (cursor <= end) {
-            const key = toDateKey(cursor);
-            const dayRecord = recordByDate.get(key);
-
-            if (!isWeeklyOffDate(cursor) && !isNonWorkingStatus(dayRecord?.status)) {
-                workingDays += 1;
-                activeHours += parseHHMMToHours(dayRecord?.actualActiveTime);
-                if (dayRecord?.status === "PRESENT") {
-                    presentDays += 1;
+                    name: true,
                 }
             }
-
-            cursor.setDate(cursor.getDate() + 1);
         }
-
-        return {
-            activeHours,
-            requiredHours: workingDays * dailyRequiredHours,
-            presentDays,
-            workingDays,
-        };
-    };
-
-    const getLast7WorkingDaysSummary = () => {
-        let workingDays = 0;
-        let presentDays = 0;
-        let activeHours = 0;
-
-        const cursor = new Date(today);
-        let safety = 0;
-        while (workingDays < 7 && safety < 120) {
-            const key = toDateKey(cursor);
-            const dayRecord = recordByDate.get(key);
-            if (!isWeeklyOffDate(cursor) && !isNonWorkingStatus(dayRecord?.status)) {
-                workingDays += 1;
-                activeHours += parseHHMMToHours(dayRecord?.actualActiveTime);
-                if (dayRecord?.status === "PRESENT") {
-                    presentDays += 1;
-                }
-            }
-            cursor.setDate(cursor.getDate() - 1);
-            safety += 1;
-        }
-
-        return {
-            activeHours,
-            requiredHours: workingDays * dailyRequiredHours,
-            presentDays,
-            workingDays,
-        };
-    };
-
-    const thisMonthSummary = summarizeRange(firstDayOfMonth, today);
-    const thisWeekSummary = summarizeRange(firstDayOfWeek, today);
-    const lastMonthSummary = summarizeRange(firstDayOfLastMonth, lastDayOfLastMonth);
-    const last7WorkingDaysSummary = getLast7WorkingDaysSummary();
-
-    const currentQuarter = Math.floor(currentDate.getMonth() / 3) + 1;
-    const quarterSummaries = [1, 2, 3, 4].map(quarter => {
-        if (quarter >= currentQuarter) {
-            return {
-                quarter: `Q${quarter}`,
-                activeHours: 0,
-                requiredHours: 0,
-                presentDays: 0,
-                workingDays: 0,
-            };
-        }
-
-        const quarterStartMonth = (quarter - 1) * 3;
-        const quarterStartDate = new Date(currentDate.getFullYear(), quarterStartMonth, 1);
-        const quarterEndDate = new Date(currentDate.getFullYear(), quarterStartMonth + 3, 0);
-        const summary = summarizeRange(quarterStartDate, quarterEndDate);
-
-        return {
-            quarter: `Q${quarter}`,
-            ...summary,
-        };
     });
-
-    const totalHoursThisMonth = thisMonthSummary.activeHours;
-    const totalHoursLastMonth = lastMonthSummary.activeHours;
 
     // Build dynamic leave breakdown only from available leave types
     const leaveArray = leaveRecords.map(leave => ({
@@ -269,49 +70,7 @@ export async function getEmployeeDashboardData() {
             amount: s.netAmount
         })),
         recentTransactions,
-        attendanceData: {
-            present: timelineRecords.filter(r => r.date >= firstDayOfMonth && r.date <= today && r.status === "PRESENT").length,
-            absent: timelineRecords.filter(r => r.date >= firstDayOfMonth && r.date <= today && r.status === "ABSENT").length,
-            onLeave: timelineRecords.filter(r => r.date >= firstDayOfMonth && r.date <= today && r.status === "ON_LEAVE").length,
-            weeklyOff: timelineRecords.filter(r => r.date >= firstDayOfMonth && r.date <= today && r.status === "WEEKLY_OFF").length,
-        },
         leaveArray,
-        activeTimeData: {
-            last7WorkingDays: last7WorkingDaysSummary,
-            thisWeek: thisWeekSummary,
-            thisMonth: thisMonthSummary,
-            lastMonth: lastMonthSummary,
-            quarterSummaries,
-            dailyRequiredHours,
-        },
-        monthComparisonData: [
-            {
-                name: "Active Hours",
-                thisMonth: Math.round(totalHoursThisMonth / 20),
-                lastMonth: Math.round(totalHoursLastMonth / 20),
-            },
-            {
-                name: "Attendance",
-                thisMonth: thisMonthSummary.presentDays,
-                lastMonth: lastMonthSummary.presentDays,
-            },
-            {
-                name: "Leaves",
-                thisMonth: timelineRecords.filter(
-                    r => r.date >= firstDayOfMonth && r.date <= today && r.status === "ON_LEAVE"
-                ).length,
-                lastMonth: timelineRecords.filter(
-                    r => r.date >= firstDayOfLastMonth && r.date <= lastDayOfLastMonth && r.status === "ON_LEAVE"
-                ).length,
-            },
-        ],
-        overtimeTrendData: overtimeRecords
-            .reverse()
-            .slice(-6)
-            .map((ot, i) => ({
-                name: `W${i + 1}`,
-                hours: parseHHMMToHours(ot.totalOvertime),
-            })),
     };
 }
 

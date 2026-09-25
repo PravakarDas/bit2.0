@@ -24,6 +24,9 @@ type UpdatePayload = {
   zktecoUsername?: string;
   zktecoPassword?: string;
   loanMode?: "AUTO" | "MANUAL";
+  attendanceCalculationMethod?: string;
+  zktAttendancePollEnabled?: boolean;
+  zktAttendancePollIntervalSeconds?: number;
 };
 
 const SENSITIVE_HISTORY_FIELDS = new Set(["zktecoUsername", "zktecoPassword"]);
@@ -62,6 +65,14 @@ function sanitizePayload(user: NonNullable<Awaited<ReturnType<typeof getDbUser>>
 
   if (typeof payload.zktecoBaseUrl === "string") set("zktecoBaseUrl", payload.zktecoBaseUrl.trim());
 
+  if (typeof payload.attendanceCalculationMethod === "string") {
+    set("attendanceCalculationMethod", payload.attendanceCalculationMethod === "ZKT_ATTENDANCE_TABLE" ? "ZKT_ATTENDANCE_TABLE" : "ZKTECO_API");
+  }
+  if (typeof payload.zktAttendancePollEnabled === "boolean") set("zktAttendancePollEnabled", payload.zktAttendancePollEnabled);
+  if (typeof payload.zktAttendancePollIntervalSeconds === "number") {
+    set("zktAttendancePollIntervalSeconds", normalizeCronPart(payload.zktAttendancePollIntervalSeconds, 1, 3600, 30));
+  }
+
   if (canEditSensitiveZkteco(user)) {
     if (typeof payload.zktecoUsername === "string") set("zktecoUsername", payload.zktecoUsername.trim());
     if (typeof payload.zktecoPassword === "string") set("zktecoPassword", payload.zktecoPassword);
@@ -83,6 +94,8 @@ export async function getSystemControlConfig() {
   return {
     settings: {
       ...settings,
+      // BigInt isn't serializable across the Server Action boundary — stringified for display only, never parsed back for writes.
+      zktAttendanceLastProcessedId: settings.zktAttendanceLastProcessedId?.toString?.() ?? "0",
       zktecoPassword: canEditSensitive ? settings.zktecoPassword : "",
       zktecoUsername: canEditSensitive ? settings.zktecoUsername : "",
     },

@@ -15,8 +15,13 @@ import AttendanceSummaryStats, {
   type AttendanceSummaryStatsData,
 } from "@/components/employee/AttendanceSummaryStats";
 import TimelineCalendarOverview from "@/components/employee/TimelineCalendarOverview";
-import { getTimelineRecords, getLatestProcessedTimelineDate } from "@/actions/timeline.actions";
+import { getTimelineRecords, getLatestProcessedTimelineDate, type TimelineSortField } from "@/actions/timeline.actions";
 import type { TimelineStatus } from "@/lib/timeline-status";
+
+export interface EmployeeSortState {
+  field: TimelineSortField | null;
+  order: "asc" | "desc";
+}
 
 function timeStringToMinutes(timeStr: string): number {
   if (!timeStr) return 0;
@@ -126,11 +131,23 @@ export default function EmployeeTimelineClient({
   const [startDate, setStartDate] = useState<Date>(monthStart);
   const [endDate, setEndDate] = useState<Date>(monthEnd);
   const [displayMonth, setDisplayMonth] = useState<Date>(now);
+  const [sort, setSort] = useState<EmployeeSortState>({ field: null, order: "asc" });
+
+  const handleSortChange = (field: TimelineSortField) => {
+    setSort((prev) => {
+      if (prev.field !== field) return { field, order: "asc" };
+      if (prev.order === "asc") return { field, order: "desc" };
+      return { field: null, order: "asc" };
+    });
+  };
 
   const loadTimelineData = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getTimelineRecords(userId, startDate, endDate);
+      const result = await getTimelineRecords(userId, startDate, endDate, {
+        sortBy: sort.field || undefined,
+        sortOrder: sort.order,
+      });
 
       if (result.success) {
         const records = result.records || [];
@@ -147,7 +164,7 @@ export default function EmployeeTimelineClient({
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, userId]);
+  }, [startDate, endDate, userId, sort]);
 
   // Load timeline data when date range changes
   useEffect(() => {
@@ -278,6 +295,8 @@ export default function EmployeeTimelineClient({
           records={timeRecords}
           summary={null}
           latestProcessedDate={latestProcessedDate}
+          sort={sort}
+          onSortChange={handleSortChange}
         />
       )}
     </div>
