@@ -111,7 +111,7 @@ export default async function ManagerLeaveApplicationsPage() {
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <ApprovalButtons applicationId={application.id} approverRole="manager" />
+                                                <ApprovalButtons applicationId={application.id} />
                                             </TableCell>
                                         </TableRow>
                                     ))}

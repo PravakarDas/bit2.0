@@ -1768,6 +1768,46 @@ export async function getTimelineRecords(
 }
 
 /**
+ * Get every employee who has at least one DailyTimeRecord — including archived
+ * employees — for the Timeline page's Employee filter. Unlike getUsers()
+ * (which only returns currently-approved, non-archived users), this covers
+ * anyone whose attendance history still exists in the table, since DailyTimeRecord
+ * rows are cascade-deleted with their user (schema.prisma DailyTimeRecord.user
+ * onDelete: Cascade), so every row here always has a valid, joinable user.
+ */
+export async function getTimelineEmployeeOptions() {
+  try {
+    const actor = await getDbUser();
+    if (!actor) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const isSelfTimelineView = actor.role === "EMPLOYEE" && !actor.isManager;
+    const canAccessTimeline = actor.role === "SUPERADMIN" || actor.role === "HR" || actor.isManager || isSelfTimelineView;
+    if (!canAccessTimeline) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const users = await prisma.user.findMany({
+      where: { timeRecords: { some: {} } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        isArchived: true,
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }, { email: 'asc' }],
+    });
+
+    return { success: true, employees: users };
+  } catch (error) {
+    console.error('Error fetching timeline employee options:', error);
+    return { success: false, error: 'Failed to fetch employee options' };
+  }
+}
+
+/**
  * Self-scoped: the distinct months and years an employee has processed
  * attendance data for, used to populate the Work Summary period dropdowns
  * (only periods with actual data are offered).

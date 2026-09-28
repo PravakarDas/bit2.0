@@ -92,10 +92,13 @@ interface ApproveLoanDialogProps {
         };
     };
     approvalMode?: "manager_verified" | "bypass_manager";
+    /** MANUAL: no grace period / EMI schedule; repayment is deducted at admin's discretion in payroll. */
+    loanMode?: "AUTO" | "MANUAL";
     onApprovalSuccess?: () => void;
 }
 
-export function ApproveLoanDialog({ loan, approvalMode = "manager_verified", onApprovalSuccess }: ApproveLoanDialogProps) {
+export function ApproveLoanDialog({ loan, approvalMode = "manager_verified", loanMode = "AUTO", onApprovalSuccess }: ApproveLoanDialogProps) {
+    const isManual = loanMode === "MANUAL";
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [detailsLoading, setDetailsLoading] = useState(false);
@@ -306,20 +309,24 @@ export function ApproveLoanDialog({ loan, approvalMode = "manager_verified", onA
                                                         ৳{loanDetails.loan.issuedAmount.toLocaleString('en-BD')}
                                                     </div>
                                                 </div>
+                                                {!isManual && (
                                                 <div>
                                                     <Label className="text-xs text-muted-foreground">Grace Period</Label>
                                                     <div className="text-lg font-semibold">
                                                         {loanDetails.loan.gracePeriodMonths} months
                                                     </div>
                                                 </div>
+                                                )}
                                             </div>
                                             <div className="grid grid-cols-2 gap-4">
+                                                {!isManual && (
                                                 <div>
                                                     <Label className="text-xs text-muted-foreground">Total Duration</Label>
                                                     <div className="text-lg font-semibold">
                                                         {loanDetails.loan.totalMonths} months
                                                     </div>
                                                 </div>
+                                                )}
                                                 <div>
                                                     <Label className="text-xs text-muted-foreground">Applied On</Label>
                                                     <div className="text-sm">
@@ -447,6 +454,7 @@ export function ApproveLoanDialog({ loan, approvalMode = "manager_verified", onA
                                                     Max allowed: ৳{loanDetails.financialMetrics.maxAllowedLoan.toLocaleString('en-BD')}
                                                 </div>
                                             </div>
+                                            {!isManual && (<>
                                             <div className="grid gap-2">
                                                 <Label htmlFor="gracePeriodMonths">Grace Period (Months)</Label>
                                                 <Input
@@ -476,6 +484,7 @@ export function ApproveLoanDialog({ loan, approvalMode = "manager_verified", onA
                                                     }
                                                 />
                                             </div>
+                                            </>)}
                                             <div className="grid gap-2">
                                                 <Label htmlFor="adminComments">Admin Comments (Optional)</Label>
                                                 <Input
@@ -495,6 +504,17 @@ export function ApproveLoanDialog({ loan, approvalMode = "manager_verified", onA
                                         <div className="space-y-4">
                                             <div className="p-4 bg-muted/50 rounded-lg">
                                                 <h4 className="font-medium mb-3">Loan Preview</h4>
+                                                {isManual ? (
+                                                <div className="space-y-2 text-sm">
+                                                    <div className="flex justify-between">
+                                                        <span>Amount credited to wallet:</span>
+                                                        <span className="font-medium">৳{formData.issuedAmount.toLocaleString('en-BD')}</span>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Manual loan: no EMI schedule or automatic deduction. Choose the amount to deduct in any month while running payroll.
+                                                    </p>
+                                                </div>
+                                                ) : (
                                                 <div className="space-y-2 text-sm">
                                                     <div className="flex justify-between">
                                                         <span>Monthly EMI:</span>
@@ -521,6 +541,7 @@ export function ApproveLoanDialog({ loan, approvalMode = "manager_verified", onA
                                                         <span className="font-medium">{getTimelinePreview().totalDurationMonths} months</span>
                                                     </div>
                                                 </div>
+                                                )}
                                             </div>
                                             
                                             {!isValidApproval() && (

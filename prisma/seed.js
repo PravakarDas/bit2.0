@@ -34,6 +34,105 @@ async function main() {
         ],
     });
 
+    // 3. Notification Engine (Phase 10): ensure the LOAN_APPROVED/EMAIL
+    // template exists. Idempotent — skipped if an active version is already
+    // registered. Placeholders match the payload `approveLoan()` (loan.actions.ts)
+    // raises: `employee.name`, `amount`, `approvedBy` — see BusinessIntegrationReport.md.
+    const existingTemplate = await prisma.notificationTemplate.findFirst({
+        where: { key: "LOAN_APPROVED", channel: "EMAIL", isActive: true },
+    });
+
+    if (!existingTemplate) {
+        await prisma.notificationTemplate.create({
+            data: {
+                key: "LOAN_APPROVED",
+                channel: "EMAIL",
+                subjectTemplate: "Your loan has been approved",
+                bodyTemplateHtml: "<p>Hi {{employee.name}},</p><p>Your loan of ৳{{amount}} has been approved by {{approvedBy}}.</p>",
+                bodyTemplateText: "Hi {{employee.name}}, your loan of ৳{{amount}} has been approved by {{approvedBy}}.",
+                version: 1,
+                isActive: true,
+            },
+        });
+        console.log("Created LOAN_APPROVED/EMAIL notification template.");
+    } else {
+        console.log("LOAN_APPROVED/EMAIL notification template already exists — skipped.");
+    }
+
+    // 4. Notification Engine (Phase 15): ensure the LEAVE_APPROVED/LEAVE_REJECTED/
+    // OVERTIME_REQUEST_APPROVED/OVERTIME_REQUEST_DECLINED EMAIL templates exist.
+    // Idempotent, same pattern as LOAN_APPROVED above. Placeholders match the
+    // payload leave.actions.ts/overtime-request.actions.ts raise — see
+    // BusinessEventsIntegrationReport.md.
+    const businessEventTemplates = [
+        {
+            key: "LEAVE_APPROVED",
+            subjectTemplate: "Your leave application has been approved",
+            bodyTemplateHtml:
+                "<p>Hi {{employee.name}},</p><p>Your {{leaveType}} leave on {{leaveDate}} has been approved by {{approvedBy}}.</p>",
+            bodyTemplateText: "Hi {{employee.name}}, your {{leaveType}} leave on {{leaveDate}} has been approved by {{approvedBy}}.",
+        },
+        {
+            key: "LEAVE_REJECTED",
+            subjectTemplate: "Your leave application has been rejected",
+            bodyTemplateHtml:
+                "<p>Hi {{employee.name}},</p><p>Your {{leaveType}} leave on {{leaveDate}} has been rejected by {{rejectedBy}}.</p>",
+            bodyTemplateText: "Hi {{employee.name}}, your {{leaveType}} leave on {{leaveDate}} has been rejected by {{rejectedBy}}.",
+        },
+        {
+            key: "OVERTIME_REQUEST_APPROVED",
+            subjectTemplate: "Your overtime request has been approved",
+            bodyTemplateHtml:
+                "<p>Hi {{employee.name}},</p><p>Your overtime request for {{totalOvertime}} hours on {{overtimeDate}} has been approved by {{approvedBy}}.</p>",
+            bodyTemplateText:
+                "Hi {{employee.name}}, your overtime request for {{totalOvertime}} hours on {{overtimeDate}} has been approved by {{approvedBy}}.",
+        },
+        {
+            key: "OVERTIME_REQUEST_DECLINED",
+            subjectTemplate: "Your overtime request has been declined",
+            bodyTemplateHtml:
+                "<p>Hi {{employee.name}},</p><p>Your overtime request for {{totalOvertime}} hours on {{overtimeDate}} has been declined by {{declinedBy}}. Reason: {{declineReason}}</p>",
+            bodyTemplateText:
+                "Hi {{employee.name}}, your overtime request for {{totalOvertime}} hours on {{overtimeDate}} has been declined by {{declinedBy}}. Reason: {{declineReason}}",
+        },
+        {
+            // Phase 18c: payload raised by payroll.actions.ts's dispatchPayrollPayslips()
+            // is { employeeName, month, year } (flat, not { employee: { name } }
+            // like the templates above — see PayrollEmailImplementationPlan.md §16).
+            // The PDF payslip itself is attached via NotificationJob.documentId,
+            // not rendered into this template.
+            key: "PAYROLL_PROCESSED",
+            subjectTemplate: "Your Payslip for {{month}} {{year}}",
+            bodyTemplateHtml:
+                "<p>Hello {{employeeName}},</p><p>Your payslip for {{month}} {{year}} is ready.</p><p>Please find your payslip attached to this email.</p><p>Regards,<br/>HR / Payroll Team</p>",
+            bodyTemplateText:
+                "Hello {{employeeName}},\n\nYour payslip for {{month}} {{year}} is ready.\n\nPlease find your payslip attached to this email.\n\nRegards,\nHR / Payroll Team",
+        },
+    ];
+
+    for (const template of businessEventTemplates) {
+        const existing = await prisma.notificationTemplate.findFirst({
+            where: { key: template.key, channel: "EMAIL", isActive: true },
+        });
+
+        if (!existing) {
+            await prisma.notificationTemplate.create({
+                data: {
+                    key: template.key,
+                    channel: "EMAIL",
+                    subjectTemplate: template.subjectTemplate,
+                    bodyTemplateHtml: template.bodyTemplateHtml,
+                    bodyTemplateText: template.bodyTemplateText,
+                    version: 1,
+                    isActive: true,
+                },
+            });
+            console.log(`Created ${template.key}/EMAIL notification template.`);
+        } else {
+            console.log(`${template.key}/EMAIL notification template already exists — skipped.`);
+        }
+    }
+
     console.log("Seed successful!");
 }
 

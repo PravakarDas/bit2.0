@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getDbUser } from "@/actions/user.actions";
 import { getSystemControlConfig, getSystemControlChangeLog } from "@/actions/system-control.actions";
+import { getEmailConfig } from "@/actions/email-config.actions";
+import { getGoogleDriveConfig } from "@/actions/google-drive-config.actions";
 import SystemControlClient from "@/components/system/SystemControlClient";
 
 export default async function AdminSystemControlPage() {
@@ -13,9 +15,11 @@ export default async function AdminSystemControlPage() {
     redirect("/unauthorized");
   }
 
-  const [{ settings, permissions }, logs] = await Promise.all([
+  const [{ settings, permissions }, logs, emailConfig, googleDriveConfig] = await Promise.all([
     getSystemControlConfig(),
     getSystemControlChangeLog(100),
+    getEmailConfig(),
+    getGoogleDriveConfig(),
   ]);
 
   return (
@@ -24,6 +28,8 @@ export default async function AdminSystemControlPage() {
       canEditSensitive={permissions.canEditSensitive}
       isManager={permissions.isManager}
       logs={logs}
+      emailConfig={emailConfig}
+      googleDriveConfig={googleDriveConfig}
     />
   );
 }

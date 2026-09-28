@@ -7,6 +7,7 @@ import { processNewZktAttendanceRows, reconcileUnprocessedDailyTimeRecords } fro
 const CRON_GLOBAL_FLAG = "__dailyTimelineCronStarted";
 const ZKTECO_CRON_GLOBAL_FLAG = "__zkTecoSyncCronStarted";
 const LEAVE_AUTOMATION_CRON_GLOBAL_FLAG = "__leaveAutomationCronStarted";
+const NOTIFICATION_WORKER_GLOBAL_FLAG = "__notificationWorkerStarted";
 const ZKT_ATTENDANCE_POLL_GLOBAL_FLAG = "__zktAttendancePollStarted";
 
 function getLocalTimeParts(timeZone?: string) {
@@ -282,6 +283,39 @@ function startLeaveAutomationCron() {
   setInterval(runIfDue, 60_000);
 }
 
+// Notification Engine (Phase 11): same in-process-loop + idempotency-guard
+// convention as the three crons above — the established, only mechanism
+// this project uses to start a long-running background loop from
+// application boot (see ProductionWorkerReport.md's "Startup Strategy" for
+// why this, not a separate process/service, was chosen). Unlike the crons,
+// this doesn't poll "is it due yet" on a shared 60s tick — WorkerRuntime
+// owns its own poll loop once started (see worker-runtime.ts); this
+// function's only job is the one-time, guarded `.start()` call.
+//
+// `production-worker.ts` is imported dynamically, not statically at the top
+// of this file, deliberately: `instrumentation.ts`'s `register()` is bundled
+// by Next.js for BOTH the Node.js and Edge runtimes, and this function is
+// only ever called from inside the `NEXT_RUNTIME === "nodejs"` guard below —
+// but a static top-level import would still make Turbopack bundle (and, for
+// `container.ts`'s module-level `randomUUID()` call, potentially evaluate)
+// the whole node:crypto-touching chain for the Edge runtime too, which
+// caused build warnings and could throw if that Edge bundle were ever
+// actually loaded. A dynamic import is only ever reached from code that has
+// already confirmed it's running under Node.js.
+function startNotificationWorker() {
+  const globalAny = global as unknown as Record<string, boolean>;
+  if (globalAny[NOTIFICATION_WORKER_GLOBAL_FLAG]) {
+    return;
+  }
+  globalAny[NOTIFICATION_WORKER_GLOBAL_FLAG] = true;
+
+  import("@/lib/services/notification-engine/production-worker")
+    .then(({ startProductionNotificationWorker }) => startProductionNotificationWorker())
+    .catch((error) => {
+      console.error("Failed to start Notification Engine worker:", error);
+    });
+}
+
 /**
  * Continuous ingestion from `public.zkt_attendance` (the "Local DB Table"
  * attendance calculation method — see zkt-attendance-poller.service.ts).
@@ -379,6 +413,7 @@ export async function register() {
     startDailyTimelineCron();
     startZKTecoSyncCron();
     startLeaveAutomationCron();
+    startNotificationWorker();
     startZktAttendancePollCron();
     void runZktAttendanceStartupReconciliation();
   }

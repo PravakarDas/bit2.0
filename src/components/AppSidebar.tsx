@@ -30,6 +30,7 @@ import {
     Crown,
     Plus,
     Settings,
+    Mail,
     Fingerprint,
 } from "lucide-react";
 
@@ -65,6 +66,7 @@ const adminItems = [
     { title: "Leave-board", url: "/admin/leave-board", icon: ScrollText },
     { title: "Employee Notes", url: "/admin/employee-notes", icon: ClipboardList },
     { title: "Notifications", url: "/admin/notifications", icon: Bell },
+    { title: "Notification Center", url: "/admin/notification-center", icon: Mail },
     { title: "Notice", url: "/admin/notices", icon: Megaphone },
     { title: "Role Management", url: "/admin/role-management", icon: UserCog },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
@@ -97,7 +99,7 @@ const requestSubItems = [
 
 const loanSubItems = [
     { title: "View All Loans", url: "/admin/loans", icon: Banknote },
-    { title: "Create Manual Loan", url: "/admin/loans/manual-create", icon: Plus },
+    { title: "Register Existing Loan", url: "/admin/loans/manual-create", icon: Plus },
 ];
 
 const employeeItems = [
@@ -105,6 +107,7 @@ const employeeItems = [
     { title: "My Late Check-Ins", url: "/late-checkins", icon: Clock },
     { title: "Timeline Modify Requests", url: "/timeline-modification-requests", icon: ClipboardList },
     { title: "My Profile", url: "/profile", icon: UserCircle },
+    { title: "Notification Center", url: "/notification-center", icon: Mail },
     { title: "My Timeline", url: "/timeline", icon: Clock },
     { title: "Calendar", url: "/calendar", icon: CalendarDays },
     { title: "Employee Contact", url: "/employee-contacts", icon: Contact },

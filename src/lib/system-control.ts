@@ -41,3 +41,13 @@ export function normalizeCronPart(value: number, min: number, max: number, fallb
   }
   return value;
 }
+
+/**
+ * Loan processing mode chosen by admin. AUTO = EMI schedule + automatic payroll
+ * deduction (original behaviour). MANUAL = no schedule; admin picks the deduction
+ * amount per employee/loan while running payroll.
+ */
+export async function getLoanMode(): Promise<"AUTO" | "MANUAL"> {
+  const settings = await getOrCreateSystemControlSettings();
+  return settings.loanMode === "MANUAL" ? "MANUAL" : "AUTO";
+}

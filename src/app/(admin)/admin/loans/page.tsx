@@ -19,6 +19,7 @@ import { ProcessEMIButton } from "@/components/admin/loans/ProcessEMIButton";
 import { EmiManageDialog } from "@/components/admin/EmiManageDialog";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
 import { DeleteLoanButton } from "@/components/admin/DeleteLoanButton";
+import { ManualLoanLedgerDialog } from "@/components/admin/loans/ManualLoanLedgerDialog";
 
 interface Loan {
     id: string;
@@ -65,6 +66,7 @@ interface Loan {
 export default function AdminLoansPage() {
     const [allLoans, setAllLoans] = useState<Loan[]>([]);
     const [canDeleteLoans, setCanDeleteLoans] = useState(false);
+    const [loanMode, setLoanMode] = useState<"AUTO" | "MANUAL">("AUTO");
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
@@ -74,6 +76,7 @@ export default function AdminLoansPage() {
             const result = await getAllLoansWithManagerInfo();
             setAllLoans(result.loans as Loan[]);
             setCanDeleteLoans(result.canDeleteLoans);
+            setLoanMode(result.loanMode);
         } catch (error) {
             console.error("Failed to load loans:", error);
         } finally {
@@ -131,6 +134,9 @@ export default function AdminLoansPage() {
                     <p className="text-muted-foreground mt-1">
                         Review pending requests and monitor active loan portfolios.
                     </p>
+                    <Badge variant="outline" className="mt-2">
+                        Mode for new approvals: {loanMode === "MANUAL" ? "Manual (payroll deduction by admin)" : "Automatic (EMI)"}
+                    </Badge>
                 </div>
                 <div className="flex items-center gap-2">
                     <Button
@@ -142,7 +148,7 @@ export default function AdminLoansPage() {
                         <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
                         Refresh
                     </Button>
-                    <ProcessEMIButton />
+                    {(loanMode === "AUTO" || allLoans.some(l => l.emiState && l.status === "ACTIVE")) && <ProcessEMIButton />}
                 </div>
             </div>
 
@@ -216,6 +222,7 @@ export default function AdminLoansPage() {
                                                         user: { email: loan.user.email }
                                                     }}
                                                     approvalMode="bypass_manager"
+                                                    loanMode={loanMode}
                                                     onApprovalSuccess={handleApprovalSuccess}
                                                 />
                                             </TableCell>
@@ -286,6 +293,7 @@ export default function AdminLoansPage() {
                                                         user: { email: loan.user.email }
                                                     }}
                                                     approvalMode="manager_verified"
+                                                    loanMode={loanMode}
                                                     onApprovalSuccess={handleApprovalSuccess}
                                                 />
                                             </TableCell>
@@ -346,7 +354,9 @@ export default function AdminLoansPage() {
                                                 ৳{loan.remainingPrincipal.toLocaleString("en-BD")}
                                             </TableCell>
                                             <TableCell className="text-right tabular-nums">
-                                                ৳{loan.emiState?.currentEmi?.toLocaleString("en-BD") || "0"}
+                                                {loan.emiState
+                                                    ? `৳${loan.emiState.currentEmi?.toLocaleString("en-BD") || "0"}`
+                                                    : <span className="text-xs text-muted-foreground">Manual</span>}
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 <Badge 
@@ -366,7 +376,11 @@ export default function AdminLoansPage() {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    <EmiManageDialog loan={loan} />
+                                                    {loan.emiState ? (
+                                                        <EmiManageDialog loan={loan} />
+                                                    ) : (
+                                                        <ManualLoanLedgerDialog loan={loan} onChanged={loadLoans} />
+                                                    )}
                                                     {canDeleteLoans && (
                                                         <DeleteLoanButton
                                                             loanId={loan.id}

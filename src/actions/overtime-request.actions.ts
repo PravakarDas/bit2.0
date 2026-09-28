@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { OvertimeRequestStatus } from "@prisma/client";
 import { isArchivedStatus } from "@/lib/employee-status";
+import { notificationEngineContainer } from "@/lib/services/notification-engine";
 
 // Helper to convert HH:MM to minutes
 function timeStringToMinutes(timeStr: string): number {
@@ -327,6 +328,7 @@ export async function approveOvertimeRequest(requestId: string) {
             id: true,
             firstName: true,
             lastName: true,
+            email: true,
           },
         },
       },
@@ -443,6 +445,34 @@ export async function approveOvertimeRequest(requestId: string) {
     revalidatePath("/employee/overtime-requests");
     revalidatePath("/employee/attendance");
 
+    // Notification Engine integration (Phase 15) — best-effort, after the
+    // transaction commits: a business action's own success must never hinge
+    // on a notification going out. Same pattern as approveLoan()'s
+    // LOAN_APPROVED call (loan.actions.ts).
+    if (request.user.email) {
+      try {
+        await notificationEngineContainer.notificationService.raiseEvent({
+          eventType: "OVERTIME_REQUEST_APPROVED",
+          dedupeKey: `OVERTIME_REQUEST_APPROVED:${requestId}`,
+          sourceDomain: "overtime",
+          payload: {
+            employee: {
+              id: request.user.id,
+              name: `${request.user.firstName ?? ""} ${request.user.lastName ?? ""}`.trim() || request.user.email,
+            },
+            totalOvertime: request.totalOvertime,
+            overtimeDate: request.overtimeDate.toISOString(),
+            approvedBy: `${admin.firstName ?? ""} ${admin.lastName ?? ""}`.trim(),
+          },
+          recipients: [
+            { channel: "EMAIL", recipientAddress: request.user.email, recipientUserId: request.user.id },
+          ],
+        });
+      } catch (error) {
+        console.error("notificationService.raiseEvent(OVERTIME_REQUEST_APPROVED) failed:", error);
+      }
+    }
+
     return { success: true, data: result };
   } catch (error) {
     console.error("Error approving overtime request:", error);
@@ -478,6 +508,7 @@ export async function declineOvertimeRequest(requestId: string, declineReason: s
             id: true,
             firstName: true,
             lastName: true,
+            email: true,
           },
         },
       },
@@ -533,6 +564,33 @@ export async function declineOvertimeRequest(requestId: string, declineReason: s
     revalidatePath("/admin/overtime-requests");
     revalidatePath("/admin/notifications");
     revalidatePath("/employee/overtime-requests");
+
+    // Notification Engine integration (Phase 15) — best-effort, after the
+    // update commits; see approveOvertimeRequest's identical comment.
+    if (request.user.email) {
+      try {
+        await notificationEngineContainer.notificationService.raiseEvent({
+          eventType: "OVERTIME_REQUEST_DECLINED",
+          dedupeKey: `OVERTIME_REQUEST_DECLINED:${requestId}`,
+          sourceDomain: "overtime",
+          payload: {
+            employee: {
+              id: request.user.id,
+              name: `${request.user.firstName ?? ""} ${request.user.lastName ?? ""}`.trim() || request.user.email,
+            },
+            totalOvertime: request.totalOvertime,
+            overtimeDate: request.overtimeDate.toISOString(),
+            declinedBy: `${admin.firstName ?? ""} ${admin.lastName ?? ""}`.trim(),
+            declineReason,
+          },
+          recipients: [
+            { channel: "EMAIL", recipientAddress: request.user.email, recipientUserId: request.user.id },
+          ],
+        });
+      } catch (error) {
+        console.error("notificationService.raiseEvent(OVERTIME_REQUEST_DECLINED) failed:", error);
+      }
+    }
 
     return { success: true, data: updatedRequest };
   } catch (error) {

@@ -1,4 +1,4 @@
-import { getPayrollAggregation } from "@/actions/payroll.actions";
+import { getPayrollAggregation, getFinalizedPayrollForMonth } from "@/actions/payroll.actions";
 import { PayrollClient } from "@/components/admin/PayrollClient";
 import { PayrollSelectors } from "@/components/admin/PayrollSelectors";
 
@@ -14,6 +14,9 @@ export default async function PayrollPage({
     const selectedMonth = params.month ? parseInt(params.month) : 1;
 
     const payrollData = await getPayrollAggregation(selectedMonth, selectedYear);
+    const finalizedData = await getFinalizedPayrollForMonth(
+        `${selectedYear}-${selectedMonth.toString().padStart(2, "0")}`
+    );
 
     return (
         <div className="container mx-auto space-y-6">
@@ -29,7 +32,10 @@ export default async function PayrollPage({
             </div>
 
             <PayrollClient
-                initialData={payrollData as unknown as Parameters<typeof PayrollClient>[0]["initialData"]}
+                // Remount when switching month so the per-employee form state starts fresh.
+                key={`${selectedYear}-${selectedMonth}`}
+                initialData={payrollData}
+                finalized={finalizedData}
                 month={selectedMonth}
                 year={selectedYear}
             />

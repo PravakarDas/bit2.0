@@ -28,8 +28,45 @@ export async function processLoanPayment(loanId: string, amount: number, type: P
             include: { emiState: true }
         });
 
-        if (!loan || !loan.emiState) {
-            throw new Error("Loan or EmiState not found");
+        if (!loan) {
+            throw new Error("Loan not found");
+        }
+
+        // Manual-mode loans have no EmiState/waterfall: a payment simply reduces the principal.
+        if (!loan.emiState) {
+            if (amount > loan.remainingPrincipal) {
+                throw new Error(`Payment exceeds remaining balance (৳${loan.remainingPrincipal})`);
+            }
+
+            const remaining = loan.remainingPrincipal - amount;
+
+            await tx.payment.create({
+                data: {
+                    loanId,
+                    amount,
+                    type,
+                    payrollMonth: new Date().toISOString().slice(0, 7), // YYYY-MM
+                }
+            });
+
+            const settledLoan = await tx.loan.update({
+                where: { id: loanId },
+                data: {
+                    remainingPrincipal: remaining,
+                    status: remaining === 0 ? LoanStatus.CLOSED : loan.status
+                }
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    loanId,
+                    oldEmi: 0,
+                    newEmi: 0,
+                    changeReason: `Payment of ${amount} (${type}) processed.`
+                }
+            });
+
+            return settledLoan;
         }
 
         const oldEmi = loan.emiState.currentEmi;

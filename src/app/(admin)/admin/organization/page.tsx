@@ -4,10 +4,11 @@ import { getBranches } from "@/actions/branch.actions";
 import { getBonusTypes } from "@/actions/bonus.actions";
 import { getAllowanceTypes, getSystemSettings } from "@/actions/settings.actions";
 import { getAllLeaveTypes } from "@/actions/leave.actions";
+import { getPdfTemplates } from "@/actions/pdf-template.actions";
 import { UnifiedOrganizationClient } from "@/components/admin/UnifiedOrganizationClient";
 
 export default async function OrganizationPage() {
-  const [departments, designations, branches, bonuses, allowances, systemSettings, leaveTypes] = await Promise.all([
+  const [departments, designations, branches, bonuses, allowances, systemSettings, leaveTypes, pdfTemplates] = await Promise.all([
     getAllDepartments(),
     getAllDesignations(),
     getBranches(),
@@ -15,6 +16,7 @@ export default async function OrganizationPage() {
     getAllowanceTypes(),
     getSystemSettings(),
     getAllLeaveTypes(),
+    getPdfTemplates(),
   ]);
 
   return (
@@ -26,6 +28,7 @@ export default async function OrganizationPage() {
       allowances={allowances}
       systemSettings={systemSettings}
       leaveTypes={leaveTypes}
+      pdfTemplates={pdfTemplates}
     />
   );
 }

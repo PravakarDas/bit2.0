@@ -44,6 +44,11 @@ enum LoanStatus {
   MANAGER_REJECTED
 }
 
+enum LoanMode {
+  AUTO
+  MANUAL
+}
+
 enum PaymentType {
   EMI
   MANUAL
@@ -305,6 +310,12 @@ model User {
   notesReceived EmployeeNote[]
   notesCreated  EmployeeNote[] @relation("EmployeeNoteCreator")
 
+  // Notification Engine relations (see NotificationEngineDesign.md) — additive only, no new columns on User itself
+  notificationJobs           NotificationJob[]
+  notificationPreferences    NotificationPreference[]
+  // Phase 12 (Notification Center) — same additive convention as the two lines above.
+  notificationJobInboxStates NotificationJobInboxState[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -348,16 +359,36 @@ model Branch {
 
   // Timeline/Attendance Settings
   checkInTime   String   @default("09:00") // Format: "HH:MM" (24-hour)
-  checkOutTime  String   @default("18:00") // Format: "HH:MM" (24-hour)  
+  checkOutTime  String   @default("18:00") // Format: "HH:MM" (24-hour)
   breakDuration String   @default("01:00") // Format: "HH:MM" (duration)
   weeklyOffDays String[] @default(["SUNDAY"]) // Array of day names: MONDAY, TUESDAY, etc.
 
   users                   User[]
   bonuses                 BonusType[]
   targetedBreakingNotices BreakingNotice[] @relation("BreakingNoticeTargetBranch")
+  pdfTemplate             PdfTemplate?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Blank letterhead PDF used as the background of generated PDFs (e.g. payslips).
+// branchId = null is the shared "Default" template used by branches without their own.
+// Stored in the database (not on disk) so it survives redeploys; capped at 5 MB on upload.
+model PdfTemplate {
+  id       String  @id @default(cuid())
+  branchId String? @unique
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  fileName  String
+  sizeBytes Int
+  pageWidth  Float // first page size in PDF points
+  pageHeight Float
+  data      Bytes
+
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model SystemSettings {
@@ -450,6 +481,11 @@ model MedicalClaim {
   attachmentUrl String?
   status        ClaimStatus @default(PENDING)
 
+  // Set when the claim is paid through payroll: what was actually paid (may differ from `amount`)
+  // and the payroll month. Admin-added payroll amounts with no claim are stored as their own PAID row.
+  paidAmount   Float?
+  payrollMonth String?
+
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
@@ -458,6 +494,11 @@ model MedicalClaim {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum SalaryPaymentStatus {
+  DRAFT // saved by admin, no money effects applied yet (wallet/medical/loans untouched)
+  FINALIZED // payslip sent; wallet cleared, medical marked paid, loan balances updated
 }
 
 model SalaryPayment {
@@ -471,10 +512,19 @@ model SalaryPayment {
   walletAdjustment     Float  @default(0)
   netAmount            Float
 
+  // Draft/finalize workflow. Rows that existed before this workflow are FINALIZED.
+  status          SalaryPaymentStatus @default(FINALIZED)
+  customBonus     Float               @default(0) // one-off bonus for this month, already included in totalBonuses
+  customBonusNote String?
+  draftInputs     Json? // admin selections behind a DRAFT: bonus ids, EMI switch, manual loan deductions
+  payslipSentAt   DateTime?
+
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
+
+  @@index([month, status])
 }
 
 model Loan {
@@ -578,22 +628,23 @@ model SystemAudit {
 }
 
 model SystemControlSettings {
-  id                         String  @id @default("global")
-  appTimezone                String  @default("Asia/Dhaka")
-  timelineCronEnabled        Boolean @default(true)
-  timelineCronHour           Int     @default(1)
-  timelineCronMinute         Int     @default(24)
-  zktecoCronEnabled          Boolean @default(true)
-  zktecoCronMode             String  @default("DAILY") // "DAILY" | "INTERVAL"
-  zktecoIntervalMinutes      Int     @default(15)
-  zktecoCronHour             Int     @default(11)
-  zktecoCronMinute           Int     @default(0)
-  leaveAutomationCronEnabled Boolean @default(true)
-  leaveAutomationCronHour    Int     @default(23)
-  leaveAutomationCronMinute  Int     @default(43)
-  zktecoBaseUrl              String  @default("")
-  zktecoUsername             String  @default("")
-  zktecoPassword             String  @default("")
+  id                         String   @id @default("global")
+  appTimezone                String   @default("Asia/Dhaka")
+  timelineCronEnabled        Boolean  @default(true)
+  timelineCronHour           Int      @default(1)
+  timelineCronMinute         Int      @default(24)
+  zktecoCronEnabled          Boolean  @default(true)
+  zktecoCronMode             String   @default("DAILY") // "DAILY" | "INTERVAL"
+  zktecoIntervalMinutes      Int      @default(15)
+  zktecoCronHour             Int      @default(11)
+  zktecoCronMinute           Int      @default(0)
+  leaveAutomationCronEnabled Boolean  @default(true)
+  leaveAutomationCronHour    Int      @default(23)
+  leaveAutomationCronMinute  Int      @default(43)
+  zktecoBaseUrl              String   @default("")
+  zktecoUsername             String   @default("")
+  zktecoPassword             String   @default("")
+  loanMode                   LoanMode @default(AUTO) // Applies to loans approved from now on; existing loans keep their own behaviour
 
   // Phase: attendance calculation source. "ZKTECO_API" (default, existing
   // behavior — live HTTP polling via zkteco-sync.actions.ts) vs
@@ -626,6 +677,67 @@ model SystemControlChangeLog {
   previousValues Json?
   newValues      Json?
   createdAt      DateTime @default(now())
+}
+
+model EmailConfig {
+  id                   String   @id @default("global")
+  provider             String   @default("GMAIL")
+  smtpHost             String   @default("smtp.gmail.com")
+  smtpPort             Int      @default(587)
+  secure               Boolean  @default(false)
+  senderEmail          String   @default("")
+  appPasswordEncrypted String   @default("")
+  updatedById          String?
+  updatedByEmail       String?
+  updatedByRole        String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+// Google Drive service-account config (Payroll PDF archival) — singleton row,
+// same "global" id + encrypted-secret pattern as EmailConfig above.
+// serviceAccountEmail + privateKeyEncrypted are the two fields a Google
+// service account needs to authenticate (JWT auth, no OAuth consent flow).
+// rootFolderId is the Drive folder ID (shared with the service account, or
+// inside sharedDriveId) under which the "Payroll" folder tree is found/
+// created — a bare service account has no usable personal Drive storage of
+// its own, so this anchor must point at a location a human has already
+// shared with it.
+// Phase 19: authenticationMethod defaults to SERVICE_ACCOUNT so the existing
+// singleton row (and every row created before this enum existed) is treated
+// as Service Account mode with no data migration and no forced reconnect.
+// The four oauth* fields are additive and unused until authenticationMethod
+// is switched to OAUTH2 — see GoogleDriveOAuthPlan.md.
+enum GoogleDriveAuthMethod {
+  SERVICE_ACCOUNT
+  OAUTH2
+}
+
+model GoogleDriveConfig {
+  id                   String                @id @default("global")
+  authenticationMethod GoogleDriveAuthMethod @default(SERVICE_ACCOUNT)
+
+  // Service Account fields — unchanged, still the default/only-used path
+  // until authenticationMethod is switched to OAUTH2.
+  serviceAccountEmail String @default("")
+  privateKeyEncrypted String @default("")
+
+  // OAuth 2.0 fields — populated only in OAUTH2 mode. No access-token column:
+  // googleapis's OAuth2 client refreshes short-lived access tokens in memory
+  // from oauthRefreshTokenEncrypted, so no access token is ever persisted.
+  oauthClientId              String  @default("")
+  oauthClientSecretEncrypted String  @default("")
+  oauthRefreshTokenEncrypted String  @default("")
+  oauthConnectedEmail        String?
+
+  sharedDriveId  String? // set only when rootFolderId lives inside a Shared Drive
+  rootFolderId   String   @default("")
+  rootFolderName String   @default("Payroll")
+  updatedById    String?
+  updatedByEmail String?
+  updatedByRole  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 // Leave Management Models
@@ -1074,4 +1186,302 @@ model EmployeeNote {
 
   @@index([employeeId])
   @@index([createdBy])
+}
+
+// ==================== Notification Engine — Database Foundation ====================
+// Implements the schema described in NotificationEngineDesign.md.
+// Phase 1 (this migration) is database-only: no worker, service, Server Action, or UI
+// code exists yet. AdminNotification/EmployeeNotification/EmailConfig/SystemControlSettings
+// are deliberately left untouched — they remain the in-app channel and the legacy single-
+// provider email config respectively (see design §9, §31).
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  PUSH
+  SLACK
+  TEAMS
+  IN_APP_ADMIN
+  IN_APP_EMPLOYEE
+}
+
+enum NotificationJobStatus {
+  QUEUED
+  PROCESSING
+  SENT
+  RETRY_SCHEDULED
+  FAILED
+  DEAD_LETTER
+  COMPLETED
+}
+
+enum AttemptOutcome {
+  SUCCESS
+  FAILURE
+}
+
+enum NotificationProviderHealthStatus {
+  HEALTHY
+  DEGRADED
+  DOWN
+}
+
+enum DocumentStatus {
+  PENDING_GENERATION
+  GENERATED_LOCAL
+  UPLOADING
+  UPLOADED
+  GENERATION_FAILED
+  UPLOAD_FAILED
+}
+
+// Durable, idempotent record of "a notifiable thing happened" (design §6).
+model NotificationEvent {
+  id                String  @id @default(cuid())
+  eventType         String // e.g. "LOAN_APPROVED" — free-form, growing catalog (matches EmployeeNotification.type precedent)
+  dedupeKey         String  @unique // e.g. "LOAN_APPROVED:{loanId}" — first layer of duplicate prevention (design §17)
+  payload           Json?
+  sourceDomain      String // Which actions.ts domain raised this event, e.g. "loan"
+  triggeredByUserId String? // Plain string, no FK — matches the existing AuditLog.userId precedent
+
+  jobs NotificationJob[]
+
+  createdAt DateTime @default(now())
+
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// One unit of delivery work: one recipient, one channel, one event (design §5, §16, §19, §23).
+model NotificationJob {
+  id String @id @default(cuid())
+
+  eventId String
+  event   NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  channel          NotificationChannel
+  recipientUserId  String?
+  recipient        User?               @relation(fields: [recipientUserId], references: [id], onDelete: SetNull)
+  recipientAddress String // Denormalized snapshot of the address/target actually sent to
+
+  idempotencyKey String @unique // `${dedupeKey}:${channel}:${recipientUserId}` — second layer of duplicate prevention (design §17)
+
+  status        NotificationJobStatus @default(QUEUED)
+  attemptCount  Int                   @default(0)
+  maxAttempts   Int                   @default(5)
+  nextAttemptAt DateTime              @default(now())
+
+  // Crash-recovery lease fields (design §19) — reclaimed by the reaper sweep when lockedAt is stale
+  lockedAt DateTime?
+  lockedBy String?
+
+  documentId String?
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  deliveryAttempts NotificationDeliveryAttempt[]
+
+  // Phase 12 (Notification Center) — virtual back-relation only, required by
+  // Prisma to declare NotificationJobInboxState's FK; produces NO migration
+  // SQL for this table (verified — see NotificationCenterReport.md).
+  inboxStates NotificationJobInboxState[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, nextAttemptAt]) // worker claim query
+  @@index([status, lockedAt]) // crash-recovery reaper query
+  @@index([eventId])
+  @@index([recipientUserId])
+  @@index([channel, status])
+  @@index([createdAt])
+}
+
+// Immutable per-attempt log — full delivery history reconstructable independent of job.status (design §3, §10).
+model NotificationDeliveryAttempt {
+  id String @id @default(cuid())
+
+  jobId String
+  job   NotificationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  providerId String?
+  provider   NotificationProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  attemptNumber Int
+  outcome       AttemptOutcome
+  errorCode     String?
+  errorMessage  String?
+
+  attemptedAt DateTime @default(now())
+
+  @@index([jobId, attemptNumber])
+  @@index([providerId])
+}
+
+// Versioned subject/body content per event type per channel (design §7, §22, §32 — append-style history like BaseSalary).
+model NotificationTemplate {
+  id               String              @id @default(cuid())
+  key              String // Matches NotificationEvent.eventType
+  channel          NotificationChannel
+  subjectTemplate  String? // Not applicable to every channel (e.g. Slack has no subject)
+  bodyTemplateHtml String?
+  bodyTemplateText String?
+  version          Int                 @default(1)
+  isActive         Boolean             @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, channel, version])
+  @@index([key, channel, isActive])
+}
+
+// One configured delivery account with failover priority + health tracking (design §9, §10).
+model NotificationProvider {
+  id                  String                           @id @default(cuid())
+  channel             NotificationChannel
+  name                String // Human-readable label, e.g. "Primary Gmail SMTP"
+  priority            Int                              @default(1) // Lower = tried first
+  configEncrypted     String // AES-256-GCM via existing src/lib/crypto.ts — reuses EMAIL_SECRET_KEY, no new secret key introduced
+  isActive            Boolean                          @default(true)
+  healthStatus        NotificationProviderHealthStatus @default(HEALTHY)
+  consecutiveFailures Int                              @default(0)
+  lastFailureAt       DateTime?
+
+  deliveryAttempts NotificationDeliveryAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([channel, priority])
+  @@index([channel, healthStatus])
+}
+
+// Per-user opt-in/opt-out for a notification type + channel combination (design §6, §31).
+model NotificationPreference {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  notificationType String // Matches NotificationEvent.eventType
+  channel          NotificationChannel
+  isEnabled        Boolean             @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, notificationType, channel])
+  @@index([userId])
+}
+
+// Singleton runtime configuration (design §16, §25, §36, §40) — same id:"global" pattern as
+// SystemControlSettings/EmailConfig; env vars are not involved (engine config is DB-only from day one).
+model NotificationSettings {
+  id String @id @default("global")
+
+  workerPollIntervalSeconds Int @default(10)
+  workerBatchSize           Int @default(20)
+
+  retryBaseDelaySeconds Int   @default(30)
+  retryMaxDelaySeconds  Int   @default(3600)
+  retryMaxAttempts      Int   @default(5)
+  retryJitterRatio      Float @default(0.2)
+
+  completedRetentionDays  Int @default(90)
+  deadLetterRetentionDays Int @default(180)
+
+  emailChannelEnabled    Boolean @default(true)
+  smsChannelEnabled      Boolean @default(false)
+  whatsappChannelEnabled Boolean @default(false)
+  pushChannelEnabled     Boolean @default(false)
+  slackChannelEnabled    Boolean @default(false)
+  teamsChannelEnabled    Boolean @default(false)
+
+  updatedById    String?
+  updatedByEmail String?
+  updatedByRole  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Phase 12 (Notification Center) — purely additive per-recipient UI state
+// (read/archived/deleted) for a NotificationJob. Deliberately a separate side
+// table rather than columns on NotificationJob/NotificationEvent: those two
+// models are frozen Notification Engine infrastructure (Phases 1–11); this
+// state is presentation-layer only and QueueEngine/WorkerRuntime/TemplateEngine/
+// DeliveryManager/NotificationService never read or write it. A row is only
+// created lazily, the first time a recipient interacts with a job (marks it
+// read/archived) — a job with no row here is implicitly unread, unarchived,
+// not deleted (see NotificationCenterReport.md).
+model NotificationJobInboxState {
+  id String @id @default(cuid())
+
+  notificationJobId String
+  notificationJob   NotificationJob @relation(fields: [notificationJobId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  isArchived Boolean   @default(false)
+  archivedAt DateTime?
+
+  // Soft delete (matches EmployeeNote's existing deletedAt convention) — only
+  // ever set for an already-archived notification (see "Delete archived
+  // notification" in NotificationCenterReport.md).
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([notificationJobId, userId])
+  @@index([userId, isRead])
+  @@index([userId, isArchived])
+  @@index([userId, deletedAt])
+}
+
+// One generated file's lifecycle: local generation → Drive upload (design §11–§15).
+model Document {
+  id             String         @id @default(cuid())
+  type           String // e.g. "PAYSLIP", "OFFER_LETTER", "EMI_SCHEDULE" — free-form, open-ended catalog
+  sourceEntityId String // Plain string, no FK — Document can describe any domain entity; matches the
+  // AuditLog.userId / TimelineModificationActionLog.dailyTimeRecordId precedent
+  // for polymorphic, non-enforced references (see DATABASE.md)
+  status         DocumentStatus @default(PENDING_GENERATION)
+
+  localTempPath String?
+  driveFileId   String?
+  driveFileUrl  String?
+
+  generatedAt DateTime?
+  uploadedAt  DateTime?
+
+  notificationJobs NotificationJob[]
+  uploadAttempts   DocumentUploadAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([sourceEntityId])
+  @@index([type, status])
+}
+
+// Immutable per-attempt log for Drive uploads (design §15).
+model DocumentUploadAttempt {
+  id String @id @default(cuid())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  attemptNumber Int
+  outcome       AttemptOutcome
+  errorMessage  String?
+
+  attemptedAt DateTime @default(now())
+
+  @@index([documentId, attemptNumber])
 }

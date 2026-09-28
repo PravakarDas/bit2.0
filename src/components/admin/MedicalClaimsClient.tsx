@@ -1,5 +1,6 @@
 "use client";
 
+import { MedicalAmount } from "@/components/shared/MedicalAmount";
 import { useState, useMemo } from "react";
 import {
     approveMedicalClaim,
@@ -78,6 +79,8 @@ interface Claim {
     amount: number;
     description: string;
     status: string;
+    paidAmount?: number | null;
+    payrollMonth?: string | null;
     attachmentUrl?: string | null;
     createdAt: Date;
     userId: string;
@@ -103,6 +106,7 @@ interface MedicalClaimsClientProps {
             rejected: number;
             totalAmount: number;
             approvedAmount: number;
+            paidAmount: number;
         };
     };
     employeeEntitlements: Entitlement[];
@@ -287,12 +291,14 @@ export default function MedicalClaimsClient({ initialPendingClaims, allClaimsDat
 
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Approved Amount</CardTitle>
+                                <CardTitle className="text-sm font-medium">Paid Amount</CardTitle>
                                 <TrendingUp className="h-4 w-4 text-green-600" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-green-600">৳{allClaimsData.stats.approvedAmount.toLocaleString("en-BD")}</div>
-                                <p className="text-xs text-muted-foreground">Total disbursed</p>
+                                <div className="text-2xl font-bold text-green-600">৳{allClaimsData.stats.paidAmount.toLocaleString("en-BD")}</div>
+                                <p className="text-xs text-muted-foreground">
+                                    Paid via payroll · ৳{allClaimsData.stats.approvedAmount.toLocaleString("en-BD")} approved, awaiting payroll
+                                </p>
                             </CardContent>
                         </Card>
                     </div>
@@ -321,7 +327,7 @@ export default function MedicalClaimsClient({ initialPendingClaims, allClaimsDat
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <span className="text-sm font-semibold">৳{Number(claim.amount).toLocaleString("en-BD")}</span>
+                                            <span className="text-sm font-semibold"><MedicalAmount claim={claim} /></span>
                                             {getStatusBadge(claim.status)}
                                         </div>
                                     </div>
@@ -538,7 +544,7 @@ export default function MedicalClaimsClient({ initialPendingClaims, allClaimsDat
                                                     <p className="line-clamp-2 text-sm">{claim.description}</p>
                                                 </TableCell>
                                                 <TableCell className="text-right tabular-nums font-semibold">
-                                                    ৳{Number(claim.amount).toLocaleString("en-BD")}
+                                                    <MedicalAmount claim={claim} />
                                                 </TableCell>
                                                 <TableCell className="text-center">
                                                     {getStatusBadge(claim.status)}

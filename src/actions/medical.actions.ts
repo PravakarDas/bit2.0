@@ -1,5 +1,6 @@
 "use server";
 
+import { getPaidMedicalAmount } from "@/lib/medical-history";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getDbUser } from "./user.actions";
@@ -307,6 +308,8 @@ export async function getAllMedicalClaimsHistory() {
         rejected: claims.filter(c => c.status === "REJECTED").length,
         totalAmount: claims.reduce((sum, c) => sum + Number(c.amount), 0),
         approvedAmount: claims.filter(c => c.status === "APPROVED").reduce((sum, c) => sum + Number(c.amount), 0),
+        // Actually paid out through payroll (falls back to the claimed amount for older paid claims)
+        paidAmount: claims.filter(c => c.status === "PAID").reduce((sum, c) => sum + getPaidMedicalAmount(c), 0),
     };
 
     return { claims, stats };

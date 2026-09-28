@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { checkZktecoServer, updateSystemControlConfig } from "@/actions/system-control.actions";
+import EmailConfigCard from "@/components/system/EmailConfigCard";
+import GoogleDriveConfigCard from "@/components/system/GoogleDriveConfigCard";
 
 type SettingsState = {
   appTimezone: string;
@@ -29,6 +31,7 @@ type SettingsState = {
   zktecoBaseUrl: string;
   zktecoUsername: string;
   zktecoPassword: string;
+  loanMode: "AUTO" | "MANUAL";
   attendanceCalculationMethod: string;
   zktAttendancePollEnabled: boolean;
   zktAttendancePollIntervalSeconds: number;
@@ -46,11 +49,36 @@ type ChangeLog = {
   newValues?: Record<string, unknown> | null;
 };
 
+type EmailConfigState = {
+  provider: string;
+  smtpHost: string;
+  smtpPort: number;
+  secure: boolean;
+  senderEmail: string;
+  hasAppPassword: boolean;
+};
+
+type GoogleDriveConfigState = {
+  authenticationMethod: "SERVICE_ACCOUNT" | "OAUTH2";
+  serviceAccountEmail: string;
+  sharedDriveId: string | null;
+  rootFolderId: string;
+  rootFolderName: string;
+  hasPrivateKey: boolean;
+  oauthClientId: string;
+  hasOauthClientSecret: boolean;
+  hasOauthRefreshToken: boolean;
+  oauthConnectedEmail: string | null;
+  oauthRedirectUri: string | null;
+};
+
 interface SystemControlClientProps {
   initialSettings: SettingsState;
   canEditSensitive: boolean;
   isManager: boolean;
   logs: ChangeLog[];
+  emailConfig?: EmailConfigState;
+  googleDriveConfig?: GoogleDriveConfigState;
 }
 
 function twoDigits(value: number) {
@@ -86,6 +114,7 @@ function formatHistoryField(field: string) {
     zktecoBaseUrl: "ZKTeco Base URL",
     zktecoUsername: "ZKTeco Username",
     zktecoPassword: "ZKTeco Password",
+    loanMode: "Loan Processing Mode",
     attendanceCalculationMethod: "Attendance Calculation Method",
     zktAttendancePollEnabled: "Attendance DB Polling",
     zktAttendancePollIntervalSeconds: "Attendance DB Poll Interval (sec)",
@@ -99,6 +128,8 @@ export default function SystemControlClient({
   canEditSensitive,
   isManager,
   logs,
+  emailConfig,
+  googleDriveConfig,
 }: SystemControlClientProps) {
   const [form, setForm] = useState<SettingsState>(initialSettings);
   const [isSaving, startSave] = useTransition();
@@ -373,6 +404,41 @@ export default function SystemControlClient({
           </div>
 
           <div className="space-y-3">
+            <Label>Loan Processing Mode</Label>
+            <p className="text-xs text-muted-foreground">
+              Applies to loans approved from now on. Loans already active keep the behaviour they were approved with.
+              {!canEditSensitive && " Only Admin/HR can change this."}
+            </p>
+            <RadioGroup
+              value={form.loanMode === "MANUAL" ? "MANUAL" : "AUTO"}
+              onValueChange={(value: string) =>
+                setForm((prev) => ({ ...prev, loanMode: value === "MANUAL" ? "MANUAL" : "AUTO" }))
+              }
+              disabled={!canEditSensitive}
+              className="gap-3"
+            >
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <RadioGroupItem value="AUTO" id="loan-mode-auto" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <Label htmlFor="loan-mode-auto" className="font-medium">Automatic (EMI)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Grace period + EMI schedule; the EMI is deducted automatically in payroll.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <RadioGroupItem value="MANUAL" id="loan-mode-manual" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <Label htmlFor="loan-mode-manual" className="font-medium">Manual</Label>
+                  <p className="text-xs text-muted-foreground">
+                    No schedule and no automatic deduction. Admin chooses the amount to deduct per loan, per month, while running payroll.
+                  </p>
+                </div>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <div className="space-y-3">
             <Label>Attendance Data Source</Label>
             <p className="text-xs text-muted-foreground">
               Choose where check-in/check-out/break data is captured from. Switching this does not affect
@@ -454,6 +520,10 @@ export default function SystemControlClient({
           </div>
         </CardContent>
       </Card>
+
+      {emailConfig && <EmailConfigCard initialConfig={emailConfig} />}
+
+      {googleDriveConfig && <GoogleDriveConfigCard initialConfig={googleDriveConfig} />}
 
       <Card>
         <CardHeader>
