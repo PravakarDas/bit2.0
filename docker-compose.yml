@@ -39,6 +39,9 @@ services:
     image: bitcode-hrm-postgres:latest
     container_name: bitcode-hrm-postgres
     restart: unless-stopped
+    # Give postgres time to checkpoint and shut down cleanly on `compose down`
+    # (the 10s default can SIGKILL it and force crash recovery on next start).
+    stop_grace_period: 60s
     environment:
       # --- Postgres ---
       POSTGRES_DB: ${DB_NAME:-hrm}
@@ -66,8 +69,8 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 20
+      start_period: 120s
     networks:
       - hrm-internal
 

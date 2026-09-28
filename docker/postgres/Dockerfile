@@ -1,4 +1,4 @@
-FROM postgres:17-alpine
+FROM postgres:17.11-alpine3.24
 
 # Tini supervises crond + postgres so signals propagate and zombies are reaped.
 # barman-cloud-* are installed into a venv to avoid touching the system python.

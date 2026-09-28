@@ -29,7 +29,11 @@ function redirectWithStatus(origin: string, status: "success" | "error", reason?
 }
 
 export async function GET(request: NextRequest) {
-  const origin = request.nextUrl.origin;
+  // Behind a reverse proxy (Traefik in production) `request.nextUrl.origin`
+  // is the container's own bind address (`localhost:3000`), not the public
+  // domain — so redirect back via the same configured public origin that
+  // the OAuth redirect URI is built from.
+  const origin = process.env.NEXT_PUBLIC_APP_URL ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin : request.nextUrl.origin;
   const searchParams = request.nextUrl.searchParams;
 
   // Read-then-clear immediately, before any other branch — makes the state
