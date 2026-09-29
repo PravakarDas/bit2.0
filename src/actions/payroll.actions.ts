@@ -9,7 +9,7 @@ import { MANUAL_MEDICAL_DESCRIPTION_PREFIX } from "@/lib/medical-history";
 import { loadLetterheadResolver } from "@/lib/services/pdf-template.service";
 import { formatEmployeeCode } from "@/lib/employee-code";
 import { walletClearingDescription, withoutPreviousPayrollClearing } from "@/lib/payroll-wallet";
-import { shouldGeneratePayroll } from "@/lib/employee-status";
+import { getArchivedTypeStatuses } from "@/lib/employee-status";
 import { createAdminNotification } from "./notification.actions";
 import { notificationEngineContainer } from "@/lib/services/notification-engine";
 import { generatePayslipPdf } from "@/lib/services/payslip-pdf.service";
@@ -196,7 +196,6 @@ function resolveAutoDeductions(
 
 async function computePayrollAggregation(month: number, year: number): Promise<PayrollAggregation[]> {
     const payrollMonth = `${year}-${month.toString().padStart(2, '0')}`;
-    const currentDate = new Date(year, month - 1, 1); // First day of the payroll month
 
     const users = await prisma.user.findMany({
         where: {
@@ -208,15 +207,13 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
                     status: SalaryPaymentStatus.FINALIZED
                 }
             },
+            // Only currently active employees are paid; archived ones (resigned, layoff, ...)
+            // stay visible only through their already-finalized payslips.
+            isArchived: false,
             OR: [
-                // Active employees
-                { isArchived: false },
-                // Archived employees still within payroll continuation period
-                {
-                    isArchived: true,
-                    archivedAt: { not: null }
-                }
-            ]
+                { employeeStatus: null },
+                { employeeStatus: { notIn: getArchivedTypeStatuses() } },
+            ],
         },
         include: {
             branch: {
@@ -257,20 +254,6 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
     });
     const defaultMedicalLimit = (await prisma.systemSettings.findUnique({ where: { id: "global" } }))?.medicalClaimLimit ?? 500;
 
-    // Filter archived employees based on payroll continuation logic
-    const eligibleUsers = users.filter((user) => {
-        if (!user.isArchived) {
-            return true; // Include all active employees
-        }
-
-        // For archived employees, check if they're within payroll continuation period
-        return shouldGeneratePayroll(
-            user.archivedAt,
-            user.payrollContinuationMonths,
-            currentDate
-        );
-    });
-
     const draftRows = await prisma.salaryPayment.findMany({
         where: { month: payrollMonth, status: SalaryPaymentStatus.DRAFT },
         orderBy: { createdAt: "asc" },
@@ -297,7 +280,7 @@ async function computePayrollAggregation(month: number, year: number): Promise<P
         },
     });
 
-    return eligibleUsers.map((user) => {
+    return users.map((user) => {
         // All unpaid claims: approved ones, plus pending ones (paying a pending claim approves it)
         const medicalApproved = user.medicalClaims
             .filter((claim) => claim.status === ClaimStatus.APPROVED)
