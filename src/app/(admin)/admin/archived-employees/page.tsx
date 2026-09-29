@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ArchiveFilters } from "@/components/admin/ArchiveFilters";
+import { ResetEmployeeDataButton } from "@/components/admin/ResetEmployeeDataButton";
 
 interface SearchParams {
     fromDate?: string;
@@ -78,9 +79,12 @@ export default async function ArchivedEmployeesPage({
                                             </div>
                                         </div>
                                     </div>
-                                    <Link href={`/admin/employees/${employee.id}`}>
-                                        <Button variant="outline" size="sm">View Profile</Button>
-                                    </Link>
+                                    <div className="flex items-center gap-2">
+                                        <Link href={`/admin/employees/${employee.id}`}>
+                                            <Button variant="outline" size="sm">View Profile</Button>
+                                        </Link>
+                                        <ResetEmployeeDataButton userId={employee.id} />
+                                    </div>
                                 </div>
                             ))}
                         </div>
