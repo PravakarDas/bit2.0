@@ -120,7 +120,18 @@ function startDailyTimelineCron() {
   let lastRunDate = "";
 
   const runIfDue = async () => {
-    const runtime = await getRuntimeSystemControlConfig();
+    let runtime: Awaited<ReturnType<typeof getRuntimeSystemControlConfig>>;
+    try {
+      runtime = await getRuntimeSystemControlConfig();
+    } catch (error) {
+      // A DB blip here must never escape this tick: setInterval never awaits/catches its
+      // callback's returned promise, so an uncaught rejection would be an unhandled
+      // rejection at the process level — which crashes the whole server (Node's default
+      // since v15), taking the web server down with it, not just this cron. Skip this tick
+      // and retry on the next one instead.
+      console.error("Daily timeline cron: failed to read system control settings, skipping this tick:", error);
+      return;
+    }
     if (!runtime.timelineCronEnabled) {
       return;
     }
@@ -199,7 +210,14 @@ function startZKTecoSyncCron() {
       return;
     }
 
-    const runtime = await getRuntimeSystemControlConfig();
+    let runtime: Awaited<ReturnType<typeof getRuntimeSystemControlConfig>>;
+    try {
+      runtime = await getRuntimeSystemControlConfig();
+    } catch (error) {
+      // See startDailyTimelineCron's identical guard for why this must never be unguarded.
+      console.error("ZKTeco sync cron: failed to read system control settings, skipping this tick:", error);
+      return;
+    }
     if (!runtime.zktecoCronEnabled) {
       return;
     }
@@ -251,7 +269,14 @@ function startLeaveAutomationCron() {
   let lastRunDate = "";
 
     const runIfDue = async () => {
-    const runtime = await getRuntimeSystemControlConfig();
+    let runtime: Awaited<ReturnType<typeof getRuntimeSystemControlConfig>>;
+    try {
+      runtime = await getRuntimeSystemControlConfig();
+    } catch (error) {
+      // See startDailyTimelineCron's identical guard for why this must never be unguarded.
+      console.error("Leave automation cron: failed to read system control settings, skipping this tick:", error);
+      return;
+    }
     if (!runtime.leaveAutomationCronEnabled) {
       return;
     }
@@ -351,7 +376,16 @@ function startZktAttendancePollCron() {
       return;
     }
 
-    const runtime = await getRuntimeSystemControlConfig();
+    let runtime: Awaited<ReturnType<typeof getRuntimeSystemControlConfig>>;
+    try {
+      runtime = await getRuntimeSystemControlConfig();
+    } catch (error) {
+      // See startDailyTimelineCron's identical guard for why this must never be unguarded.
+      // This one ticks every 5s, so an unguarded DB blip here is the most likely of the four
+      // to actually fire during a real outage.
+      console.error("zkt_attendance poll: failed to read system control settings, skipping this tick:", error);
+      return;
+    }
     if (runtime.attendanceCalculationMethod !== "ZKT_ATTENDANCE_TABLE" || !runtime.zktAttendancePollEnabled) {
       return;
     }
@@ -408,8 +442,33 @@ async function runZktAttendanceStartupReconciliation() {
   }
 }
 
+/**
+ * Last-resort safety net. This process serves HTTP traffic AND runs five in-process
+ * background loops (the crons above, the notification worker) for the lifetime of the
+ * container — there is no separate worker process. Every loop above is now audited to
+ * catch its own errors per tick, but Node's default behavior for anything that still slips
+ * through as an unhandled promise rejection is to terminate the entire process (since
+ * Node 15) — which would kill the web server too, over a background job's transient
+ * failure (e.g. a DB blip). Log instead of crashing, so one bad tick degrades that one
+ * feature, not the whole site. `uncaughtException` is also logged rather than left to
+ * Node's default (which is likewise to crash): Node's own docs warn that resuming after
+ * one risks continuing with corrupted state, but for a bug we don't yet know the shape of,
+ * an unexpected restart-under-load (this exact incident, repeated) is the worse default for
+ * a site with real users — this handler exists to surface the error loudly in logs, not to
+ * paper over it; any crash it logs should still be treated as a bug to fix.
+ */
+function installProcessSafetyNet() {
+  process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled promise rejection (process kept alive):", reason);
+  });
+  process.on("uncaughtException", (error) => {
+    console.error("Uncaught exception (process kept alive):", error);
+  });
+}
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    installProcessSafetyNet();
     startDailyTimelineCron();
     startZKTecoSyncCron();
     startLeaveAutomationCron();
