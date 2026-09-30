@@ -172,6 +172,8 @@ function startZKTecoSyncCron() {
   // Single-flight lock shared by both modes so two runs never overlap. A new tick that
   // fires while a sync is still running is skipped; the next eligible tick picks it up.
   let isSyncRunning = false;
+  // Logs the "skipped, DB-table method is active" notice once per state, not every tick.
+  let hasLoggedDbTableModeSkip = false;
 
   // Runs the actual sync once, guarded by the no-overlap lock and the base-URL health check.
   // Returns true if the sync was attempted (so callers can mark progress), false if skipped.
@@ -221,6 +223,27 @@ function startZKTecoSyncCron() {
     if (!runtime.zktecoCronEnabled) {
       return;
     }
+
+    // The two attendance-source settings are independent toggles today (zktecoCronEnabled
+    // here vs. attendanceCalculationMethod for the ZKT_ATTENDANCE_TABLE poller below), but
+    // they are meant to be mutually exclusive in practice: once an org has switched to the
+    // DB-table method, the live API is no longer the source of truth for anything, and this
+    // cron's own reachability probe (isZKTecoBaseUrlReachable) was still firing against it
+    // regardless — producing the EHOSTUNREACH warnings for a device that's deliberately no
+    // longer relied on. This is the only place that probe is called from, so skipping it here
+    // when the DB-table method is active removes the unnecessary network dependency entirely,
+    // without touching the legacy sync path itself for orgs that still use it as their
+    // attendance source.
+    if (runtime.attendanceCalculationMethod === "ZKT_ATTENDANCE_TABLE") {
+      if (!hasLoggedDbTableModeSkip) {
+        console.log(
+          "ZKTeco sync cron: attendanceCalculationMethod is ZKT_ATTENDANCE_TABLE — database attendance data is authoritative, skipping the live API reachability check and sync."
+        );
+        hasLoggedDbTableModeSkip = true;
+      }
+      return;
+    }
+    hasLoggedDbTableModeSkip = false;
 
     const zkTecoBaseUrl = runtime.zktecoBaseUrl;
     const mode = runtime.zktecoCronMode === "INTERVAL" ? "INTERVAL" : "DAILY";
