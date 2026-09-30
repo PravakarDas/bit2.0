@@ -1,0 +1,52 @@
+# Applies to the root Dockerfile's build context (docker build -t bitcode-hrm:latest .).
+# Two things this protects against, independently of the Dockerfile's own COPY list:
+#   1. A leaner, faster build context (nothing here is ever needed to build or run the app).
+#   2. Defense in depth: if someone ever builds locally (where node_modules/.next/.env
+#      genuinely exist on disk, unlike GitHub Actions' fresh checkout), none of it can
+#      leak into the image even before the Dockerfile's own COPY list is considered.
+
+# Dependencies — always reinstalled inside the image, never copied in from the host
+node_modules
+.pnpm-store
+
+# Build output — always rebuilt inside the image
+.next
+out
+.test-build
+
+# Version control
+.git
+.github
+
+# Env files — must never be baked into an image
+.env
+.env.*
+!.env.example
+
+# Docs (this repo keeps a lot of design/report markdown at the root and under docs/) —
+# useful to humans, not needed to build or run the app
+*.md
+docs
+
+# Test / lint / coverage artifacts
+coverage
+playwright-report
+eslint-report.json
+*.tsbuildinfo
+tsconfig.test.json
+**/*.test.ts
+**/*.test.tsx
+
+# Logs, data dumps, editor/OS noise
+*.log
+*.csv
+.DS_Store
+.vscode
+.idea
+
+# The postgres image has its own separate build context (./docker/postgres) — not needed
+# to build the app image
+docker
+
+# Claude Code project-local scratch, if present
+.claude

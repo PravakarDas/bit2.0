@@ -104,6 +104,9 @@ importers:
       pdfkit:
         specifier: ^0.20.1
         version: 0.20.1
+      prisma:
+        specifier: ^6.2.1
+        version: 6.19.2(typescript@5.9.3)
       radix-ui:
         specifier: ^1.4.3
         version: 1.4.3(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -162,9 +165,6 @@ importers:
       pdfjs-dist:
         specifier: ^6.2.108
         version: 6.2.108
-      prisma:
-        specifier: ^6.2.1
-        version: 6.19.2(typescript@5.9.3)
       tailwindcss:
         specifier: ^4
         version: 4.2.2
