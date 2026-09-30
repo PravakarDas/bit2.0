@@ -65,9 +65,43 @@ jobs:
           ssh -p ${{ secrets.SSH_PORT }} git@${{ secrets.SSH_HOST }} << 'EOF'
             set -euo pipefail
             cd ${{ secrets.SERVER_PROJECT_PATH }}
+
+            echo "--- disk usage before deploy ---"
+            df -h /
+
+            # Reclaim space from any dangling images left behind by a previous deploy BEFORE
+            # attempting to load the new ones — not just after a successful run (see below).
+            # `-f` alone only means "no tag and no container using it" — that is NOT the same
+            # as "belongs to this app": on this shared VPS, another project's own dangling
+            # image would satisfy that too. The label filter is the actual ownership check:
+            # `app=bitcode-hrm` is baked into this project's own Dockerfiles (see Dockerfile
+            # and docker/postgres/Dockerfile), independent of tag, so this can only ever match
+            # an image THIS project built — never another app's, dangling or not, labeled or
+            # unlabeled. (Images built before this label existed are simply skipped, not
+            # touched — see this commit's message for that one-time transition note.)
+            docker image prune -f --filter "label=app=bitcode-hrm"
+
+            AVAIL_KB=$(df --output=avail / | tail -1)
+            if [ "$AVAIL_KB" -lt 6291456 ]; then
+              echo "WARNING: only ${AVAIL_KB}KB free on / after pruning — this deploy's images" \
+                   "are several GB combined and may fail to load. Investigate disk usage" \
+                   "(docker system df -v, df -h) before it fails mid-extraction with a less" \
+                   "obvious containerd error." >&2
+            fi
+
             docker load < /tmp/bitcode-hrm-images.tar.gz
             docker compose down
             docker compose up -d --no-build
-            rm /tmp/bitcode-hrm-images.tar.gz
-            docker image prune -f
+            rm -f /tmp/bitcode-hrm-images.tar.gz
+            # Reclaim space from the images just superseded by the load above — this is the
+            # step that used to be the ONLY cleanup, and being last meant `set -euo pipefail`
+            # skipped it entirely whenever an earlier command failed (e.g. docker load itself
+            # running out of space), so a failed deploy left its dangling images behind
+            # instead of freeing them for the next attempt. Kept here too for the normal
+            # happy-path deploy, now backed up by the pre-load prune above. Same label filter,
+            # same reason: ownership by label, not by "currently unused".
+            docker image prune -f --filter "label=app=bitcode-hrm"
+
+            echo "--- disk usage after deploy ---"
+            df -h /
           EOF

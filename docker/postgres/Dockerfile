@@ -1,5 +1,9 @@
 FROM postgres:17.11-alpine3.24
 
+# See Dockerfile (app image)'s identical LABEL for why: durable ownership marker for the
+# deploy pipeline's scoped `docker image prune` filter, independent of this image's tag.
+LABEL app=bitcode-hrm
+
 # Tini supervises crond + postgres so signals propagate and zombies are reaped.
 # barman-cloud-* are installed into a venv to avoid touching the system python.
 RUN apk add --no-cache \
