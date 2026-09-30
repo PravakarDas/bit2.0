@@ -43,6 +43,35 @@ jobs:
           echo "echo $SSH_PASSPHRASE" > ~/.ssh_askpass && chmod +x ~/.ssh_askpass
           echo "$SSH_PRIVATE_KEY" | tr -d '\r' | DISPLAY=None SSH_ASKPASS=~/.ssh_askpass ssh-add - >/dev/null
 
+      - name: Free disk space on server before deploy
+        # Positioned BEFORE the build/export/upload steps, not just inside the later "Deploy
+        # with Docker Compose" step: that step's pruning only ever gets a chance to run once
+        # the multi-GB tar has already been uploaded successfully. If the VPS is already too
+        # full for `rsync` to even land that tar (exactly what happened here — failed writing
+        # to /tmp with "No space left on device" before the deploy step was ever reached),
+        # freeing space this late is too late. This gives every deploy the best chance of
+        # having room before anything large touches the VPS at all.
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} git@${{ secrets.SSH_HOST }} << 'EOF'
+            set -euo pipefail
+
+            echo "--- disk usage before cleanup ---"
+            df -h /
+
+            # A previous failed upload (this exact incident) can leave a partial tar, or
+            # rsync's own hidden in-progress temp file, sitting in /tmp — clean up both
+            # before trying again.
+            rm -f /tmp/bitcode-hrm-images.tar.gz /tmp/.bitcode-hrm-images.tar.gz.*
+
+            # Same ownership-scoped prune as the deploy step (see its own comment for why the
+            # label filter matters on a shared VPS) — safe to run here too, before this
+            # project's own containers are touched at all.
+            docker image prune -f --filter "label=app=bitcode-hrm"
+
+            echo "--- disk usage after cleanup ---"
+            df -h /
+          EOF
+
       - name: Build app image
         run: docker build -t bitcode-hrm:latest .
 
