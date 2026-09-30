@@ -5,6 +5,7 @@ import { startOfDay, format, subDays } from "date-fns";
 import type { DailyTimeRecord, Prisma } from "@prisma/client";
 import { syncAllEmployeesTimeDataForDate, type SyncResult } from "./zkteco-sync.actions";
 import { isActiveStatus, isArchivedStatus } from "@/lib/employee-status";
+import { getRuntimeSystemControlConfig } from "@/lib/system-control";
 
 type ActiveEmployee = Prisma.UserGetPayload<{
     include: {
@@ -246,6 +247,28 @@ export async function runLeaveAutomationPipeline(options?: {
         )
         : await getUnprocessedDateKeys();
 
+    // Once an org has switched to the ZKT_ATTENDANCE_TABLE method, the live ZKTeco API is no
+    // longer the source of truth for anything — attendance data is kept current by the
+    // separate zkt_attendance polling/reconciliation pipeline instead (see instrumentation.ts's
+    // startZktAttendancePollCron). The per-date syncAllEmployeesTimeDataForDate call below was
+    // still running unconditionally regardless of this setting, meaning EVERY unprocessed date
+    // in EVERY leave-automation run attempted its own live-API reachability check against a
+    // device this org no longer relies on — the actual source of the repeated EHOSTUNREACH
+    // warnings, not the cron-level check in instrumentation.ts. `continueOnSyncFailure` already
+    // defaults to true (automation proceeds with whatever is already in the DB even if the sync
+    // fails), so skipping the call outright when this method is active changes nothing about
+    // the automation's real behavior for ZKT_ATTENDANCE_TABLE orgs — it only removes the
+    // guaranteed-to-fail network calls.
+    let skipLegacyZktecoSync = false;
+    try {
+        const runtime = await getRuntimeSystemControlConfig();
+        skipLegacyZktecoSync = runtime.attendanceCalculationMethod === "ZKT_ATTENDANCE_TABLE";
+    } catch (error) {
+        // A DB blip reading this setting must not block the whole automation run — fall back
+        // to the previous behavior (attempt the sync) rather than skip it on a guess.
+        console.error("runLeaveAutomationPipeline: failed to read attendanceCalculationMethod, defaulting to attempting the legacy ZKTeco sync:", error);
+    }
+
     const aggregateSync: SyncResult = {
         success: true,
         message: "",
@@ -286,7 +309,9 @@ export async function runLeaveAutomationPipeline(options?: {
             continue;
         }
 
-        const syncResult = await syncAllEmployeesTimeDataForDate(processDate, employeeIds);
+        const syncResult: SyncResult = skipLegacyZktecoSync
+            ? { success: true, message: "Skipped (attendanceCalculationMethod is ZKT_ATTENDANCE_TABLE)", syncedRecords: 0, skippedRecords: 0, errors: [] }
+            : await syncAllEmployeesTimeDataForDate(processDate, employeeIds);
         aggregateSync.syncedRecords += syncResult.syncedRecords;
         aggregateSync.skippedRecords += syncResult.skippedRecords;
         aggregateSync.errors.push(...syncResult.errors);
