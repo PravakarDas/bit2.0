@@ -78,6 +78,19 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/next.config.ts ./next.config.ts
 COPY --from=builder /app/src/lib/services/assets/fonts ./src/lib/services/assets/fonts
 
+# Everything above is root-owned and read-only for the runtime user. The one place `next start`
+# itself writes is `.next/cache` (image-optimizer / fetch cache), dropped in the builder above,
+# so recreate just that directory for nextjs — node_modules and the rest stay unwritable.
+RUN mkdir -p .next/cache && chown nextjs:nodejs .next/cache
+
+# Fail the image build, not the deploy, if anything `next start` / `prisma migrate deploy` need
+# was pruned. `next start` transpiles next.config.ts with the `typescript` package at startup;
+# when it can't resolve it, Next tries to `yarn add typescript` into the read-only node_modules
+# (EACCES) and the server never comes up — the 502 this check now catches at build time.
+# That is also why `typescript` is in package.json "dependencies", not "devDependencies".
+RUN node -e "for (const m of ['typescript', 'next', '@prisma/client']) require.resolve(m, { paths: ['/app'] })" && \
+  test -x node_modules/.bin/next && test -x node_modules/.bin/prisma
+
 USER nextjs
 
 EXPOSE 3000
@@ -85,5 +98,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# CMD ["npm", "start"]
-CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
+# Local binaries only: npx/npm can fall back to downloading a package at runtime if one is missing.
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && exec node_modules/.bin/next start"]
