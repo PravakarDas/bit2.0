@@ -52,6 +52,7 @@ import {
 import { updateTimelineRecord, adjustLeaveType, setTimelineRecordProcessed, reverseLatePenalty } from "@/actions/timeline.actions";
 import { manualSyncEmployee } from "@/actions/zkteco-sync.actions";
 import EmployeeProfileLink from "@/components/admin/EmployeeProfileLink";
+import TimelineBulkActions from "@/components/admin/TimelineBulkActions";
 import { formatTime12 } from "@/lib/utils";
 import { getTimelineStatusDisplay } from "@/lib/timeline-status";
 import { formatDurationPill, parseDurationToMinutes } from "@/lib/duration";
@@ -182,15 +183,18 @@ function FilterPopoverButton({
 function ColumnHeaderCell({
   label,
   className,
+  leading,
   children
 }: {
   label: string;
   className?: string;
+  leading?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
     <TableHead className={className}>
       <div className="flex items-center gap-1">
+        {leading}
         <span>{label}</span>
         {children}
       </div>
@@ -420,6 +424,21 @@ export default function TimelineTableView({
   zktecoSyncEnabled
 }: TimelineTableViewProps) {
   const [editingRecord, setEditingRecord] = useState<TimeRecord | null>(null);
+  // Bulk selection is scoped to the visible page: ids no longer on the page are simply ignored.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const selectedRecords = records.filter((r) => selectedIds.has(r.id));
+  const allOnPageSelected = records.length > 0 && selectedRecords.length === records.length;
+  const toggleRecordSelected = (recordId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(recordId)) next.delete(recordId);
+      else next.add(recordId);
+      return next;
+    });
+  };
+  const togglePageSelected = () => {
+    setSelectedIds(allOnPageSelected ? new Set() : new Set(records.map((r) => r.id)));
+  };
   const [editForm, setEditForm] = useState({
     status: 'PRESENT' as TimelineStatusValue,
     autoDeductedLeaveType: '',
@@ -647,11 +666,31 @@ export default function TimelineTableView({
 
   return (
     <div className="space-y-4">
+      <TimelineBulkActions
+        selectedRecords={selectedRecords}
+        onClearSelection={() => setSelectedIds(new Set())}
+        onDone={() => {
+          setSelectedIds(new Set());
+          onRecordUpdate();
+        }}
+      />
       <div className="overflow-x-auto rounded-xl border">
         <Table>
           <TableHeader className="sticky top-0 z-20 bg-gray-50">
             <TableRow className="hover:bg-transparent">
-              <ColumnHeaderCell label="Employee" className="sticky left-0 z-10 min-w-50 bg-gray-50">
+              <ColumnHeaderCell
+                label="Employee"
+                className="sticky left-0 z-10 min-w-50 bg-gray-50"
+                leading={
+                  <Checkbox
+                    className="mr-1"
+                    aria-label="Select all records on this page"
+                    disabled={records.length === 0}
+                    checked={allOnPageSelected ? true : selectedRecords.length > 0 ? "indeterminate" : false}
+                    onCheckedChange={togglePageSelected}
+                  />
+                }
+              >
                 <SortButton label="Employee" active={sort.field === "employee"} order={sort.order} onClick={() => onSortChange("employee")} />
                 <FilterPopoverButton active={filters.employeeIds.length > 0} label="Employee">
                   {(close) => (
@@ -805,7 +844,12 @@ export default function TimelineTableView({
               records.map((record) => (
                 <TableRow key={record.id} className="hover:bg-gray-50/80">
                   <TableCell className="sticky left-0 z-10 bg-white group-hover:bg-gray-50/80">
-                    <div className="font-medium text-foreground">
+                    <div className="flex items-center gap-2 font-medium text-foreground">
+                      <Checkbox
+                        aria-label="Select record"
+                        checked={selectedIds.has(record.id)}
+                        onCheckedChange={() => toggleRecordSelected(record.id)}
+                      />
                       <EmployeeProfileLink
                         employeeId={record.user.id}
                         name={record.user.firstName && record.user.lastName

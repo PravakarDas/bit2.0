@@ -2466,6 +2466,155 @@ export async function setTimelineRecordProcessed(recordId: string, isProcessed: 
   }
 }
 
+const BULK_TIMELINE_MAX_RECORDS = 200;
+const HHMM_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+export type BulkTimelineResult = {
+  success: boolean;
+  updated: number;
+  failures: { recordId: string; label: string; error: string }[];
+  error?: string;
+};
+
+async function getBulkTimelineActorError(recordIds: string[]): Promise<string | null> {
+  const actor = await getDbUser();
+  const canUpdateTimeline = !!actor && (actor.role === "SUPERADMIN" || actor.role === "HR" || (actor.role === "EMPLOYEE" && actor.isManager));
+  if (!canUpdateTimeline) return 'Unauthorized';
+  if (recordIds.length === 0) return 'No records selected';
+  if (recordIds.length > BULK_TIMELINE_MAX_RECORDS) return `Select at most ${BULK_TIMELINE_MAX_RECORDS} records at a time`;
+  return null;
+}
+
+async function getBulkRecordLabels(recordIds: string[]) {
+  const records = await prisma.dailyTimeRecord.findMany({
+    where: { id: { in: recordIds } },
+    select: {
+      id: true,
+      date: true,
+      status: true,
+      user: {
+        select: {
+          firstName: true,
+          lastName: true,
+          email: true,
+          branch: { select: { checkInTime: true, checkOutTime: true, breakDuration: true } },
+        },
+      },
+    },
+  });
+  return new Map(records.map((r) => [r.id, { ...r, label: `${getDisplayName(r.user)} — ${getDateKey(r.date)}` }]));
+}
+
+/**
+ * Bulk Process / Unprocess. Each record goes through setTimelineRecordProcessed, so a no-data day
+ * marked processed is finalized as weekly off / leave / absent exactly like the single-row action.
+ */
+export async function bulkSetTimelineRecordsProcessed(recordIds: string[], isProcessed: boolean): Promise<BulkTimelineResult> {
+  const actorError = await getBulkTimelineActorError(recordIds);
+  if (actorError) return { success: false, updated: 0, failures: [], error: actorError };
+
+  const records = await getBulkRecordLabels(recordIds);
+  const failures: BulkTimelineResult['failures'] = [];
+  let updated = 0;
+
+  for (const recordId of recordIds) {
+    const label = records.get(recordId)?.label ?? recordId;
+    const result = await setTimelineRecordProcessed(recordId, isProcessed);
+    if (result.success) {
+      updated++;
+    } else {
+      failures.push({ recordId, label, error: result.error || 'Failed to update processing status' });
+    }
+  }
+
+  return { success: failures.length === 0, updated, failures };
+}
+
+/**
+ * Bulk check-in/check-out change. `checkIn`/`checkOut` are HH:MM (Asia/Dhaka) applied to each
+ * record's OWN date; a blank one leaves that field unchanged. Each record goes through
+ * updateTimelineRecord, so active time, OT/UT and late-penalty wallet effects are recalculated
+ * per row exactly like a single edit.
+ *
+ * - ACTUAL on a non-Present day (absent / on leave / weekly off) needs both times: the day is
+ *   switched to Present (reversing its absence penalty or leave deduction) and its required times
+ *   restored from the branch, same as "Mark as Unprocessed".
+ * - REQUIRED only applies to Present days; other days are skipped with a reason.
+ */
+export async function bulkUpdateTimelineTimes(
+  recordIds: string[],
+  input: { target: "ACTUAL" | "REQUIRED"; checkIn?: string | null; checkOut?: string | null }
+): Promise<BulkTimelineResult> {
+  const actorError = await getBulkTimelineActorError(recordIds);
+  if (actorError) return { success: false, updated: 0, failures: [], error: actorError };
+
+  const checkIn = input.checkIn?.trim() || null;
+  const checkOut = input.checkOut?.trim() || null;
+  if (!checkIn && !checkOut) {
+    return { success: false, updated: 0, failures: [], error: 'Enter a check-in and/or check-out time' };
+  }
+  if ((checkIn && !HHMM_PATTERN.test(checkIn)) || (checkOut && !HHMM_PATTERN.test(checkOut))) {
+    return { success: false, updated: 0, failures: [], error: 'Times must be in HH:MM format' };
+  }
+  if (checkIn && checkOut && checkOut <= checkIn) {
+    return { success: false, updated: 0, failures: [], error: 'Check-out must be after check-in' };
+  }
+
+  const toDateTime = (date: Date, hhmm: string) => {
+    const { year, month, day } = getBangladeshDateParts(date);
+    const [hour, minute] = hhmm.split(':').map(Number);
+    return createBangladeshDateTime(year, month, day, hour, minute);
+  };
+
+  const records = await getBulkRecordLabels(recordIds);
+  const failures: BulkTimelineResult['failures'] = [];
+  let updated = 0;
+
+  for (const recordId of recordIds) {
+    const record = records.get(recordId);
+    if (!record) {
+      failures.push({ recordId, label: recordId, error: 'Timeline record not found' });
+      continue;
+    }
+
+    const data: Parameters<typeof updateTimelineRecord>[1] = {};
+    const isPresent = record.status === "PRESENT";
+
+    if (input.target === "REQUIRED") {
+      if (!isPresent) {
+        failures.push({ recordId, label: record.label, error: 'Skipped: required times can only be changed on Present days' });
+        continue;
+      }
+      if (checkIn) data.requiredCheckIn = toDateTime(record.date, checkIn);
+      if (checkOut) data.requiredCheckOut = toDateTime(record.date, checkOut);
+    } else {
+      if (!isPresent) {
+        if (!checkIn || !checkOut) {
+          failures.push({ recordId, label: record.label, error: 'Skipped: both check-in and check-out are needed to change a non-Present day to Present' });
+          continue;
+        }
+        const branch = record.user.branch;
+        data.status = "PRESENT";
+        data.requiredCheckIn = toDateTime(record.date, branch?.checkInTime || '09:00');
+        data.requiredCheckOut = toDateTime(record.date, branch?.checkOutTime || '18:00');
+        data.requiredBreakTime = branch?.breakDuration || '01:00';
+        data.actualBreakTime = '00:00';
+      }
+      if (checkIn) data.actualCheckIn = toDateTime(record.date, checkIn);
+      if (checkOut) data.actualCheckOut = toDateTime(record.date, checkOut);
+    }
+
+    const result = await updateTimelineRecord(recordId, data);
+    if (result.success) {
+      updated++;
+    } else {
+      failures.push({ recordId, label: record.label, error: result.error || 'Failed to update timeline record' });
+    }
+  }
+
+  return { success: failures.length === 0, updated, failures };
+}
+
 /**
  * Admin/manager manual reversal of an already-deducted late check-in penalty
  * for a single day. Idempotent: reverses only the outstanding (not yet
