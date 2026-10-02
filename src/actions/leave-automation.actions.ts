@@ -6,6 +6,7 @@ import type { DailyTimeRecord, Prisma } from "@prisma/client";
 import { syncAllEmployeesTimeDataForDate, type SyncResult } from "./zkteco-sync.actions";
 import { isActiveStatus, isArchivedStatus } from "@/lib/employee-status";
 import { getRuntimeSystemControlConfig } from "@/lib/system-control";
+import { fillUnprocessedRecordsFromZktTable } from "@/lib/services/zkt-attendance-poller.service";
 
 type ActiveEmployee = Prisma.UserGetPayload<{
     include: {
@@ -456,6 +457,8 @@ export async function processDailyLeaveAutomation(
     const employeeIds = normalizeEmployeeIds(options?.employeeIds);
     
     try {
+        await fillMissingAttendanceFromZktTable(processDate, employeeIds);
+
         // Only process rows that are explicitly marked as unprocessed.
         const unprocessedRecords = await prisma.dailyTimeRecord.findMany({
             where: {
@@ -495,6 +498,30 @@ export async function processDailyLeaveAutomation(
     } catch (error) {
         console.error("Error processing daily leave automation:", error);
         return { success: false, error: "Failed to process daily automation" };
+    }
+}
+
+/**
+ * When the live ZKTeco sync isn't feeding attendance (its cron toggle is off, or the org uses the
+ * zkt_attendance DB-table method), check zkt_attendance for this date's unprocessed records before
+ * they can be marked absent/auto-leave. Records still without data afterwards fall through to the
+ * normal wait rule in processEmployeeDailyRecord. Never blocks automation on failure (e.g. the
+ * externally-owned table doesn't exist in this environment).
+ */
+async function fillMissingAttendanceFromZktTable(processDate: Date, employeeIds?: string[]) {
+    try {
+        const runtime = await getRuntimeSystemControlConfig();
+        const liveSyncInactive = !runtime.zktecoCronEnabled || runtime.attendanceCalculationMethod === "ZKT_ATTENDANCE_TABLE";
+        if (!liveSyncInactive) {
+            return;
+        }
+
+        const result = await fillUnprocessedRecordsFromZktTable(processDate, employeeIds);
+        if (result.updated > 0) {
+            console.log(`Leave automation: filled ${result.updated} record(s) from zkt_attendance for ${format(processDate, "yyyy-MM-dd")}`);
+        }
+    } catch (error) {
+        console.error(`Leave automation: zkt_attendance lookup failed for ${format(processDate, "yyyy-MM-dd")}, continuing with existing data:`, error);
     }
 }
 

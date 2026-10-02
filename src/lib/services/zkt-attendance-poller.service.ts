@@ -217,6 +217,49 @@ export interface ReconcileResult {
 }
 
 /**
+ * Pre-decision check for leave automation: before a date's still-unprocessed
+ * records get marked absent/auto-leave, look each one up in `zkt_attendance`
+ * and fill in any punches already there. The cursor-based poll never revisits
+ * rows it has already passed, so records created AFTER their punches were
+ * ingested — e.g. a reset-and-reactivated employee whose timeline is
+ * regenerated from the joining date — would otherwise never see their data.
+ * Records with no rows in the table are left untouched, so the caller's
+ * normal wait-then-mark-absent rule still applies to them.
+ */
+export async function fillUnprocessedRecordsFromZktTable(recordDate: Date, userIds?: string[]): Promise<ReconcileResult> {
+  const settings = await getRuntimeSystemControlConfig();
+  const timeZone = settings.appTimezone || "Asia/Dhaka";
+
+  const candidates = await prisma.dailyTimeRecord.findMany({
+    where: {
+      date: recordDate,
+      isProcessed: false,
+      OR: [{ actualCheckIn: null }, { actualCheckOut: null }, { actualBreakTime: null }, { hasOpenBreak: true }],
+      ...(userIds && userIds.length > 0 ? { userId: { in: userIds } } : {}),
+    },
+    select: {
+      date: true,
+      user: { select: { attendanceId: true, isArchived: true, employeeStatus: true } },
+    },
+  });
+
+  let updated = 0;
+  for (const record of candidates) {
+    const attendanceId = record.user.attendanceId;
+    if (!attendanceId || record.user.isArchived || record.user.employeeStatus !== "ACTIVE") {
+      continue;
+    }
+
+    const { year, month, day } = resolveLocalDatePartsFromRecordDateKey(record.date, timeZone);
+    if (await recomputeDayForAttendanceId(attendanceId, year, month, day, timeZone)) {
+      updated++;
+    }
+  }
+
+  return { scanned: candidates.length, updated };
+}
+
+/**
  * Reconciliation sweep: finds every `DailyTimeRecord` that's `PRESENT`, not
  * yet `isProcessed`, and either still missing at least one actual field or
  * flagged `hasOpenBreak` (a break anomaly that can resolve itself once the
