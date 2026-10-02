@@ -2531,8 +2531,9 @@ export async function bulkSetTimelineRecordsProcessed(recordIds: string[], isPro
 }
 
 /**
- * Bulk check-in/check-out change. `checkIn`/`checkOut` are HH:MM (Asia/Dhaka) applied to each
- * record's OWN date; a blank one leaves that field unchanged. Each record goes through
+ * Bulk check-in/check-out/break change. `checkIn`/`checkOut` are HH:MM clock times (Asia/Dhaka)
+ * applied to each record's OWN date; `breakTime` is an HH:MM duration. A blank one leaves that
+ * field unchanged. Each record goes through
  * updateTimelineRecord, so active time, OT/UT and late-penalty wallet effects are recalculated
  * per row exactly like a single edit.
  *
@@ -2543,17 +2544,18 @@ export async function bulkSetTimelineRecordsProcessed(recordIds: string[], isPro
  */
 export async function bulkUpdateTimelineTimes(
   recordIds: string[],
-  input: { target: "ACTUAL" | "REQUIRED"; checkIn?: string | null; checkOut?: string | null }
+  input: { target: "ACTUAL" | "REQUIRED"; checkIn?: string | null; checkOut?: string | null; breakTime?: string | null }
 ): Promise<BulkTimelineResult> {
   const actorError = await getBulkTimelineActorError(recordIds);
   if (actorError) return { success: false, updated: 0, failures: [], error: actorError };
 
   const checkIn = input.checkIn?.trim() || null;
   const checkOut = input.checkOut?.trim() || null;
-  if (!checkIn && !checkOut) {
-    return { success: false, updated: 0, failures: [], error: 'Enter a check-in and/or check-out time' };
+  const breakTime = input.breakTime?.trim() || null;
+  if (!checkIn && !checkOut && !breakTime) {
+    return { success: false, updated: 0, failures: [], error: 'Enter a check-in, check-out and/or break time' };
   }
-  if ((checkIn && !HHMM_PATTERN.test(checkIn)) || (checkOut && !HHMM_PATTERN.test(checkOut))) {
+  if ([checkIn, checkOut, breakTime].some((value) => value && !HHMM_PATTERN.test(value))) {
     return { success: false, updated: 0, failures: [], error: 'Times must be in HH:MM format' };
   }
   if (checkIn && checkOut && checkOut <= checkIn) {
@@ -2587,6 +2589,7 @@ export async function bulkUpdateTimelineTimes(
       }
       if (checkIn) data.requiredCheckIn = toDateTime(record.date, checkIn);
       if (checkOut) data.requiredCheckOut = toDateTime(record.date, checkOut);
+      if (breakTime) data.requiredBreakTime = breakTime;
     } else {
       if (!isPresent) {
         if (!checkIn || !checkOut) {
@@ -2602,6 +2605,7 @@ export async function bulkUpdateTimelineTimes(
       }
       if (checkIn) data.actualCheckIn = toDateTime(record.date, checkIn);
       if (checkOut) data.actualCheckOut = toDateTime(record.date, checkOut);
+      if (breakTime) data.actualBreakTime = breakTime;
     }
 
     const result = await updateTimelineRecord(recordId, data);

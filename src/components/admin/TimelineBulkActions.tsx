@@ -24,6 +24,8 @@ import type { TimeRecord } from "@/components/admin/timeline-types";
 
 type TimeTarget = "ACTUAL" | "REQUIRED";
 
+const BREAK_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
 function reportResult(result: BulkTimelineResult, verb: string) {
   if (result.error) {
     toast.error(result.error);
@@ -53,6 +55,7 @@ export default function TimelineBulkActions({
   const [target, setTarget] = useState<TimeTarget>("ACTUAL");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
+  const [breakTime, setBreakTime] = useState("");
 
   const ids = selectedRecords.map((r) => r.id);
   const count = ids.length;
@@ -90,12 +93,17 @@ export default function TimelineBulkActions({
     setTarget("ACTUAL");
     setCheckIn("");
     setCheckOut("");
+    setBreakTime("");
     setTimeDialogOpen(true);
   };
 
   const applyTimes = async () => {
-    if (!checkIn && !checkOut) {
-      toast.error("Enter a check-in and/or check-out time");
+    if (!checkIn && !checkOut && !breakTime) {
+      toast.error("Enter a check-in, check-out and/or break time");
+      return;
+    }
+    if (breakTime && !BREAK_PATTERN.test(breakTime)) {
+      toast.error("Break time must be a duration in HH:MM format, e.g. 01:00");
       return;
     }
     if (checkIn && checkOut && checkOut <= checkIn) {
@@ -105,7 +113,12 @@ export default function TimelineBulkActions({
 
     setBusy(true);
     try {
-      const result = await bulkUpdateTimelineTimes(ids, { target, checkIn: checkIn || null, checkOut: checkOut || null });
+      const result = await bulkUpdateTimelineTimes(ids, {
+        target,
+        checkIn: checkIn || null,
+        checkOut: checkOut || null,
+        breakTime: breakTime || null
+      });
       reportResult(result, "Updated");
       if (!result.error) {
         setTimeDialogOpen(false);
@@ -184,6 +197,18 @@ export default function TimelineBulkActions({
                 <Label htmlFor="bulk-check-out">Check-out</Label>
                 <Input id="bulk-check-out" type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} />
               </div>
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="bulk-break-time">Break duration</Label>
+                <Input
+                  id="bulk-break-time"
+                  placeholder="HH:MM, e.g. 01:00"
+                  inputMode="numeric"
+                  maxLength={5}
+                  value={breakTime}
+                  onChange={(e) => setBreakTime(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Total break length for the day, not a clock time.</p>
+              </div>
             </div>
           </div>
 
@@ -191,7 +216,7 @@ export default function TimelineBulkActions({
             <Button variant="outline" disabled={busy} onClick={() => setTimeDialogOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={busy || (!checkIn && !checkOut)} onClick={applyTimes}>
+            <Button disabled={busy || (!checkIn && !checkOut && !breakTime)} onClick={applyTimes}>
               {busy ? "Applying…" : "Apply"}
             </Button>
           </DialogFooter>
