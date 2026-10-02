@@ -141,10 +141,10 @@ export function ResetEmployeeDataButton({ userId }: { userId: string }) {
                             <div className="rounded-lg border p-3 bg-gray-50 text-sm space-y-1">
                                 <div className="font-semibold">Will be kept</div>
                                 <p className="text-muted-foreground">
-                                    Login account, profile details, current base salary (history restarts from it),
+                                    Login account, profile details (except joining date, which is cleared), current base salary (history restarts from it),
                                     allowance assignments, and {preview.finalizedPayrollsKept} finalized payroll record(s).
                                     The employee stays archived; change their status to Active when they rejoin, then
-                                    set joining date and assign leave entitlements.
+                                    set the new joining date and assign leave entitlements.
                                 </p>
                             </div>
 

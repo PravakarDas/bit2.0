@@ -7,7 +7,9 @@ import { getDbUser } from "./user.actions";
 
 /**
  * "Reset for rejoin": wipes an archived employee's history so that, if they rejoin, the HRM
- * treats them as a new hire. Kept: login account, profile fields, current base salary, allowance
+ * treats them as a new hire. Kept: login account, profile fields (except dateOfJoining, which is
+ * cleared so the rejoin doesn't backfill the timeline from the old joining date — with no joining
+ * date, only today's timeline record is generated until a new one is set), current base salary, allowance
  * assignments, notification preferences, FINALIZED payroll (past months' payroll totals stay
  * correct), and anything this employee did to OTHER employees' records (reviews, notes written,
  * notices sent, audit logs as actor). The employee stays archived; reactivate them separately.
@@ -207,7 +209,7 @@ export async function resetArchivedEmployeeData(userId: string, confirmEmail: st
                     });
                 }
 
-                await tx.user.update({ where: { id: userId }, data: { walletBalance: 0 } });
+                await tx.user.update({ where: { id: userId }, data: { walletBalance: 0, dateOfJoining: null } });
 
                 const targetName = [target.firstName, target.lastName].filter(Boolean).join(" ") || target.email;
                 await tx.auditLog.create({
