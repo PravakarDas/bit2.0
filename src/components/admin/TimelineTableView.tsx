@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
@@ -340,9 +340,15 @@ function CheckboxListFilterBody<T extends string>({
   const toggle = (value: T) => {
     setDraft((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
   };
+  // Already-applied selections are pinned to the top (ordered once, from `selected`, so rows
+  // don't jump while toggling) — easy to find and uncheck without re-searching.
+  const orderedOptions = useMemo(
+    () => [...options.filter((opt) => selected.includes(opt.value)), ...options.filter((opt) => !selected.includes(opt.value))],
+    [options, selected]
+  );
   const visibleOptions = query.trim()
-    ? options.filter((opt) => opt.label.toLowerCase().includes(query.trim().toLowerCase()))
-    : options;
+    ? orderedOptions.filter((opt) => opt.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : orderedOptions;
   return (
     <div className="space-y-2">
       <Label className="text-xs text-muted-foreground">{label}</Label>
@@ -368,9 +374,20 @@ function CheckboxListFilterBody<T extends string>({
       {draft.length > 0 && (
         <p className="text-xs text-muted-foreground">{draft.length} selected</p>
       )}
-      <Button size="sm" className="w-full" onClick={() => { onApply(draft); onClose(); }}>
-        Apply
-      </Button>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          className="flex-1"
+          disabled={selected.length === 0 && draft.length === 0}
+          onClick={() => { setDraft([]); onApply([]); onClose(); }}
+        >
+          Clear
+        </Button>
+        <Button size="sm" className="flex-1" onClick={() => { onApply(draft); onClose(); }}>
+          Apply
+        </Button>
+      </div>
     </div>
   );
 }
