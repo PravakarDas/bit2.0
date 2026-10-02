@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminNotification } from "./notification.actions";
 import { Prisma, type DailyTimeRecord, type DailyRecordStatus } from "@prisma/client";
 import { getDbUser } from "./user.actions";
+import { processDailyLeaveAutomation } from "./leave-automation.actions";
 import { buildDateRangeFilter } from "@/lib/utils";
 import { isArchivedStatus } from "@/lib/employee-status";
 import { parseDurationToMinutes } from "@/lib/duration";
@@ -2384,7 +2385,22 @@ export async function setTimelineRecordProcessed(recordId: string, isProcessed: 
     }
 
     if (isProcessed) {
-      // Mark as processed (admin/manager asserts the day is handled).
+      // No attendance data: finalize through the same leave automation the nightly cron uses
+      // (zkt_attendance lookup, then weekly off / auto-leave / absent) instead of leaving an
+      // empty PRESENT day. forceProcessMissing skips the 4-day wait — the admin is deciding now.
+      if (!record.actualCheckIn && !record.actualCheckOut) {
+        const automation = await processDailyLeaveAutomation(record.date, {
+          employeeIds: [record.userId],
+          forceProcessMissing: true,
+        });
+        if (!automation.success) {
+          return { success: false, error: automation.error || 'Failed to process this day' };
+        }
+      }
+
+      // Mark as processed (admin/manager asserts the day is handled). A no-op when the
+      // automation above already finalized it; otherwise covers days it left alone (e.g.
+      // partial punches found in zkt_attendance, or an open break).
       await prisma.dailyTimeRecord.update({
         where: { id: recordId },
         data: { isProcessed: true, updatedAt: new Date() },

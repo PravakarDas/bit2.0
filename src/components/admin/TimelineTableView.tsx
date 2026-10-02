@@ -428,6 +428,17 @@ export default function TimelineTableView({
       return;
     }
 
+    if (
+      target === true &&
+      !record.actualCheckIn &&
+      !record.actualCheckOut &&
+      !window.confirm(
+        "This day has no attendance data.\n\nMarking it as processed will first check the attendance table; if nothing is found, the day is marked as Weekly Off, deducted from leave balance, or Absent (with a full-day wallet deduction) — the same as the automatic leave processing.",
+      )
+    ) {
+      return;
+    }
+
     setProcessedSavingId(record.id);
     try {
       const result = await setTimelineRecordProcessed(record.id, target);
