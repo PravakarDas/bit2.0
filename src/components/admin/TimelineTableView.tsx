@@ -83,6 +83,8 @@ interface TimelineTableViewProps {
   onSortChange: (field: TimelineSortField) => void;
   filters: ColumnFilters;
   onFiltersChange: (patch: Partial<ColumnFilters>) => void;
+  /** Mirrors SystemControlSettings.zktecoCronEnabled — the "Sync from ZKTeco" action is hidden when off. */
+  zktecoSyncEnabled: boolean;
 }
 
 const COLUMN_COUNT = 10;
@@ -397,7 +399,8 @@ export default function TimelineTableView({
   sort,
   onSortChange,
   filters,
-  onFiltersChange
+  onFiltersChange,
+  zktecoSyncEnabled
 }: TimelineTableViewProps) {
   const [editingRecord, setEditingRecord] = useState<TimeRecord | null>(null);
   const [editForm, setEditForm] = useState({
@@ -1064,14 +1067,18 @@ export default function TimelineTableView({
                           <TooltipContent>More actions</TooltipContent>
                         </Tooltip>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            disabled={syncingUsers.has(record.user.id)}
-                            onSelect={() => handleSync(record.user.id, record.date)}
-                          >
-                            <RefreshCw className={cn("h-4 w-4", syncingUsers.has(record.user.id) && "animate-spin")} />
-                            {syncingUsers.has(record.user.id) ? "Syncing…" : "Sync from ZKTeco"}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
+                          {zktecoSyncEnabled && (
+                            <>
+                              <DropdownMenuItem
+                                disabled={syncingUsers.has(record.user.id)}
+                                onSelect={() => handleSync(record.user.id, record.date)}
+                              >
+                                <RefreshCw className={cn("h-4 w-4", syncingUsers.has(record.user.id) && "animate-spin")} />
+                                {syncingUsers.has(record.user.id) ? "Syncing…" : "Sync from ZKTeco"}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
                           <DropdownMenuItem
                             disabled={processedSavingId === record.id}
                             onSelect={() => handleToggleProcessed(record, !record.isProcessed)}

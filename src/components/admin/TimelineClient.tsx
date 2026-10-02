@@ -45,7 +45,7 @@ function hasActiveFilters(filters: ColumnFilters): boolean {
   });
 }
 
-export default function TimelineClient() {
+export default function TimelineClient({ zktecoSyncEnabled }: { zktecoSyncEnabled: boolean }) {
   const [timeRecords, setTimeRecords] = useState<TimeRecord[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -309,6 +309,7 @@ export default function TimelineClient() {
             onSortChange={handleSortChange}
             filters={filters}
             onFiltersChange={handleFiltersChange}
+            zktecoSyncEnabled={zktecoSyncEnabled}
           />
         </CardContent>
       </Card>

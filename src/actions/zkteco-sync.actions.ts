@@ -605,6 +605,17 @@ export async function manualSyncEmployee(userId: string, date?: Date): Promise<S
 
     const runtimeConfig = await getRuntimeSystemControlConfig();
 
+    // The timeline's "Sync from ZKTeco" action is hidden while this toggle is off; refuse direct calls too.
+    if (!runtimeConfig.zktecoCronEnabled) {
+      return {
+        success: false,
+        message: "ZKTeco sync is turned off in System Control",
+        syncedRecords: 0,
+        skippedRecords: 0,
+        errors: ["ZKTeco sync is turned off in System Control"]
+      };
+    }
+
     const result =
       runtimeConfig.attendanceCalculationMethod === "ZKT_ATTENDANCE_TABLE" && date
         ? await (async (): Promise<SyncResult> => {
