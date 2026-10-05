@@ -102,7 +102,7 @@ async function buildOvertimePayoutSummary(userId: string, year: number) {
     // Unprocessed days (today / within the grace window) are excluded from every total.
     if (!record.isProcessed) return;
 
-    // Count working days (records with required times - not weekends/holidays)
+    // Required times only exist on working days (not weekly offs/holidays).
     if (record.requiredCheckIn && record.requiredCheckOut) {
       // Add required active time
       if (record.requiredActiveTime) {
@@ -113,23 +113,26 @@ async function buildOvertimePayoutSummary(userId: string, year: number) {
       if (record.requiredBreakTime) {
         totalRequiredBreakMinutes += timeStringToMinutes(record.requiredBreakTime);
       }
+    }
 
-      // Overtime sums are counted for every processed working day (including
-      // work-from-home days that have no office check-in). Office + WFH = Combined.
-      if (record.overtimeUndertime) {
-        totalOfficeOvertimeMinutes += timeStringToMinutes(record.overtimeUndertime);
-      }
-      if (record.requestedOvertime) {
-        totalWorkFromHomeMinutes += timeStringToMinutes(record.requestedOvertime);
-      }
-      if (record.officialOvertimeundertime) {
-        totalCombinedOvertimeMinutes += timeStringToMinutes(record.officialOvertimeundertime);
-      }
+    // Overtime sums are counted for every processed day — working days, weekly
+    // offs and holidays alike — matching the employee Attendance Timeline total.
+    // On a weekly off/holiday there is no required time, so any office or
+    // work-from-home time worked that day is pure overtime. Office + WFH = Combined.
+    if (record.overtimeUndertime) {
+      totalOfficeOvertimeMinutes += timeStringToMinutes(record.overtimeUndertime);
+    }
+    if (record.requestedOvertime) {
+      totalWorkFromHomeMinutes += timeStringToMinutes(record.requestedOvertime);
+    }
+    if (record.officialOvertimeundertime) {
+      totalCombinedOvertimeMinutes += timeStringToMinutes(record.officialOvertimeundertime);
+    }
 
-      // Actual active time only applies to days the employee actually checked in.
-      if (record.actualCheckIn && record.actualActiveTime) {
-        totalActualActiveMinutes += timeStringToMinutes(record.actualActiveTime);
-      }
+    // Actual active time only applies to days the employee actually checked in
+    // (including office check-ins on weekly offs/holidays).
+    if (record.actualCheckIn && record.actualActiveTime) {
+      totalActualActiveMinutes += timeStringToMinutes(record.actualActiveTime);
     }
   });
 
