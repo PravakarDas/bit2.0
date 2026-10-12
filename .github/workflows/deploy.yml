@@ -11,10 +11,19 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+      FIREWALL_NAME: ${{ vars.HZ_FIREWALL_NAME }}
+      RULE_MARKER: gha-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Allow runner SSH through Hetzner firewall
+        id: firewall-allow
+        env:
+          HETZNER_API_TOKEN: ${{ secrets.HZ_STAGING_API_TOKEN }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: bash .github/scripts/hetzner-firewall-ssh.sh allow
 
       - name: Create ssh config
         run: |
@@ -134,3 +143,10 @@ jobs:
             echo "--- disk usage after deploy ---"
             df -h /
           EOF
+
+      - name: Revoke runner SSH from Hetzner firewall
+        # Runs even on failure/cancel so a half-finished deploy never leaves SSH open.
+        if: always() && steps.firewall-allow.outcome != 'skipped'
+        env:
+          HETZNER_API_TOKEN: ${{ secrets.HZ_STAGING_API_TOKEN }}
+        run: bash .github/scripts/hetzner-firewall-ssh.sh revoke
